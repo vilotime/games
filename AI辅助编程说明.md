@@ -8,7 +8,7 @@
 
 ## 0. 你会拿到什么、要交回什么
 
-**拿到**：一个压缩包（下载链接：https://gitee.com/vilotime/vilotime.github.io/releases/download/pack/pack.zip），里面是
+**拿到**：一个压缩包 [下载链接](https://gitee.com/vilotime/pack/releases/download/v1.0/pack.zip) ，里面是
 
 ```
 AGENTS.md          给 AI 看的开发规范（DSH 打开文件夹会自动读）
@@ -32,9 +32,8 @@ ui/                UI 库两个文件 + 说明，只读，别改
 
 ## 1. 安装 DSH
 
-> 本节由组织者补充。
-
-<!-- 组织者补充位置：下载地址、安装步骤、首次启动要不要登录、怎么把文件夹作为工作区打开 -->
+1. 打开DSH官网 [DeepSeek Harness | Explore the limits of intelligence](https://www.deepseek.com/en/harness/)。
+2. 点击“下载Windows版”。
 
 ---
 
@@ -159,21 +158,7 @@ ui/                UI 库两个文件 + 说明，只读，别改
 
 ## 6. 提交
 
-把整个文件夹重新压成 zip（建议文件名用你的游戏名），从下面这个入口上传：
-
-> **提交入口：[【在此填入问卷 / 收集表链接】](#)**
-
-<!-- 组织者补充：
-     1) 把上面【】里的文字和括号里的 # 一起替换成问卷链接，例如 [打开提交问卷](https://example.com/form)。
-     2) 问卷建议题目：
-        · 游戏名（与 GAME-INFO.txt 第 2 项一致）
-        · 联系方式（可选，方便退回修改）
-        · 上传文件（限 1 个 zip）
-     3) 如果问卷不支持上传文件，就把上面那句改成：
-        "上传到网盘后，把分享链接填进问卷"。
-     4) 收到 zip 后按 README 的「加一款游戏」合并：把 proF/ 里那个 HTML 复制进本站 proF/，
-        照 GAME-INFO.txt 在 games.json 加一行，跑一次 node tools/export-games.js --check。
--->
+把整个文件夹重新压成 zip（建议文件名用你的游戏名），**[提交入口](https://www.wjx.top/vm/YmnQrqu.aspx# )**
 
 压缩时注意：zip 打开后第一层应该就是 `AGENTS.md`、`GAME-INFO.txt`、`proF/`、`ui/`，不要再套一层文件夹（多套一层也能收，只是多点两下）。
 
