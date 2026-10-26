@@ -30,19 +30,49 @@ ui/                UI 库两个文件 + 说明，只读，别改
 
 ---
 
-## 1. 安装 DSH
+## 1. 安装 DSH 并生成 API Key
 
-1. 打开DSH官网 [DeepSeek Harness | Explore the limits of intelligence](https://www.deepseek.com/en/harness/)。
-2. 下载对应版本的安装包，并按照提示进行安装。
+> 下面的按钮名称按 **DSH 英文界面**写，括号里是对应的中文界面字样，两种界面都能照着做。
+
+1. **下载安装包**：打开 [DeepSeek Harness 官网](https://www.deepseek.com/en/harness/)，下载对应系统（Windows / macOS）的安装包，按提示装好并启动。
+2. **创建 API Key**：打开 [DeepSeek Platform · API keys](https://platform.deepseek.com/api_keys) 并登录 → 点 **Create new API key**（新建 API 密钥）。
+   **这个 Key 只显示一次**，当场复制存好；丢了只能删掉重建。
+3. **先充值**：在 [DeepSeek Platform · Usage](https://platform.deepseek.com/usage) 里完成充值（**Top up**）。余额为 0 时，第 5 步能配好，但一发消息就会报余额不足。
+4. **把 Key 填进 DSH**（关键的一步，按顺序点）：
+   1. 打开 DSH，点**侧边栏底部**的 **Settings**（设置，齿轮图标）；
+   2. 左侧选 **Models**（模型）；
+   3. 点 **Add provider**（添加提供方）；
+   4. 在 **Search providers**（搜索提供方）里输入 `DeepSeek` 并选中它；
+   5. 在 **API key** 输入框（占位文字 *Enter your API key* / 输入 API 密钥）里粘贴第 2 步的 Key；
+   6. 点 **Apply**（中文界面是 **保存**）。成功后这条提供方会显示 **API key configured**（密钥已配置）；
+   7. 关掉设置，在对话窗口的模型选择里选一个 DeepSeek 模型。
+5. **验证**：新建一个会话，随便问一句，能正常回复就说明通了。
+   如果提示鉴权失败或没有可用模型，先回 **Settings → Models**（设置 → 模型）看那条是不是 **API key missing**（密钥缺失）。
+
+**常见卡点**
+
+- Key 忘了存 → 回平台再点一次 **Create new API key**，把旧的那条删掉，然后用新 Key 重复第 4 步。
+- 提示余额不足（insufficient balance）→ 回第 3 步充值。
+- 公司 / 学校网络连不上 `api.deepseek.com` → 需要在 DSH 的提供方设置里把 **Base URL**（地址）改成你的中转地址；没有中转就咨询你的网络管理员。正常情况下这一项留空（显示 **Provider default** / 提供方默认）即可。
 
 ---
 
-## 2. 打开压缩包
+## 2. 将压缩包解压并把文件夹载入 DSH
 
-1. 把拿到的压缩包解压到本地任意目录，例如 `D:\games\我的游戏\`。
-2. 打开 DSH，用「**打开文件夹 / 工作区**」选这个目录 —— **不要只打开 `example.html` 单个文件**，否则 AI 读不到 `AGENTS.md` 和 `ui/`。
-3. 确认它认得这个工作区：问一句「这个工作区里有哪些文件？开发规范在哪？」，它能说出 `AGENTS.md`、`proF/`、`ui/` 就对了。
-4. 双击 `proF/example.html` 玩一下模板：方向键移动、60 秒一局 —— 这就是你要改造的骨架，你的游戏最后也是这个结构。
+> 按钮名同样按英文界面写，括号里是中文界面对应字样。
+
+1. 把压缩包解压到本地任意目录，例如 `D:\games\我的游戏\`，**记住这个路径**（后面 DSH 要选它）。
+2. 打开 DSH，看侧边栏的 **Workspaces**（工作区）区块，点 **Add workspace** 或右上菜单里的 **Add workspace…**（添加工作区…）。
+3. 在弹出的系统目录选择框（标题 **Select Workspace Directory** / 选择工作区目录）里选中刚才解压出来的那个文件夹，确定。
+   - 如果这个目录以前加过，会提示 *A workspace named “xxx” already exists.*（已存在名为"xxx"的工作区）—— 那就不用再加，直接用它。
+   - **不要**只把 `example.html` 这个文件拖进去当输入：那样 AI 只看到一个文件，读不到 `AGENTS.md` 和 `ui/`，写出来的东西一定跑偏。
+4. 在这个工作区下点 **New Session**（新会话），进入对话界面。
+   - 一定要在**这个新会话**里做游戏。旧会话仍然绑在旧目录上，在里面让 AI 改文件会找不到 `proF/`。
+5. 确认 AI 认得这个工作区：发一句「这个工作区里有哪些文件？开发规范在哪？」，它答出 `AGENTS.md`、`proF/`、`ui/` 就对了。
+   答不出来、或说找不到文件 → 说明工作区选错了，回第 2 步重来。
+6. 双击 `proF/example.html` 玩一下模板：方向键移动、60 秒一局 —— 这就是你要改造的骨架，你的游戏最后也是这个结构。
+
+> 提示：如果侧边栏会话太多看不出归属，用 **View options → Group by → WorkSpace**（视图选项 → 分组方式 → 按工作区）把会话按工作区分组显示。
 
 ---
 
