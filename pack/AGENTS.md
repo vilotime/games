@@ -40,10 +40,18 @@
 
 ## 2. 硬约束（违反即打回）
 
-1. **只改 `proF/example.html` 一个文件**：HTML + CSS + JS 全写在这一个 `.html` 里。
+1. **必须用 Canvas 2D 渲染，游戏画面一律画在 `#stage > canvas#cv` 上**：
+   - 背景、实体、粒子、弹道、文字、准星、屏幕震动/闪白，全部用 `cv.getContext('2d')` 绘制
+     （`getContext('2d')` 必须带 `'2d'` 参数，无参调用返回 `null`）；
+   - **禁止**用 DOM / CSS / SVG / WebGL 直接当游戏对象：不许拿 `<div>` 摆精灵、不许用 CSS
+     `transition` / `animation` 做游戏动效、不许用绝对定位的 DOM 元素当碰撞体；
+   - **禁止**任何渲染库或游戏引擎：Phaser、PixiJS、Three.js、matter.js、Konva 之类一律不许；
+   - DOM 只允许当 **UI 外壳**：`#hud`（`.chip`）、`#banner`、`#hint`、`.overlay`（`.panel`、`.btn`）。
+     换句话说：**canvas = 游戏画面，DOM = 界面外壳**，两边不要互相抢活。
+2. **只改 `proF/example.html` 一个文件**：HTML + CSS + JS 全写在这一个 `.html` 里。
    不许拆出 `.js` / `.css` / 图片 / 字体 / 子目录。
-2. **零外部资源**：不许 CDN、外链图片、外链字体、外部库。画面全部用 canvas 画，或 base64 内联。
-3. **只引这两行**（相对路径固定，别改成别的层级）：
+3. **零外部资源**：不许 CDN、外链图片、外链字体、外部库。画面全部用 canvas 画，或 base64 内联。
+4. **只引这两行**（相对路径固定，别改成别的层级）：
 
    ```html
    <link rel="stylesheet" href="../ui/yc-ui.css">
@@ -52,7 +60,7 @@
 
    这份文件将来会被原样放进站点的 `proF/` 目录，`../ui/` 正好指回同一套 UI 库 ——
    所以**不要**把 `ui/` 复制到别处，也不要改成 `./yc-ui.css`。
-4. **不改 `ui/yc-ui.css`、`ui/yc-ui.js`**。本游戏专属的微调写在自己页面 `<style>` 里覆盖，
+5. **不改 `ui/yc-ui.css`、`ui/yc-ui.js`**。本游戏专属的微调写在自己页面 `<style>` 里覆盖，
    并用 ID 提权保证生效：
 
    ```css
@@ -60,12 +68,12 @@
    #ctlTag { font-size: 10px; padding: 2px 8px; }
    ```
 
-5. **不加全屏按钮、不做横竖屏切换**：这个项目已经彻底移除全屏逻辑。
-6. **不加暂停按钮**：需要暂停就用 `Esc` 键，或者干脆不提供。
-7. **文案极简**：短句、无废话、不堆 emoji。不写欢迎语、不写说明书式长段落。
-8. **ES5 语法**：`var` / `function` / IIFE / `'use strict'`。不用箭头函数、`let`/`const`、
+6. **不加全屏按钮、不做横竖屏切换**：这个项目已经彻底移除全屏逻辑。
+7. **不加暂停按钮**：需要暂停就用 `Esc` 键，或者干脆不提供。
+8. **文案极简**：短句、无废话、不堆 emoji。不写欢迎语、不写说明书式长段落。
+9. **ES5 语法**：`var` / `function` / IIFE / `'use strict'`。不用箭头函数、`let`/`const`、
    模板字符串、可选链 —— 与站点现有游戏保持同一风格。
-9. **`<title>` 就是游戏显示名**，原样出现在主页卡片和侧栏上。写好后就别再改。
+10. **`<title>` 就是游戏显示名**，原样出现在主页卡片和侧栏上。写好后就别再改。
 
 ---
 
@@ -125,6 +133,9 @@
 </html>
 ```
 
+**整页只有 `#cv` 这一个可见 canvas**：不要往 `#stage` 里再塞第二个 canvas，也不要用多个 canvas 叠层拼游戏。
+需要缓存静态底纹时才建离屏画布（`document.createElement('canvas')`，不插入 DOM），用完 `drawImage` 贴回 `#cv`。
+
 ---
 
 ## 4. 选择器契约（样式全部由 `yc-ui.css` 提供，你只写 HTML）
@@ -140,6 +151,11 @@
 
 `#stage` 的 `overflow: hidden` 负责防止 HUD 溢出画布，**不要覆盖**。
 `yc-ui.css` 已内置小屏压缩（`@media (max-width: 760px), (max-height: 620px)`），你只补自己的特例。
+
+**分工再强调一次**：`canvas` = 游戏画面（玩家、敌人、子弹、地图、粒子、游戏内文字），
+DOM（`#hud` / `#banner` / `#hint` / `.overlay` / `.panel` / `.btn`）= 界面外壳。
+**不要把游戏对象做成 DOM 元素**，**也不要把 HUD 里的分数、按钮画到 canvas 上** ——
+需要显示分数就用 `#hud` 里的 `<b>` 更新 `textContent`。
 
 ---
 
@@ -428,6 +444,9 @@ if (isTouchOnlyDevice()) {
 - [ ] 双击 `proF/example.html` 能玩，控制台无报错
 - [ ] 窗口拉伸 / 手机旋转后画布不糊、HUD 不溢出、鼠标点击位置准确
 - [ ] `intro → playing → over → 重开` 走一遍，没有残影 / 负计时 / 卡死
+- [ ] **画面确实全在 canvas 上**：浏览器里禁用 JavaScript 后 canvas 区域是空白，页面 DOM 里除了
+      `#hud` / `#banner` / `#hint` / `.overlay` 这些 UI 外壳，没有任何游戏对象节点；控制台没有
+      `getContext` 报错；整个页面只有一个可见 canvas
 - [ ] 切标签页回来不瞬移、不粘键
 - [ ] 移动端策略三选一已实现（可玩 / 只能观战 / 拦截面板）
 - [ ] 没有全屏按钮、没有暂停按钮、没有外部资源，没改 `ui/yc-ui.*`
@@ -459,6 +478,9 @@ Start-Process -FilePath $edge -ArgumentList @(
 | 加全屏按钮 / 横竖屏切换 | 整个项目已移除，加了必被打回 |
 | 加暂停按钮 | 站方明确不要暂停按钮，需要暂停用 `Esc` |
 | 引 CDN / 外链图片 / 字体 / 任何库 | 站点是纯静态零依赖，多一个请求就多一个坏点 |
+| 用 `<div>` / CSS 摆游戏对象，或用 `transition` / `animation` 做游戏动效 | 游戏画面必须画在 `#stage > canvas#cv` 上，DOM 只当 UI 外壳 |
+| 上 WebGL、Three.js、Phaser、PixiJS、matter.js、Konva | 项目只允许 Canvas 2D + 原生 JS，没有任何引擎 |
+| 往 `#stage` 里加第二个可见 canvas，或多个 canvas 叠层拼游戏 | 整页只有一个 `canvas#cv`；离屏缓存用 `document.createElement('canvas')`，不插入 DOM |
 | 覆盖 `#stage` 的 `overflow` | HUD 会溢出画布 |
 | CSS 像素做物理、世界坐标做 DOM | 两套坐标混用必然错位 |
 | 重开不重置数组 / 计时器 | 第二局残影、负计时 |
