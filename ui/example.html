@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0b1220">
+<title>叶初小游戏 · UI 库示例</title>
+<link rel="stylesheet" href="./yc-ui.css">
+</head>
+<body>
+
+<div id="wrap">
+  <div id="stage">
+    <canvas id="cv"></canvas>
+
+    <div id="hud">
+      <div class="chip"><span class="dot" style="background:#7ee787"></span>分数 <b id="score">0</b></div>
+      <div class="chip" id="clock">00:00</div>
+    </div>
+
+    <div id="banner"></div>
+    <div id="hint">鼠标移动 / 触摸拖动控制方块，碰到黄色光点得 1 分</div>
+
+    <div class="overlay" id="intro">
+      <div class="panel">
+        <h1>UI 库示例</h1>
+        <p>这是一个最小的可运行示例，用来检查 <b>yc-ui.css</b> 的样式是否生效。</p>
+        <p><kbd>鼠标</kbd> 或 <kbd>触摸</kbd> 控制方块，收集黄色光点，<kbd>30</kbd> 秒一局。</p>
+        <button class="btn" id="startBtn" type="button">开始游戏</button>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="over">
+      <div class="panel">
+        <h1 id="overTitle">时间到</h1>
+        <p id="overStats"></p>
+        <button class="btn" id="retryBtn" type="button">再来一局</button>
+        <button class="btn ghost" id="backBtn" type="button">返回主页</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="./yc-ui.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var W = 640, H = 400;
+  var cv = document.getElementById('cv');
+  var ctx = cv.getContext('2d');
+  var stage = document.getElementById('stage');
+  var elScore = document.getElementById('score');
+  var elClock = document.getElementById('clock');
+  var elBanner = document.getElementById('banner');
+  var elIntro = document.getElementById('intro');
+  var elOver = document.getElementById('over');
+  var elOverTitle = document.getElementById('overTitle');
+  var elOverStats = document.getElementById('overStats');
+
+  var scale = 1;
+
+  function resize() {
+    var pad = 20;
+    var s = Math.min((window.innerWidth - pad) / W, (window.innerHeight - pad) / H);
+    s = Math.max(0.3, s);
+    var dpr = window.devicePixelRatio || 1;
+    scale = s;
+    cv.width = Math.round(W * s * dpr);
+    cv.height = Math.round(H * s * dpr);
+    cv.style.width = Math.round(W * s) + 'px';
+    cv.style.height = Math.round(H * s) + 'px';
+    ctx.setTransform(s * dpr, 0, 0, s * dpr, 0, 0);
+    stage.style.width = cv.style.width;
+    stage.style.height = cv.style.height;
+  }
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
+  resize();
+
+  /* ---------------- 状态 ---------------- */
+  var player = { x: W / 2, y: H / 2, r: 14 };
+  var orb = { x: 100, y: 100, r: 9 };
+  var score = 0;
+  var timeLeft = 30;
+  var playing = false;
+  var bannerT = 0;
+  var last = 0;
+
+  function randOrb() {
+    orb.x = 40 + Math.random() * (W - 80);
+    orb.y = 40 + Math.random() * (H - 80);
+  }
+
+  function banner(text, sec) {
+    elBanner.textContent = text;
+    elBanner.classList.add('show');
+    bannerT = sec || 1.2;
+  }
+
+  function fmt(t) {
+    t = Math.max(0, t);
+    var m = Math.floor(t / 60), s = Math.floor(t % 60);
+    return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  function start() {
+    score = 0; timeLeft = 30; playing = true;
+    player.x = W / 2; player.y = H / 2;
+    randOrb();
+    elScore.textContent = '0';
+    elClock.textContent = fmt(timeLeft);
+    elIntro.classList.add('hidden');
+    elOver.classList.add('hidden');
+    banner('开始！', 1);
+  }
+
+  function gameOver() {
+    playing = false;
+    elOverTitle.textContent = '时间到';
+    elOverStats.textContent = '本局得分 ' + score + ' 分';
+    elOver.classList.remove('hidden');
+  }
+
+  /* ---------------- 输入 ---------------- */
+  function toWorld(cx, cy) {
+    var r = cv.getBoundingClientRect();
+    return { x: (cx - r.left) / scale, y: (cy - r.top) / scale };
+  }
+  function pointer(e) {
+    if (!playing) { return; }
+    var p = e.touches && e.touches[0] ? e.touches[0] : e;
+    var w = toWorld(p.clientX, p.clientY);
+    player.x = Math.max(player.r, Math.min(W - player.r, w.x));
+    player.y = Math.max(player.r, Math.min(H - player.r, w.y));
+  }
+  cv.addEventListener('mousemove', pointer);
+  cv.addEventListener('touchstart', function (e) { e.preventDefault(); pointer(e); }, { passive: false });
+  cv.addEventListener('touchmove', function (e) { e.preventDefault(); pointer(e); }, { passive: false });
+
+  document.getElementById('startBtn').addEventListener('click', start);
+  document.getElementById('retryBtn').addEventListener('click', start);
+  document.getElementById('backBtn').addEventListener('click', function () {
+    location.href = '../index.html';
+  });
+
+  /* ---------------- 主循环 ---------------- */
+  function step(dt) {
+    if (bannerT > 0) {
+      bannerT -= dt;
+      if (bannerT <= 0) { elBanner.classList.remove('show'); }
+    }
+    if (!playing) { return; }
+
+    timeLeft -= dt;
+    elClock.textContent = fmt(timeLeft);
+    if (timeLeft <= 0) { gameOver(); return; }
+
+    var dx = player.x - orb.x, dy = player.y - orb.y;
+    if (dx * dx + dy * dy < (player.r + orb.r) * (player.r + orb.r)) {
+      score++;
+      elScore.textContent = String(score);
+      randOrb();
+      banner('+1', 0.5);
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    var g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#0e1a2c');
+    g.addColorStop(1, '#070b14');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.strokeStyle = 'rgba(120,180,255,.08)';
+    ctx.lineWidth = 1;
+    for (var x = 0; x <= W; x += 40) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+    for (var y = 0; y <= H; y += 40) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+
+    var t = performance.now() / 1000;
+    var pulse = 1 + Math.sin(t * 4) * 0.15;
+    ctx.beginPath();
+    ctx.arc(orb.x, orb.y, orb.r * pulse, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,209,102,.25)';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(orb.x, orb.y, orb.r, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffd166';
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2);
+    ctx.fillStyle = '#4f9cf9';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#9fe0ff';
+    ctx.stroke();
+  }
+
+  function loop(now) {
+    if (!last) { last = now; }
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    step(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  window.__demo = { start: start };
+})();
+</script>
+</body>
+</html>

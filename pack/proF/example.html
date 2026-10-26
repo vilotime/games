@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>新游戏</title>
+<link rel="stylesheet" href="../ui/yc-ui.css">
+<style>
+  /* 本游戏专属的微调写这里；不要改 ../ui/yc-ui.css */
+</style>
+</head>
+<body>
+<!-- ============================================================
+     单游戏模板：整份文件就是你的游戏。
+     · 文件名建议改成游戏名（proF/游戏名.html），不要空格和括号
+     · <title> 就是显示名，之后会原样出现在主页卡片和侧栏
+     · 下面的玩法只是可运行的最小示例，全部可以删掉重写
+     ============================================================ -->
+<div id="wrap">
+  <div id="stage">
+    <canvas id="cv"></canvas>
+
+    <div id="hud">
+      <div class="chip">分数 <b id="score">0</b></div>
+      <div class="chip" id="clock">01:00</div>
+    </div>
+
+    <div id="banner"></div>
+    <div id="hint">WASD / 方向键移动</div>
+
+    <div class="overlay" id="intro">
+      <div class="panel">
+        <h1>新游戏</h1>
+        <p>把这一页改成你的玩法。<kbd>Enter</kbd> 或点按钮开始。</p>
+        <button class="btn" id="startBtn" type="button">开始游戏</button>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="over">
+      <div class="panel">
+        <h1>游戏结束</h1>
+        <p id="overStats"></p>
+        <button class="btn" id="retryBtn" type="button">再来一局</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../ui/yc-ui.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  /* ---------------- 画布 ---------------- */
+  var W = 900, H = 560;                 /* 逻辑尺寸（世界坐标），本游戏全局常量 */
+  var cv = document.getElementById('cv');
+  var ctx = cv.getContext('2d');
+  var st = document.getElementById('stage');
+  var UNIT = 1;                          /* canvas 物理像素 / 世界像素 */
+
+  function resize() {
+    var s = Math.min((window.innerWidth - 24) / W, (window.innerHeight - 24) / H);
+    s = Math.max(0.4, s);
+    var dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(W * s * dpr);
+    cv.height = Math.round(H * s * dpr);
+    cv.style.width = Math.round(W * s) + 'px';
+    cv.style.height = Math.round(H * s) + 'px';
+    st.style.width = cv.style.width;
+    st.style.height = cv.style.height;
+    UNIT = s * dpr;
+  }
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
+  resize();
+
+  /* ---------------- 状态 ---------------- */
+  var state = 'intro';                   /* intro | playing | over */
+  var elScore = document.getElementById('score');
+  var elClock = document.getElementById('clock');
+  var elBanner = document.getElementById('banner');
+  var elIntro = document.getElementById('intro');
+  var elOver = document.getElementById('over');
+  var elOverStats = document.getElementById('overStats');
+
+  var last = 0, bannerT = 0, score = 0, timeLeft = 60;
+  var player = { x: W / 2, y: H / 2, r: 14, speed: 260 };
+
+  function banner(text, ms) {
+    elBanner.textContent = text;
+    elBanner.classList.add('show');
+    bannerT = (ms || 1000) / 1000;
+  }
+  function fmt(t) {
+    t = Math.max(0, t);
+    var m = Math.floor(t / 60), s = Math.floor(t % 60);
+    return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+  }
+  function reset() {
+    score = 0; timeLeft = 60; bannerT = 0;
+    player.x = W / 2; player.y = H / 2;
+    elScore.textContent = '0';
+    elClock.textContent = fmt(timeLeft);
+    elBanner.classList.remove('show');
+  }
+  function start() {
+    reset();
+    state = 'playing';
+    elIntro.classList.add('hidden');
+    elOver.classList.add('hidden');
+    banner('开始', 900);
+  }
+  function gameOver() {
+    state = 'over';
+    elOverStats.textContent = '本局得分 ' + score;
+    elOver.classList.remove('hidden');
+  }
+
+  /* ---------------- 输入 ---------------- */
+  var keys = Object.create(null);
+  window.addEventListener('keydown', function (e) {
+    var k = (e.key || '').toLowerCase();
+    keys[k] = true;
+    if (k === 'w' || k === 'a' || k === 's' || k === 'd' || k === ' ' ||
+        k === 'arrowup' || k === 'arrowdown' || k === 'arrowleft' || k === 'arrowright') {
+      e.preventDefault();
+    }
+    if (k === 'enter' && state !== 'playing') { start(); }
+  });
+  window.addEventListener('keyup', function (e) {
+    keys[(e.key || '').toLowerCase()] = false;
+  });
+  /* 失焦必须清空按键，否则切回来会一直往一个方向跑 */
+  window.addEventListener('blur', function () { keys = Object.create(null); });
+  document.addEventListener('visibilitychange', function () { last = 0; });
+
+  /* ---------------- 更新 ---------------- */
+  function update(dt) {
+    if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) { elBanner.classList.remove('show'); } }
+
+    timeLeft -= dt;
+    elClock.textContent = fmt(timeLeft);
+    if (timeLeft <= 0) { gameOver(); return; }
+
+    var dx = 0, dy = 0;
+    if (keys['a'] || keys['arrowleft']) { dx -= 1; }
+    if (keys['d'] || keys['arrowright']) { dx += 1; }
+    if (keys['w'] || keys['arrowup']) { dy -= 1; }
+    if (keys['s'] || keys['arrowdown']) { dy += 1; }
+    if (dx || dy) {
+      var len = Math.sqrt(dx * dx + dy * dy);
+      player.x += (dx / len) * player.speed * dt;
+      player.y += (dy / len) * player.speed * dt;
+      player.x = Math.max(player.r, Math.min(W - player.r, player.x));
+      player.y = Math.max(player.r, Math.min(H - player.r, player.y));
+    }
+  }
+
+  /* ---------------- 绘制 ---------------- */
+  function draw() {
+    ctx.setTransform(UNIT, 0, 0, UNIT, 0, 0);
+
+    var g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#0e1a2c');
+    g.addColorStop(1, '#070b14');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.strokeStyle = 'rgba(120,180,255,.08)';
+    ctx.lineWidth = 1;
+    for (var x = 0; x <= W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+    for (var y = 0; y <= H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2);
+    ctx.fillStyle = '#4f9cf9';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#9fe0ff';
+    ctx.stroke();
+  }
+
+  /* ---------------- 主循环 ---------------- */
+  function tick(ts) {
+    var now = ts / 1000;
+    if (!last) { last = now; }
+    var dt = Math.min(0.05, Math.max(0, now - last));   /* 钳制：切标签页回来不跳帧 */
+    last = now;
+    if (state === 'playing') { update(dt); }
+    draw();
+  }
+  function loop(ts) { tick(ts); requestAnimationFrame(loop); }
+
+  document.getElementById('startBtn').addEventListener('click', start);
+  document.getElementById('retryBtn').addEventListener('click', start);
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

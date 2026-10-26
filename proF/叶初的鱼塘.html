@@ -1,0 +1,2768 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>叶初的鱼塘</title>
+<link rel="stylesheet" href="../ui/yc-ui.css">
+<style>
+  #hud { align-items: center; }
+  #hud .chip { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+  #hud b { color: #ffd166; font-variant-numeric: tabular-nums; }
+  #intro .diffnote { font-size: 11.5px; opacity: .72; margin-top: 10px; }
+  #intro .diffs { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
+  #intro .diffs .btn {
+    margin-top: 0; padding: 9px 16px; font-size: 14px; line-height: 1.25;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+  }
+  #intro .diffs .btn small { font-size: 10px; font-weight: 400; opacity: .72; letter-spacing: 0; }
+  .keys, .ex, .hits { display: flex; gap: 3px; }
+  .keys i, .ex i, .hits i {
+    display: block; width: 9px; height: 9px; border-radius: 2px;
+    background: rgba(255, 255, 255, .16);
+  }
+  .keys i.on { background: #ffd166; box-shadow: 0 0 9px rgba(255, 209, 102, .9); }
+  #hud .next {
+    font-size: 10.5px; letter-spacing: .5px; color: #ffb3b3;
+    border: 1px solid rgba(255, 93, 93, .45); border-radius: 999px;
+    padding: 1px 6px; font-variant-numeric: tabular-nums;
+  }
+  #hud .next.rage { color: #fff; background: rgba(200, 30, 40, .55); border-color: rgba(255, 120, 120, .8); }
+  .ex i { width: 8px; height: 13px; }
+  .ex i.on { background: #ff5d5d; box-shadow: 0 0 10px rgba(255, 93, 93, .9); }
+  .hits i.on { background: #fff3b0; box-shadow: 0 0 9px rgba(255, 243, 176, .9); }
+  .ex.rage i.on { animation: ycRage .45s infinite alternate; }
+  /* 开门撞鬼专属：血红色的结算 */
+  .overlay.blood { background: rgba(96, 0, 10, .88); }
+  .overlay.blood .panel h1 { color: #ffd2d2; text-shadow: 0 0 18px rgba(255, 40, 40, .75); }
+  .overlay.blood .panel p { color: #f0b9b9; }
+  .overlay.blood .btn { background: linear-gradient(135deg, #a11426, #e0313f); box-shadow: 0 8px 22px rgba(200, 30, 50, .5); }
+  .overlay.blood .panel #overSub { color: #ffe3e3; font-weight: 700; }
+  @keyframes ycRage { to { opacity: .3; } }
+  @media (max-width: 640px) {
+    #hud { font-size: 12px; gap: 6px; }
+    #hud .chip { padding: 4px 8px; gap: 5px; }
+  }
+</style>
+</head>
+<body data-pc-only="1">
+<div id="wrap">
+  <div id="stage">
+    <canvas id="cv"></canvas>
+
+    <div id="hud">
+      <div class="chip">
+        <span class="dot" style="background:#ffd166"></span>钥匙 <b id="keyTxt">0</b>/3
+        <span class="keys" id="keyDots"><i></i><i></i><i></i></span>
+      </div>
+      <div class="chip">
+        ⏱ <b id="timeTxt">0:00</b>
+        <span style="opacity:.5">·</span>
+        兴奋
+        <span class="ex" id="exDots"><i></i><i></i><i></i></span>
+        <span class="next" id="nextEx">30s</span>
+      </div>
+      <div class="chip">
+        <span class="dot" style="background:#fff3b0"></span>中弹 <b id="hitTxt">0</b>/3
+        <span style="opacity:.5">·</span>存活 <b id="aliveTxt">5</b>
+      </div>
+    </div>
+
+    <div id="banner"></div>
+    <div id="hint"></div>
+
+    
+    <div class="overlay" id="intro">
+      <div class="panel">
+        <h1>叶初的鱼塘</h1>
+        <p>夜里，叶初的家就在 T 字小道正中。找齐自己的<b>三把钥匙</b>，再从<b>小道尽头的传送门</b>逃走。</p>
+        <p>钥匙只会藏在：路的<b>东西两头</b>、路口四个角、竖道中段，以及屋子里（床边 / 衣柜前 / 木箱旁 / 货架旁 / 桌子旁）。<b>走近才会看见微光。</b></p>
+        <p><b>移动</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / 方向键　<b>互动</b> 按 <kbd>F</kbd>：按住 F 2 秒捡钥匙、按住 F 5 秒给传送门充能、进出屋。<b>电脑上才能玩。</b></p>
+        <p><b>第一把钥匙</b>头顶的箭头会给你指方向，后两把自己找。</p>
+        <p>⚠ 别碰叶初——碰到当场阵亡。他会自己进屋、也会跟进来，还会<b>守在门口</b>。他的<b>兴奋值会自己涨</b>；你或人机凑到他身边待满 3 秒也会 +1。<b>兴奋 1 格他看得更远，2 格开始小跑冲刺</b>；满 3 格暴走，屋旁的大炮改成<b>三连扇形</b>轰你。中 3 发炮弹也会死。等你身上<b>拿到 2 把钥匙，他能远远闻到味道</b>，追你会不择手段。</p>
+        <p>同场 4 个人机也在各找各的 3 把钥匙，谁先带齐钥匙、在传送门充能满 5 秒谁赢（人机也要充能）。</p>
+        <p class="diffnote">难度只影响三件事：叶初的移动速度、兴奋值自动 +1 的间隔、大炮射速。</p>
+        <div class="diffs">
+          <button class="btn ghost" id="diffEasy" type="button">简单<small>40 秒 +1</small></button>
+          <button class="btn" id="diffNormal" type="button">普通<small>30 秒 +1</small></button>
+          <button class="btn ghost" id="diffHard" type="button">噩梦<small>20 秒 +1</small></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="over">
+      <div class="panel">
+        <h1 id="overTitle">游戏结束</h1>
+        <p id="overSub"></p>
+        <p id="overStats"></p>
+        <button class="btn" id="retryBtn" type="button">再来一局</button>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="mobile">
+      <div class="panel">
+        <h1>这个游戏只能在电脑上玩</h1>
+        <p>「叶初的鱼塘」需要键盘走位，手机 / 平板没法正常操作。</p>
+        <p>请用电脑打开，或回主页挑个手机能玩的游戏。</p>
+        <button class="btn" id="mobileBack" type="button">返回主页</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+ * 叶初的鱼塘 · 2D 俯视生存收集
+ *   · 中央是叶初的家，T 字小道贯穿全图，两边全是树林
+ *   · 1 真人 + 4 人机抢 3 把钥匙，集齐后从传送门逃走
+ *   · 叶初缓慢游走 / 靠近就贴上来 / 贴身即死
+ *   · 靠近叶初累计 3 秒 → 兴奋值 +1，满 3 格 → 暴走，大炮启动
+ *   · 3 分钟到点同样强制暴走；被炮弹击中 3 次阵亡
+ * ============================================================ */
+
+/* ---------------- 基础常量 ---------------- */
+var WW = 1040, WH = 660;               /* 世界尺寸（单位） */
+var TICK = 1 / 120;
+var CELL = 8;                          /* 寻路网格边长 */
+var GW = Math.ceil(WW / CELL), GH = Math.ceil(WH / CELL);
+
+/* ============================================================
+ * 难度：只影响三件事 —— 叶初速度、兴奋自动 +1 的间隔、大炮射速
+ * ============================================================ */
+var DIFFS = {
+  easy:   { key: 'easy',   label: '简单', spd: 0.82, auto: 40, cannon: 1.90, shellSpd: 0.88 },
+  normal: { key: 'normal', label: '普通', spd: 1.00, auto: 30, cannon: 1.45, shellSpd: 1.00 },
+  hard:   { key: 'hard',   label: '噩梦', spd: 1.18, auto: 20, cannon: 1.12, shellSpd: 1.12 }
+};
+var diff = DIFFS.normal;
+
+/* 叶初偶尔会去这几个位置守着（门口 / 竖道口） */
+var GUARD_POSTS = [
+  { x: 446, y: 356 },   /* 西门里侧 */
+  { x: 594, y: 356 },   /* 东门里侧 */
+  { x: 520, y: 412 },   /* 南门外 */
+  { x: 520, y: 498 }    /* 竖道口 */
+];
+
+var EX_AUTO = 30;                      /* 基础间隔，实际用 diff.auto */
+var EX_NEAR = 115;                     /* 真人兴奋判定半径：稍微靠近就开始涨 */
+var EX_BOT_NEAR = 125;                 /* 人机判定半径略宽（它们本来就躲着他走） */
+var EX_TIME = 3;                       /* 贴着他待满 3 秒 +1 */
+var EX_MAX = 3;
+var YE_SPEED = 30, YE_SPEED_RAGE = 58;     /* 走得更快：躲他要更花心思 */
+var YE_DETECT = 160, YE_DETECT_RAGE = 380;   /* 平时留意范围更大，暴走远远就盯上你 */
+var TOUCH_R = 27;
+var ME_SPEED = 122, BOT_SPEED = 82;    /* 走位放慢：脚步沉一点，躲叶初更紧张；人机仍比真人慢一截 */
+var SHELL_SPEED = 208, SHELL_R = 7;
+var HIT_MAX = 3;
+var KEY_SEEN = 130;                    /* 走多近才看得见钥匙 */
+var PORTAL_R = 34;
+var PORTAL_CHARGE = 5.0;          /* 传送门充能：真人也罢、人机也罢，都要按满 5 秒 */
+var KEY_PICK = 2.0;               /* 捡钥匙读条：真人和人机都要 2 秒 */
+var BODY_R = 11;                       /* 人物碰撞半径 */
+var KEY_N = 3;                          /* 每人要集的钥匙数 */
+var PLAYERS_N = 5;                     /* 1 真人 + 4 人机 */
+
+/* ---------------- 地图 ---------------- */
+/* T 字小道 = 横杠 + 中央路口（屋子周围的空地）+ 向下的竖笔 */
+var PATH = [
+  { x: 40,  y: 302, w: 960, h: 96 },   /* 横向小道 */
+  { x: 398, y: 208, w: 244, h: 244 },  /* 屋子周围的空地（路口） */
+  { x: 472, y: 440, w: 96,  h: 180 }   /* 向下的竖道（和路口重叠一段，避免接缝处走不过去） */
+];
+var HOUSE = { x: 468, y: 268, w: 104, h: 120 };   /* 叶初的家（俯视屋顶） */
+
+/* 室外门口（走到跟前就进屋） / 进屋后的落点 / 出门后的落点 */
+var DOOR_OUT   = { w: { x: 462, y: 330 }, e: { x: 578, y: 330 }, s: { x: 520, y: 396 } };
+var DOOR_IN    = { w: { x: 172, y: 330 }, e: { x: 868, y: 330 }, s: { x: 520, y: 538 } };
+var DOOR_ENTER_IN  = { w: { x: 206, y: 330 }, e: { x: 834, y: 330 }, s: { x: 520, y: 508 } };
+var DOOR_ENTER_OUT = { w: { x: 426, y: 330 }, e: { x: 614, y: 330 }, s: { x: 520, y: 424 } };
+/* 进门/出门必须“朝门里走”的方向（单纯路过不算） */
+var DOOR_INWARD = {
+  world: { w: { x: 1, y: 0 }, e: { x: -1, y: 0 }, s: { x: 0, y: 1 } },
+  house: { w: { x: -1, y: 0 }, e: { x: 1, y: 0 }, s: { x: 0, y: -1 } }
+};
+
+/* 室内 */
+var ROOM = { x: 150, y: 100, w: 740, h: 460 };
+var WALL = 16;
+var FURN = [
+  { x: 190, y: 130, w: 150, h: 86 },   /* 床 */
+  { x: 660, y: 130, w: 120, h: 70 },   /* 衣柜 */
+  { x: 380, y: 170, w: 120, h: 80 },   /* 桌子 */
+  { x: 190, y: 430, w: 100, h: 70 },   /* 木箱 */
+  { x: 650, y: 440, w: 170, h: 56 }    /* 货架 */
+];
+var ROOM_CX = 520, ROOM_CY = 330;
+
+/* 传送门 / 大炮初始位 / 叶初出场点 */
+var PORTAL = { x: 520, y: 586 };
+var CANNON0 = { x: 600, y: 232 };      /* 大炮初始位置：路口东北角，避开所有钥匙点 */
+
+
+var YE_START = { x: 520, y: 404 };      /* 正好在屋门口，开局慢慢走出来 */
+
+/* 钥匙可疑点：室外 6 个、室内 5 个，每局随机抽 3 个（室内至少 1） */
+var OUT_SPOTS = [
+  { x: 96,  y: 350 },   /* 路西头 */
+  { x: 944, y: 350 },   /* 路东头 */
+  { x: 430, y: 236 },   /* 路口西北角 */
+  { x: 612, y: 424 },   /* 路口东南角 */
+  { x: 426, y: 420 },   /* 路口西南角 */
+  { x: 496, y: 534 }    /* 竖道中段 */
+];
+var IN_SPOTS = [
+  { x: 266, y: 250, inHouse: true },   /* 床边 */
+  { x: 720, y: 232, inHouse: true },   /* 衣柜前 */
+  { x: 245, y: 520, inHouse: true },   /* 木箱旁 */
+  { x: 700, y: 514, inHouse: true },   /* 货架旁 */
+  { x: 440, y: 276, inHouse: true }    /* 桌子旁 */
+];
+
+var COLORS = ['#5ec8ff', '#ffb86b', '#a07bff', '#6be3a8', '#ff8fb1'];
+
+/* 四台人机的性格：影响移动速度、躲叶初的距离、搜点偏好 */
+var BOT_STYLES = [
+  { key: 'aggr',     label: '激进', speed: 1.14, yeR: 76,  house: 0 },
+  { key: 'careful',  label: '谨慎', speed: 0.94, yeR: 150, house: 0 },
+  { key: 'router',   label: '抄近道', speed: 1.06, yeR: 100, house: -220 },
+  { key: 'follower', label: '跟屁虫', speed: 1.00, yeR: 96,  house: 0 }
+];
+
+/* ---------------- 通用小工具 ---------------- */
+function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+function dist(ax, ay, bx, by) { var dx = ax - bx, dy = ay - by; return Math.sqrt(dx * dx + dy * dy); }
+function rand(a, b) { return a + Math.random() * (b - a); }
+function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+function norm(dx, dy) { var d = Math.sqrt(dx * dx + dy * dy); return d > 0.0001 ? { x: dx / d, y: dy / d } : { x: 0, y: 0 }; }
+function inRect(r, x, y, pad) {
+  return x > r.x - pad && x < r.x + r.w + pad && y > r.y - pad && y < r.y + r.h + pad;
+}
+function shuffle(a) {
+  for (var i = a.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+function makeRng(seed) {
+  var s = seed >>> 0;
+  return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+}
+
+/* ---------------- 画布 ---------------- */
+var cv = document.getElementById('cv');
+var st = document.getElementById('stage');
+var ctx = cv.getContext('2d');
+var UNIT = 1;
+
+function resize() {
+  var vw = window.innerWidth, vh = window.innerHeight;
+  var s = Math.min((vw - 24) / WW, (vh - 34) / WH);
+  s = Math.max(0.32, s);
+  var dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(WW * s * dpr);
+  cv.height = Math.round(WH * s * dpr);
+  cv.style.width = Math.round(WW * s) + 'px';
+  cv.style.height = Math.round(WH * s) + 'px';
+  st.style.width = cv.style.width;
+  st.style.height = cv.style.height;
+  UNIT = s * dpr;
+}
+
+/* ---------------- 碰撞 ---------------- */
+function onPath(x, y) {
+  for (var i = 0; i < PATH.length; i++) { if (inRect(PATH[i], x, y, 0)) { return true; } }
+  return false;
+}
+
+function isWalkOut(x, y) { return onPath(x, y) && !inRect(HOUSE, x, y, 0); }
+function pathPad(x, y, pad) {
+  for (var i = 0; i < PATH.length; i++) { if (inRect(PATH[i], x, y, pad)) { return true; } }
+  return false;
+}
+function canOut(x, y, r) {
+  if (!isWalkOut(x, y)) { return false; }
+  for (var i = 0; i < 8; i++) {
+    var a = i * Math.PI / 4;
+    if (!isWalkOut(x + Math.cos(a) * r, y + Math.sin(a) * r)) { return false; }
+  }
+  return true;
+}
+function inRoom(x, y) {
+  return x > ROOM.x + WALL && x < ROOM.x + ROOM.w - WALL &&
+         y > ROOM.y + WALL && y < ROOM.y + ROOM.h - WALL;
+}
+function canIn(x, y, r) {
+  if (!inRoom(x, y)) { return false; }
+  for (var i = 0; i < 8; i++) {
+    var a = i * Math.PI / 4;
+    if (!inRoom(x + Math.cos(a) * r, y + Math.sin(a) * r)) { return false; }
+  }
+  for (var j = 0; j < FURN.length; j++) { if (inRect(FURN[j], x, y, r)) { return false; } }
+  return true;
+}
+/* 找附近能站的点 */
+function findOpenOut(x, y, r) {
+  if (canOut(x, y, r)) { return { x: x, y: y }; }
+  for (var rad = 8; rad <= 220; rad += 8) {
+    for (var i = 0; i < 16; i++) {
+      var a = i * Math.PI / 8;
+      var nx = x + Math.cos(a) * rad, ny = y + Math.sin(a) * rad;
+      if (canOut(nx, ny, r)) { return { x: nx, y: ny }; }
+    }
+  }
+  return { x: 150, y: 350 };
+}
+function findOpenIn(x, y, r) {
+  if (canIn(x, y, r)) { return { x: x, y: y }; }
+  for (var rad = 8; rad <= 220; rad += 8) {
+    for (var i = 0; i < 16; i++) {
+      var a = i * Math.PI / 8;
+      var nx = x + Math.cos(a) * rad, ny = y + Math.sin(a) * rad;
+      if (canIn(nx, ny, r)) { return { x: nx, y: ny }; }
+    }
+  }
+  return { x: ROOM_CX, y: ROOM_CY };
+}
+
+/* 沿小步移动，撞墙就贴着墙滑 */
+function moveBody(b, dx, dy, check, r) {
+  if (!dx && !dy) { return; }
+  if (check(b.x + dx, b.y + dy, r)) { b.x += dx; b.y += dy; return; }
+  if (check(b.x + dx, b.y, r)) { b.x += dx; return; }
+  if (check(b.x, b.y + dy, r)) { b.y += dy; return; }
+}
+
+/* ---------------- 寻路（室外网格 BFS） ---------------- */
+var walkOut = new Uint8Array(GW * GH);      /* 室外可走格（人机/叶初） */
+var walkIn  = new Uint8Array(GW * GH);      /* 室内可走格（坐标和世界一致） */
+var walkBig = new Uint8Array(GW * GH);      /* 大件可走格（大炮，半径大，得单独算） */
+function buildWalkGrid() {
+  for (var gy = 0; gy < GH; gy++) {
+    for (var gx = 0; gx < GW; gx++) {
+      var x = (gx + 0.5) * CELL, y = (gy + 0.5) * CELL;
+      /* 用比人物半径（11）稍大的 12 建网格，这样寻路出来的线人物一定走得过去 */
+      walkOut[gy * GW + gx] = canOut(x, y, 12) ? 1 : 0;
+      walkIn[gy * GW + gx]  = canIn(x, y, 12) ? 1 : 0;
+      walkBig[gy * GW + gx] = canOut(x, y, 19) ? 1 : 0;
+    }
+  }
+}
+function cellX(x) { return clamp(Math.floor(x / CELL), 0, GW - 1); }
+function cellY(y) { return clamp(Math.floor(y / CELL), 0, GH - 1); }
+
+function bfsField(grid, tx, ty) {
+  var field = new Int16Array(GW * GH);
+  field.fill(-1);
+  var sx = cellX(tx), sy = cellY(ty);
+  var start = sy * GW + sx;
+  if (!grid[start]) {
+    var found = -1, bestD = 1e9;
+    for (var i = 0; i < GW * GH; i++) {
+      if (!grid[i]) { continue; }
+      var ix = i % GW, iy = (i - ix) / GW;
+      var dd = (ix - sx) * (ix - sx) + (iy - sy) * (iy - sy);
+      if (dd < bestD) { bestD = dd; found = i; }
+    }
+    if (found < 0) { return field; }
+    start = found;
+  }
+  field[start] = 0;
+  var q = [start], head = 0;
+  while (head < q.length) {
+    var cur = q[head++], cx2 = cur % GW, cy2 = (cur - cx2) / GW, dv = field[cur];
+    for (var dy = -1; dy <= 1; dy++) {
+      for (var dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) { continue; }
+        var nx = cx2 + dx, ny = cy2 + dy;
+        if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) { continue; }
+        var ni = ny * GW + nx;
+        if (!grid[ni] || field[ni] >= 0) { continue; }
+        field[ni] = dv + 1;
+        q.push(ni);
+      }
+    }
+  }
+  return field;
+}
+
+/* 顺着 BFS 距离场往目标走 */
+function followField(b, grid, tx, ty) {
+  var key = (grid === walkIn ? 'i' : (grid === walkBig ? 'b' : 'o')) + ',' + Math.round(tx) + ',' + Math.round(ty);
+  if (b.fieldKey !== key || !b.field) { b.field = bfsField(grid, tx, ty); b.fieldKey = key; }
+  var f = b.field;
+  var cx = cellX(b.x), cy = cellY(b.y);
+  var cur = f[cy * GW + cx];
+  if (cur <= 0) { return norm(tx - b.x, ty - b.y); }
+  var bestI = -1, bestV = cur;
+  for (var dy = -1; dy <= 1; dy++) {
+    for (var dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) { continue; }
+      var nx = cx + dx, ny = cy + dy;
+      if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) { continue; }
+      var ni = ny * GW + nx;
+      if (!grid[ni]) { continue; }
+      var v = f[ni];
+      if (v < 0) { continue; }
+      if (v < bestV) { bestV = v; bestI = ni; }
+    }
+  }
+  if (bestI < 0) { return norm(tx - b.x, ty - b.y); }
+  var bx = (bestI % GW + 0.5) * CELL, by = (Math.floor(bestI / GW) + 0.5) * CELL;
+  return norm(bx - b.x, by - b.y);
+}
+function nearestSide(map, x, y) {
+  var best = 'w', bestD = 1e9;
+  for (var k in map) {
+    var d = dist(x, y, map[k].x, map[k].y);
+    if (d < bestD) { bestD = d; best = k; }
+  }
+  return best;
+}
+
+/* ---------------- 状态 ---------------- */
+var state = 'intro';            /* intro | playing | over | blocked */
+var me = null, bots = [], keys = [], shells = [], fx = [], pops = [];
+var ye = null, cannon = null;
+var time = 0, ex = 0, berserk = false, rageGlow = 0;
+var endKeys = null;             /* 阵亡瞬间手上的钥匙数：结算界面要如实显示 */
+var exAutoT = 30;               /* 距离下一次自动 +1 还有多少秒 */
+var hbT = 0;                    /* 下一次心跳的间隔 */
+var dangerGlow = 0;             /* 离叶初越近，屏幕边缘越红 */
+var botExCool = 0;              /* 人机贡献的全局冷却：别让四个人机一起把他点炸 */
+var scene = 'world';            /* 镜头跟着真人：world | house */
+var fade = 0;                   /* 场景切换黑场 */
+var redFlash = 0;               /* 开门撞鬼后的血屏 */
+var bannerT = 0;
+var keysDown = Object.create(null);
+var fDown = false;               /* F 是不是正被按住（充能传送门要一直按着） */
+var worldBg = null, houseBg = null, fogSprite = null;
+
+var elBanner = document.getElementById('banner');
+var elHint = document.getElementById('hint');
+var elKeyTxt = document.getElementById('keyTxt');
+var elKeyDots = document.getElementById('keyDots').children;
+var elTimeTxt = document.getElementById('timeTxt');
+var elExDots = document.getElementById('exDots').children;
+var elExWrap = document.getElementById('exDots');
+var elNextEx = document.getElementById('nextEx');
+var elHitTxt = document.getElementById('hitTxt');
+var elAliveTxt = document.getElementById('aliveTxt');
+
+function isTouchOnlyDevice() {
+  try {
+    var tp = navigator.maxTouchPoints || 0;
+    var ua = navigator.userAgent || '';
+    if (window.matchMedia) {
+      var coarse = window.matchMedia('(pointer: coarse)').matches;
+      var noHover = window.matchMedia('(hover: none)').matches;
+      if (coarse && noHover) { return true; }
+    }
+    return /Android|iPhone|iPad|iPod|Mobile|Tablet|Silk|Kindle/i.test(ua) || (tp > 0 && !/Windows|Macintosh|Linux/.test(ua));
+  } catch (e) { return false; }
+}
+var touchOnly = isTouchOnlyDevice();
+
+/* ---------- 音效：全部用 WebAudio 现场合成，不加载外部文件 ---------- */
+var AC = null, NOISE = null;
+function audioInit() {
+  try {
+    if (!AC) {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) { return; }
+      AC = new Ctx();
+      var len = Math.floor(AC.sampleRate * 2);
+      NOISE = AC.createBuffer(1, len, AC.sampleRate);
+      var d = NOISE.getChannelData(0);
+      for (var i = 0; i < len; i++) { d[i] = Math.random() * 2 - 1; }
+    }
+    if (AC.state === 'suspended') { AC.resume(); }
+  } catch (e) { AC = null; }
+}
+
+/* 心跳：离叶初越近，跳得越快越响 */
+function sfxHeart(strong) {
+  if (!AC) { return; }
+  try {
+    var t = AC.currentTime + 0.01;
+    var out = AC.createGain();
+    out.gain.value = strong ? 0.55 : 0.34;
+    out.connect(AC.destination);
+    for (var k = 0; k < 2; k++) {
+      var th = t + (k ? 0.17 : 0);
+      var o = AC.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(strong ? 64 : 54, th);
+      o.frequency.exponentialRampToValueAtTime(26, th + 0.16);
+      var g = AC.createGain();
+      g.gain.setValueAtTime(0.0001, th);
+      g.gain.exponentialRampToValueAtTime(k ? 0.42 : 0.8, th + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, th + 0.19);
+      o.connect(g);
+      g.connect(out);
+      o.start(th);
+      o.stop(th + 0.21);
+    }
+  } catch (e) {}
+}
+
+/* 推开家门撞进叶初怀里：刺耳尖叫 + 耳鸣 + 心跳骤停 */
+function sfxDoorDeath() {
+  if (!AC) { return; }
+  try {
+    var t = AC.currentTime + 0.01;
+    var out = AC.createGain();
+    out.gain.value = 0.95;
+    var lim = AC.createDynamicsCompressor();
+    lim.threshold.value = -12; lim.knee.value = 6; lim.ratio.value = 14;
+    lim.attack.value = 0.002; lim.release.value = 0.2;
+    out.connect(lim);
+    lim.connect(AC.destination);
+
+    /* 白噪声过带通快速下扫：指甲刮玻璃那一下 */
+    var src = AC.createBufferSource();
+    src.buffer = NOISE; src.loop = true;
+    var bp = AC.createBiquadFilter();
+    bp.type = 'bandpass'; bp.Q.value = 9;
+    bp.frequency.setValueAtTime(5200, t);
+    bp.frequency.exponentialRampToValueAtTime(680, t + 0.85);
+    var ng = AC.createGain();
+    ng.gain.setValueAtTime(0.0001, t);
+    ng.gain.exponentialRampToValueAtTime(0.55, t + 0.02);
+    ng.gain.exponentialRampToValueAtTime(0.2, t + 0.55);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + 1.05);
+    src.connect(bp); bp.connect(ng); ng.connect(out);
+    src.start(t); src.stop(t + 1.1);
+
+    /* 两个差 85Hz 的锯齿往下扫：刺耳的拍频 */
+    for (var k = 0; k < 2; k++) {
+      var osc = AC.createOscillator();
+      osc.type = 'sawtooth';
+      var base = k === 0 ? 1650 : 1735;
+      osc.frequency.setValueAtTime(base, t);
+      osc.frequency.exponentialRampToValueAtTime(base * 0.2, t + 1.0);
+      var g = AC.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.15, t + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.02);
+      osc.connect(g); g.connect(out);
+      osc.start(t); osc.stop(t + 1.04);
+    }
+
+    /* 高频耳鸣，慢慢淡出 */
+    var ring = AC.createOscillator();
+    ring.type = 'sine';
+    ring.frequency.setValueAtTime(5400, t);
+    var rg = AC.createGain();
+    rg.gain.setValueAtTime(0.17, t);
+    rg.gain.exponentialRampToValueAtTime(0.0001, t + 1.7);
+    ring.connect(rg); rg.connect(out);
+    ring.start(t); ring.stop(t + 1.72);
+
+    /* 心跳骤停：两下闷响 + 低频下坠 */
+    for (var h = 0; h < 2; h++) {
+      var th = t + (h ? 0.42 : 0);
+      var sub = AC.createOscillator();
+      sub.type = 'sine';
+      sub.frequency.setValueAtTime(74, th);
+      sub.frequency.exponentialRampToValueAtTime(26, th + 0.3);
+      var sg = AC.createGain();
+      sg.gain.setValueAtTime(0.0001, th);
+      sg.gain.exponentialRampToValueAtTime(h ? 0.5 : 0.9, th + 0.02);
+      sg.gain.exponentialRampToValueAtTime(0.0001, th + 0.34);
+      sub.connect(sg); sg.connect(out);
+      sub.start(th); sub.stop(th + 0.36);
+    }
+  } catch (e) {}
+}
+
+function banner(t, ms) {
+  elBanner.textContent = t;
+  elBanner.classList.add('show');
+  bannerT = (ms || 1000) / 1000;
+}
+function popup(x, y, text, color) {
+  pops.push({ x: x, y: y, text: text, color: color, life: 0.9, max: 0.9 });
+}
+function burst(x, y, color, n, speed) {
+  for (var i = 0; i < (n || 10); i++) {
+    var a = Math.random() * Math.PI * 2, sp = (speed || 90) * (0.35 + Math.random());
+    fx.push({
+      x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+      life: 0.25 + Math.random() * 0.35, max: 0.6, color: color, size: 1.4 + Math.random() * 2
+    });
+  }
+}
+
+/* ---------------- 一局 ---------------- */
+function mkPlayer(i, isMe, spawn) {
+  return {
+    x: spawn.x, y: spawn.y, scene: 'world',
+    keys: 0, hits: 0, alive: true, escaped: false, channel: null, hitCool: 0, nearKey: null, nearPortal: false,
+    idx: i, isMe: !!isMe,
+    name: isMe ? '你' : ('人机' + i),
+    color: COLORS[i % COLORS.length],
+    speed: isMe ? ME_SPEED : BOT_SPEED * rand(0.93, 1.07),
+    dir: -Math.PI / 2, flash: 0, doorCool: 0, nearT: 0, nearLock: false, exCool: 0, rest: 0, doorFlashT: 0,
+    think: 0, goal: null, field: null, fieldKey: '', spots: [], wander: 0,
+    moveAng: -Math.PI / 2, yieldT: 0, yieldAng: 0, keepT: 0, yieldFor: null,
+    fleeAng: null, fleeHold: 0, fleeCalm: 0, fleeWait: 0, loiterT: 0
+  };
+}
+
+/* 每个玩家一套自己的 3 把钥匙（别人看不见也拿不走），随机藏在可疑点里。
+   这样谁也不会被“钥匙被别人揣走”卡死，比的就是谁找得快、逃得快。 */
+function placeKeys() {
+  keys = [];
+  for (var pi = 0; pi < PLAYERS_N; pi++) {
+    var inS = shuffle(IN_SPOTS.slice());
+    var outS = shuffle(OUT_SPOTS.slice());
+    var nIn = Math.random() < 0.5 ? 1 : 2;          /* 家里至少藏 1 把 */
+    for (var i = 0; i < nIn; i++) {
+      keys.push({ owner: pi, x: inS[i].x, y: inS[i].y, inHouse: true, taken: false, spin: rand(0, 6.28) });
+    }
+    for (var j = 0; j < KEY_N - nIn; j++) {
+      keys.push({ owner: pi, x: outS[j].x, y: outS[j].y, inHouse: false, taken: false, spin: rand(0, 6.28) });
+    }
+  }
+}
+
+/* 人机要搜的点：所有钥匙可能藏的地方（和真人拿到的一样，就看谁跑得快） */
+function botSpots() {
+  var list = [];
+  for (var i = 0; i < OUT_SPOTS.length; i++) {
+    list.push({ x: OUT_SPOTS[i].x, y: OUT_SPOTS[i].y, inHouse: false, done: false });
+  }
+  for (var j = 0; j < IN_SPOTS.length; j++) {
+    list.push({ x: IN_SPOTS[j].x, y: IN_SPOTS[j].y, inHouse: true, done: false });
+  }
+  return shuffle(list);
+}
+function newGame(diffKey) {
+  if (diffKey && DIFFS[diffKey]) { diff = DIFFS[diffKey]; }
+  time = 0; ex = 0; berserk = false; rageGlow = 0; fade = 0; redFlash = 0;
+  exAutoT = diff.auto; botExCool = 0; endKeys = null;
+  document.getElementById('over').classList.remove('blood');
+  shells = []; fx = []; pops = [];
+
+  scene = 'world';
+
+  me = mkPlayer(0, true, { x: 148, y: 350 });
+  bots = [
+    mkPlayer(1, false, { x: 902, y: 350 }),
+    mkPlayer(2, false, { x: 350, y: 372 }),
+    mkPlayer(3, false, { x: 262, y: 350 }),
+    mkPlayer(4, false, { x: 800, y: 350 })
+  ];
+  for (var si = 0; si < bots.length; si++) {
+    bots[si].style = BOT_STYLES[si % BOT_STYLES.length];   /* 性格只影响行为，不写在名字上 */
+  }
+  placeKeys();                                   /* 先把钥匙摆好，人机才知道要搜哪些点 */
+  for (var i = 0; i < bots.length; i++) { bots[i].spots = botSpots(); }
+
+  ye = {
+    x: YE_START.x, y: YE_START.y, dir: Math.PI / 2, scene: 'world',
+    intro: 2.6, target: null, wait: 0, flash: 0, rage: 0, aimTarget: null, heading: Math.PI / 2, guardT: 0, guardCool: rand(6, 12), guardPost: null, sprintT: 0, sprintCool: rand(4, 8),
+    goHouse: false, houseT: rand(12, 22), leaveT: 0, chaseT: 0, chaseBest: 1e9, giveUp: 0, field: null, fieldKey: ''
+  };
+  cannon = { x: CANNON0.x, y: CANNON0.y, ang: Math.PI, cool: 1.2, moving: false };
+  state = 'playing';
+  document.getElementById('intro').classList.add('hidden');
+  document.getElementById('over').classList.add('hidden');
+  elHint.textContent = 'WASD 移动 · 按住 F 捡钥匙(2s) / 充能传送门(5s) · 轻按 F 进出屋 · 找齐 3 把钥匙逃出去';
+  banner('叶初慢慢推开门…', 1800);
+  hud();
+}
+
+function players() {
+  var a = [];
+  if (me) { a.push(me); }
+  for (var i = 0; i < bots.length; i++) { a.push(bots[i]); }
+  return a;
+}
+function alivePlayers() {
+  var all = players(), out = [];
+  for (var i = 0; i < all.length; i++) { if (all[i].alive) { out.push(all[i]); } }
+  return out;
+}
+
+/* ---------------- 场景切换 ---------------- */
+function enterHouse(side) {
+  var p = DOOR_ENTER_IN[side];
+  me.x = p.x; me.y = p.y; me.scene = 'house';
+  me.doorCool = 0.15; fade = 1; scene = 'house';
+  me.doorFlashT = 1.0;                       /* 门口这一下是盲区，记得住 */
+  banner('🏠 走进叶初的家', 1200);
+}
+function leaveHouse(side) {
+  var p = DOOR_ENTER_OUT[side];
+  me.x = p.x; me.y = p.y; me.scene = 'world';
+  me.doorCool = 0.15; fade = 1; scene = 'world';
+  me.doorFlashT = 1.0;
+}
+function botEnterHouse(b, side) {
+  var p = DOOR_ENTER_IN[side];
+  b.x = p.x; b.y = p.y; b.scene = 'house';
+  b.doorCool = 1.4; b.field = null; b.fieldKey = '';
+}
+function botLeaveHouse(b, side) {
+  var p = DOOR_ENTER_OUT[side];
+  b.x = p.x; b.y = p.y; b.scene = 'world';
+  b.doorCool = 1.4; b.field = null; b.fieldKey = '';
+}
+
+/* ---------------- 叶初 ---------------- */
+function pickYeWanderOut() {
+  for (var t = 0; t < 30; t++) {
+    var x, y;
+    if (Math.random() < 0.88) { x = rand(410, 630); y = rand(220, 440); }   /* 主要在他家周围 */
+    else { x = rand(380, 680); y = rand(312, 388); }                          /* 偶尔走到门口的小道上 */
+    if (canOut(x, y, 12)) { return { x: x, y: y }; }
+  }
+  return { x: 520, y: 430 };
+}
+function pickYeWanderIn() {
+  for (var t = 0; t < 30; t++) {
+    var x = rand(200, 840), y = rand(145, 515);
+    if (canIn(x, y, 13)) { return { x: x, y: y }; }
+  }
+  return { x: ROOM_CX, y: ROOM_CY };
+}
+
+/* 叶初：屋外游走 / 偶尔回屋 / 屋里有他就跟 / 贴到就带走 */
+function stepYe(dt) {
+  if (ye.flash > 0) { ye.flash -= dt; }
+
+  /* 兜底：如果被挤到非法位置（贴墙太紧之类），先挪回能站的地方，
+     否则 moveBody 一步都走不动，会看起来像“定住不动” */
+  var chkSelf = ye.scene === 'house' ? canIn : canOut;
+  if (!chkSelf(ye.x, ye.y, 12)) {
+    var fix = ye.scene === 'house' ? findOpenIn(ye.x, ye.y, 12) : findOpenOut(ye.x, ye.y, 12);
+    ye.x = fix.x; ye.y = fix.y;
+    ye.heading = undefined;
+  }
+  ye.rage += ((berserk ? 1 : ex / EX_MAX) - ye.rage) * Math.min(1, dt * 3);
+
+  /* 只找“和自己同一个场景”的活人 —— 隔着墙他是看不见的 */
+  var here = [];
+  var all = players();
+  for (var i = 0; i < all.length; i++) {
+    if (!all[i].alive || all[i].scene !== ye.scene) { continue; }
+
+    here.push(all[i]);
+  }
+  var chased = null, bestD = 1e9, bestScore = 1e9;
+  for (var j = 0; j < here.length; j++) {
+    var d = dist(here[j].x, here[j].y, ye.x, ye.y);
+    /* 更爱盯着真人：他身上钥匙越多，越优先 */
+    var pref = here[j].isMe ? ((me && me.keys >= 1) ? 80 : 45) : 0;
+    var score = d - pref;
+    if (score < bestScore) { bestScore = score; chased = here[j]; bestD = d; }
+  }
+
+  /* 目标黏性：周围几个人距离都差不多时，不要每帧换人（会原地打转抽搐）。
+     只有新目标比当前目标近 45 像素以上，才换人。 */
+  if (ye.aimTarget && here.indexOf(ye.aimTarget) < 0) { ye.aimTarget = null; }
+  if (!ye.aimTarget) {
+    ye.aimTarget = chased;
+  } else if (chased && chased !== ye.aimTarget) {
+    var curD = dist(ye.aimTarget.x, ye.aimTarget.y, ye.x, ye.y);
+    if (bestD < curD - 45) { ye.aimTarget = chased; }
+  }
+  if (ye.aimTarget) {
+    chased = ye.aimTarget;
+    bestD = dist(chased.x, chased.y, ye.x, ye.y);
+  }
+
+  /* 在屋里的“想出来”倒计时：不管在不在追人都会走完 */
+  if (ye.scene === 'house' && ye.leaveT > 0) { ye.leaveT -= dt; }
+
+  /* ---------- 兴奋值分档：不只是最后暴走才有变化 ---------- */
+  var tier = berserk ? 3 : ex;
+  var det = berserk ? YE_DETECT_RAGE : YE_DETECT;
+  if (tier === 1) { det *= 1.3; }           /* 兴奋 1 格：察觉范围变大 */
+  if (tier >= 2) { det *= 1.75; }           /* 兴奋 2 格：更远，还会小跑冲刺 */
+  if (ye.scene === 'house') { det = berserk ? 1200 : 420; }
+
+  /* 你身上带着 2 把以上钥匙，他能远远闻到味道 */
+  var smells = !!(me && me.alive && me.keys >= 1);   /* 拿到一把钥匙他就开始闻味 */
+  if (smells && !berserk) { det *= 1.7; }
+
+  /* 追击范围：屋外只在“家周围”；带着钥匙就不限；屋里就那么大 */
+  var nearHome = chased && dist(chased.x, chased.y, 520, 330) < 270;
+  var leash = !!berserk || !!(chased && (ye.scene === 'house' || nearHome || smells));
+
+  /* 追不上就放弃：不然人机在他面前绕圈，他会一辈子盯着同一个目标 */
+  if (ye.giveUp > 0) { ye.giveUp -= dt; }
+  /* 屋里待够了就得走人，谁在面前勾着他也没用 */
+  var mustLeave = (ye.scene === 'house' && ye.leaveT <= 0);
+  var chasing = !!(chased && bestD < det && leash && ye.giveUp <= 0 && !mustLeave);
+  if (chasing) {
+    if (ye.scene === 'house') {
+      /* 在自己家里不放弃，绕着家具也要过来 */
+      ye.chaseT = 0; ye.chaseBest = 1e9;
+    } else if (bestD < ye.chaseBest - 5) {
+      ye.chaseBest = bestD; ye.chaseT = 0;              /* 在靠近就继续追 */
+    } else {
+      ye.chaseT += dt;
+      if (ye.chaseT > 6) { ye.chaseT = 0; ye.chaseBest = 1e9; ye.giveUp = rand(3, 5); chasing = false; }
+    }
+  } else {
+    ye.chaseT = 0; ye.chaseBest = 1e9;
+  }
+
+  /* 兴奋 2 格以上：追人的时候会隔一阵小跑一下 */
+  if (!berserk && tier >= 2) {
+    if (ye.sprintT > 0) { ye.sprintT -= dt; }
+    else {
+      ye.sprintCool = (ye.sprintCool || 0) - dt;
+      if (chasing && ye.sprintCool <= 0) {
+        ye.sprintT = 1.2;
+        ye.sprintCool = rand(4, 7);
+        burst(ye.x, ye.y, 'rgba(255,120,90,.85)', 10, 110);
+      }
+    }
+  } else {
+    ye.sprintT = 0;
+  }
+
+  /* 盘算“回屋里转转”：追人的时候攒得慢一点；你要躲在家里，他会更急着回去看看 */
+  if (ye.scene === 'world' && !ye.goHouse && ye.intro <= 0) {
+    var rate = chasing ? 0.45 : 1;
+    if (me && me.alive && me.scene === 'house') { rate *= 2.6; }
+    ye.houseT -= dt * rate;
+    if (ye.houseT <= 0) { ye.goHouse = true; ye.target = null; ye.guardT = 0; }
+  }
+
+  /* 守门调度：不追人的时候，隔一阵去门口 / 竖道口站 5~8 秒 */
+  if (ye.scene === 'world' && !chasing && !ye.goHouse && ye.intro <= 0 && ye.guardT <= 0) {
+    ye.guardCool = (ye.guardCool === undefined ? rand(6, 12) : ye.guardCool) - dt;
+    if (ye.guardCool <= 0) {
+      ye.guardPost = GUARD_POSTS[Math.floor(Math.random() * GUARD_POSTS.length)];
+      ye.guardT = rand(6, 9);
+      ye.guardCool = rand(12, 22);
+      ye.target = null;
+      banner('叶初去守门口了', 900);
+    }
+  }
+
+  var target = null;
+  var useGrid = false;
+
+  if (ye.intro > 0 && ye.scene === 'world') {
+    ye.intro -= dt;
+    target = { x: 612, y: 412 };
+  } else if (chasing) {
+    target = { x: chased.x, y: chased.y };
+  } else if (smells && me && me.alive && me.scene === ye.scene && ye.intro <= 0) {
+    /* 身上有 2 把以上钥匙时，他能远远闻到味道：看不见也会朝你那边摸过来 */
+    target = { x: me.x, y: me.y };
+    useGrid = true;
+  } else if (ye.scene === 'world') {
+    if (ye.goHouse) {
+      var side = nearestSide(DOOR_OUT, ye.x, ye.y);
+      if (dist(ye.x, ye.y, DOOR_OUT[side].x, DOOR_OUT[side].y) < 24) { yeEnterHouse(side); return; }
+      target = DOOR_OUT[side];
+      useGrid = true;
+    } else if (ye.guardT > 0) {
+      /* 守在门口：走到位就站着 */
+      ye.guardT -= dt;
+      var gp = ye.guardPost;
+      if (gp && dist(ye.x, ye.y, gp.x, gp.y) > 14) {
+        target = gp;
+        useGrid = true;
+      }
+    } else if (dist(ye.x, ye.y, 520, 330) > 250) {
+      target = { x: 520, y: 430 };                 /* 走太远了，回家门口转悠 */
+    } else {
+      if (ye.wait > 0) { ye.wait -= dt; }
+      else if (!ye.target || dist(ye.x, ye.y, ye.target.x, ye.target.y) < 10) {
+        ye.target = pickYeWanderOut();
+        ye.wait = rand(0.4, 2.0);
+      } else { target = ye.target; }
+    }
+  } else {
+    /* 在屋里 */
+    if (ye.leaveT <= 0) {
+      var side2 = nearestSide(DOOR_IN, ye.x, ye.y);
+      if (dist(ye.x, ye.y, DOOR_IN[side2].x, DOOR_IN[side2].y) < 22) { yeLeaveHouse(side2); return; }
+      target = DOOR_IN[side2];
+      useGrid = true;
+    } else {
+      if (ye.wait > 0) { ye.wait -= dt; }
+      else if (!ye.target || dist(ye.x, ye.y, ye.target.x, ye.target.y) < 10) {
+        ye.target = pickYeWanderIn();
+        ye.wait = rand(0.4, 2.0);
+      } else { target = ye.target; }
+    }
+  }
+
+  /* 速度：难度 × 兴奋档位 × 冲刺 */
+  var sp = (berserk ? YE_SPEED_RAGE : YE_SPEED) * diff.spd;
+  if (!berserk && tier === 1) { sp *= 1.12; }
+  if (!berserk && tier >= 2) { sp *= 1.10; }
+  if (ye.sprintT > 0) { sp *= 2.6; }
+
+  if (target) {
+    var dir = null;
+    if (ye.scene === 'house') {
+      /* 屋里要绕过家具：把目标量化到 16 像素，再顺 BFS 距离场走 */
+      var qx = Math.round(target.x / 16) * 16, qy = Math.round(target.y / 16) * 16;
+      dir = followField(ye, walkIn, qx, qy);
+    } else if (useGrid) {
+      dir = followField(ye, walkOut, target.x, target.y);
+    } else {
+      dir = norm(target.x - ye.x, target.y - ye.y);
+    }
+    if (dir && (dir.x || dir.y)) {
+      var want = Math.atan2(dir.y, dir.x);
+      if (ye.heading === undefined) { ye.heading = want; }
+      var dAng = want - ye.heading;                  /* 注意别用 diff，那是难度对象 */
+      while (dAng > Math.PI) { dAng -= Math.PI * 2; }
+      while (dAng < -Math.PI) { dAng += Math.PI * 2; }
+      var maxTurn = (ye.sprintT > 0 ? 4.2 : 2.6) * dt;   /* 小跑时转得也快些 */
+      if (Math.abs(dAng) <= maxTurn) { ye.heading += dAng; }
+      else { ye.heading += (dAng > 0 ? maxTurn : -maxTurn); }
+
+      var hx = Math.cos(ye.heading), hy = Math.sin(ye.heading);
+      var stp = sp * dt;
+      var chk = ye.scene === 'house' ? canIn : canOut;
+      moveBody(ye, hx * stp, hy * stp, chk, 12);
+      ye.dir = ye.heading;
+    }
+  }
+
+  /* 碰到就当场阵亡（同一场景才算） */
+  for (var k = 0; k < here.length; k++) {
+    if (dist(here[k].x, here[k].y, ye.x, ye.y) < TOUCH_R) { killPlayer(here[k], '叶初'); }
+  }
+}
+/* 叶初进出屋子 */
+function yeEnterHouse(side) {
+  var p = DOOR_ENTER_IN[side];
+  ye.x = p.x; ye.y = p.y; ye.scene = 'house';
+  ye.goHouse = false; ye.target = null; ye.wait = 0;
+  ye.field = null; ye.fieldKey = '';
+  ye.leaveT = rand(9, 16);
+  ye.houseT = rand(14, 24);
+}
+function yeLeaveHouse(side) {
+  var p = DOOR_ENTER_OUT[side];
+  ye.x = p.x; ye.y = p.y; ye.scene = 'world';
+  ye.target = null; ye.wait = 0;
+  ye.field = null; ye.fieldKey = '';
+  ye.leaveT = 0;
+  ye.houseT = rand(12, 22);
+}
+/* ---------------- 兴奋值 / 暴走 ---------------- */
+/* 只算真人的距离：叶初是冲你“兴奋”的，人机在旁边打转不该替你把大炮叫醒。
+   规则本身没变——离他太近待满 3 秒，兴奋 +1，满 3 格暴走。 */
+/* 兴奋值来源有两个：
+   ① 每 30 秒自动 +1（谁来都不例外）
+   ② 真人或人机贴到他跟前待满 3 秒，各自 +1；同一个人必须离开半径后才能再攒 */
+function stepExcite(dt) {
+  if (berserk) { return; }
+  if (botExCool > 0) { botExCool -= dt; }
+  var all = players();
+  for (var i = 0; i < all.length; i++) {
+    var p = all[i];
+    if (!p.alive || p.scene !== ye.scene) { p.nearT = 0; p.nearLock = false; continue; }
+
+    var reach = p.isMe ? EX_NEAR : EX_BOT_NEAR;
+    var d = dist(p.x, p.y, ye.x, ye.y);
+    if (p.exCool > 0) { p.exCool -= dt; }
+    if (p.nearLock) {
+      if (d >= reach) { p.nearLock = false; }       /* 离开他的范围才重新累计 */
+      continue;
+    }
+    if (p.exCool > 0) { p.nearT = 0; continue; }    /* 刚让他兴奋过，先冷却一会儿 */
+    if (!p.isMe && botExCool > 0) { p.nearT = 0; continue; }   /* 人机整体也限流 */
+    if (d < reach) {
+      p.nearT += dt;
+      if (p.nearT >= EX_TIME) {
+        p.nearT = 0;
+        p.nearLock = true;
+        p.exCool = p.isMe ? 8 : 25;                 /* 真人 8 秒、人机 25 秒冷却 */
+        if (!p.isMe) { botExCool = 45; }            /* 人机整体 45 秒内只算一次：它们是“添把柴”，不是点火器 */
+        burst(p.x, p.y, 'rgba(255,120,120,.85)', 12, 100);
+        addExcite(p.isMe ? 'near' : 'bot');
+      }
+    } else {
+      p.nearT = 0;
+    }
+  }
+}
+function addExcite(kind) {
+  if (berserk) { return; }
+  ex = Math.min(EX_MAX, ex + 1);
+  ye.flash = 0.6;
+  burst(ye.x, ye.y, 'rgba(255,90,90,.9)', 16, 120);
+  var head = kind === 'auto' ? '叶初越来越兴奋了'
+           : (kind === 'bot' ? '人机凑得太近，他被惹躁了'
+           : '离他太近了，兴奋值 +1');
+  banner(head + '（' + ex + '/' + EX_MAX + '）', 1100);
+  if (ex >= EX_MAX) { startBerserk(); }
+}function startBerserk() {
+  if (berserk) { return; }
+  berserk = true;
+  ex = EX_MAX;
+  cannon.cool = 0.9;
+  banner('叶初暴走了！屋旁的大炮开始射击', 2100);
+}
+/* 朝某个方向前面够不够空（用大炮自己的半径 20 判定） */
+function clearAhead(x, y, ang, maxD) {
+  for (var d = 8; d <= maxD; d += 8) {
+    if (!canOut(x + Math.cos(ang) * d, y + Math.sin(ang) * d, 20)) { return false; }
+  }
+  return true;
+}
+
+/* 大炮移动：先按想去的方向走，被屋子挡住就左右斜着蹭（像贴着墙滑） */
+function cannonMove(stp, dx, dy) {
+  var base = Math.atan2(dy, dx);
+  var tries = [0, 0.52, -0.52, 1.05, -1.05, 1.57, -1.57];
+  for (var i = 0; i < tries.length; i++) {
+    var a = base + tries[i];
+    var nx = cannon.x + Math.cos(a) * stp;
+    var ny = cannon.y + Math.sin(a) * stp;
+    if (canOut(nx, ny, 20)) {
+      cannon.x = nx; cannon.y = ny;
+      cannon.lastTurn = tries[i];
+      return true;
+    }
+  }
+  return false;
+}
+
+function stepCannon(dt) {
+  cannon.moving = berserk;
+  if (!berserk) { return; }
+  cannon.cool -= dt;
+
+  /* 追最近的活人，拿满钥匙的人优先 */
+  var all = alivePlayers(), pick = null, pickS = 1e9;
+  for (var i = 0; i < all.length; i++) {
+    if (all[i].scene !== 'world') { continue; }
+    var s = dist(all[i].x, all[i].y, cannon.x, cannon.y) - (all[i].keys >= KEY_N ? 120 : 0);
+    if (s < pickS) { pickS = s; pick = all[i]; }
+  }
+  if (!pick) { return; }
+
+  /* 目标黏性：每帧换人会导致方向来回翻、原地抖着走不动。
+     锁定一个目标至少 2 秒，除非别人明显更值得打。 */
+  cannon.tgtT = (cannon.tgtT || 0) - dt;
+  if (cannon.tgt && cannon.tgt.alive && cannon.tgt.scene === 'world') {
+    var curS = dist(cannon.tgt.x, cannon.tgt.y, cannon.x, cannon.y) - (cannon.tgt.keys >= KEY_N ? 120 : 0);
+    if (pick !== cannon.tgt && pickS < curS - 90 && cannon.tgtT <= 0) {
+      cannon.tgt = pick;
+      cannon.tgtT = 2.0;
+    }
+  } else {
+    cannon.tgt = pick;
+    cannon.tgtT = 2.0;
+  }
+  var tgt = cannon.tgt;
+
+  /* 方向：前面空就走直线，被屋子挡住就顺着 BFS 距离场绕 */
+  var want = Math.atan2(tgt.y - cannon.y, tgt.x - cannon.x);
+  var dir;
+  if (clearAhead(cannon.x, cannon.y, want, 90)) {
+    dir = { x: Math.cos(want), y: Math.sin(want) };
+  } else {
+    var qx = Math.round(tgt.x / 24) * 24, qy = Math.round(tgt.y / 24) * 24;
+    dir = followField(cannon, walkBig, qx, qy);
+    if (!dir || (!dir.x && !dir.y)) { dir = { x: Math.cos(want), y: Math.sin(want) }; }
+  }
+
+  var stp = 64 * dt;
+  var bx = cannon.x, by = cannon.y;
+  cannonMove(stp, dir.x, dir.y);
+
+  /* 卡住自救：想走却一步没挪（可能顶在墙角），就侧着蹭一下换个角度 */
+  var moved = Math.abs(cannon.x - bx) + Math.abs(cannon.y - by);
+  if (moved < stp * 0.25) {
+    cannon.stuckT = (cannon.stuckT || 0) + dt;
+    if (cannon.stuckT > 0.35) {
+      cannon.stuckT = 0;
+      cannon.side = -(cannon.side || 1);
+      var alt = want + cannon.side * Math.PI / 2;
+      cannonMove(stp * 2.2, Math.cos(alt), Math.sin(alt));
+    }
+  } else {
+    cannon.stuckT = 0;
+  }
+
+  /* 万一被挤进非法位置（贴着墙太死），挪回最近能站的地方 */
+  if (!canOut(cannon.x, cannon.y, 20)) {
+    var fixC = findOpenOut(cannon.x, cannon.y, 20);
+    cannon.x = fixC.x; cannon.y = fixC.y;
+    cannon.field = null; cannon.fieldKey = '';
+  }
+
+  cannon.ang = Math.atan2(tgt.y - cannon.y, tgt.x - cannon.x);
+
+  if (cannon.cool <= 0) {
+    cannon.cool = diff.cannon;
+    /* 暴走的大炮不再单发：三连扇形，逼你绕掩体 */
+    for (var kk = -1; kk <= 1; kk++) {
+      var a2 = cannon.ang + kk * 0.09;
+      spawnShell(cannon.x + Math.cos(a2) * 24, cannon.y + Math.sin(a2) * 24, a2);
+    }
+  }
+}
+function spawnShell(x, y, ang) {
+  shells.push({
+    x: x, y: y, vx: Math.cos(ang) * SHELL_SPEED * diff.shellSpd, vy: Math.sin(ang) * SHELL_SPEED * diff.shellSpd, life: 1.7
+  });
+  burst(x, y, 'rgba(255,243,176,.95)', 6, 70);
+}
+function stepShells(dt) {
+  for (var i = shells.length - 1; i >= 0; i--) {
+    var s = shells[i];
+    s.life -= dt;
+    var nx = s.x + s.vx * dt, ny = s.y + s.vy * dt;
+
+    /* 打进屋子 / 打进树林就没了 */
+    var dead = s.life <= 0;
+    if (!dead && (!onPath(nx, ny) || inRect(HOUSE, nx, ny, 0))) {
+      burst(nx, ny, 'rgba(255,243,176,.7)', 7, 80);
+      dead = true;
+    }
+
+    if (!dead) {
+      s.x = nx; s.y = ny;
+      var all = alivePlayers();
+      for (var j = 0; j < all.length; j++) {
+        var p = all[j];
+        if (p.scene !== 'world') { continue; }
+        if (dist(p.x, p.y, s.x, s.y) < SHELL_R + BODY_R) {
+          /* 刚被炸过：这一发只算打掉，不扣血（否则三连扇形一发糊脸就是 3 点，直接死） */
+          if (p.hitCool > 0) {
+            burst(s.x, s.y, 'rgba(255,243,176,.6)', 6, 90);
+            dead = true;
+            break;
+          }
+          p.hits++;
+          p.hitCool = 0.5;
+          p.flash = 0.25;
+          popup(p.x, p.y - 14, '-' + p.hits + '/3', '#fff3b0');
+          burst(s.x, s.y, 'rgba(255,243,176,.95)', 12, 130);
+          dead = true;
+          if (p.hits >= HIT_MAX) { killPlayer(p, '炮弹'); }
+          break;
+        }
+      }
+    }
+    if (dead) { shells.splice(i, 1); }
+  }
+}
+
+/* ---------------- 阵亡 / 掉落 ---------------- */
+function killPlayer(p, reason) {
+  if (!p.alive) { return; }
+  p.alive = false;
+  p.flash = 0.5;
+  burst(p.x, p.y, 'rgba(255,90,90,.95)', 24, 150);
+  var carried = p.keys;                        /* 结算要显示死的时候手上还剩几把 */
+  p.channel = null;
+  p.keys = 0;                                  /* 自己的钥匙带不走 */
+  if (p.isMe) {
+    endKeys = carried;
+    var byShell = (reason === '炮弹');
+    var doorCrash = (reason === '叶初' || byShell) && p.doorFlashT > 0;   /* 刚推开门就出事 */
+    if (doorCrash) {
+      redFlash = 1.7;
+      fade = 0;                                  /* 立刻亮出血红，别被开门黑场压住 */
+      sfxDoorDeath();
+      document.getElementById('over').classList.add('blood');
+    }
+    endGame(false, doorCrash ? (byShell ? 'doorShell' : 'door') : 'reason:' + reason);
+  }
+  else { banner(p.name + ' 被' + reason + '带走了', 1000); }
+}
+
+/* ---------------- 拾取 ---------------- */
+function stepPickup(dt) {
+  var all = players();
+  for (var i = 0; i < all.length; i++) {
+    var p = all[i];
+    if (!p.alive) { p.channel = null; continue; }
+    if (p.isMe) { continue; }                 /* 真人按 F 自己读条 */
+
+    /* 找自己身边那把钥匙 */
+    var near = null;
+    for (var j = 0; j < keys.length; j++) {
+      var k = keys[j];
+      if (k.taken || k.owner !== p.idx) { continue; }
+      if ((k.inHouse ? 'house' : 'world') !== p.scene) { continue; }
+      if (dist(p.x, p.y, k.x, k.y) < 22) { near = k; break; }
+    }
+    var scared = !!(ye && ye.scene === p.scene &&
+                    dist(p.x, p.y, ye.x, ye.y) < (p.style ? p.style.yeR : 130) * 0.8);
+
+    if (p.channel && p.channel.kind === 'key') {
+      /* 读条中：离开范围 / 叶初靠太近就中断，进度清零 */
+      if (!near || scared) { p.channel = null; continue; }
+      p.channel.t -= dt;
+      if (p.channel.t <= 0) {
+        p.channel = null;
+        near.taken = true;
+        p.keys++;
+        burst(near.x, near.y, 'rgba(255,209,102,.95)', 14, 110);
+        if (p.keys >= KEY_N) { banner(p.name + ' 集齐了 3 把钥匙！', 1300); }
+      }
+      continue;
+    }
+
+    /* 站到钥匙旁边就开始读条（读条期间 stepBot 会站定不动） */
+    if (near && !p.channel && !p.fleeOn && !scared) {
+      p.channel = { kind: 'key', t: KEY_PICK, max: KEY_PICK };
+    }
+  }
+  /* 清理已拿走的钥匙 */
+  for (var m = keys.length - 1; m >= 0; m--) { if (keys[m].taken) { keys.splice(m, 1); } }
+}
+
+/* ---------------- 传送门 ---------------- */
+function stepPortal(dt) {
+  var all = alivePlayers();
+  for (var i = 0; i < all.length; i++) {
+    var p = all[i];
+    if (p.isMe) { continue; }               /* 真人按 F 自己充能 */
+    /* 正在捡钥匙的读条交给 stepPickup 管，别在这里清掉 */
+    if (p.channel && p.channel.kind !== 'portal') { continue; }
+    if (p.scene !== 'world' || p.keys < KEY_N) { p.channel = null; continue; }
+    var inR = dist(p.x, p.y, PORTAL.x, PORTAL.y) < PORTAL_R;
+    /* 叶初贴得太近就先别充能，先跑命 */
+    var scared = ye && ye.scene === p.scene &&
+                 dist(p.x, p.y, ye.x, ye.y) < (p.style ? p.style.yeR : 130) * 0.8;
+    if (!inR || scared) { p.channel = null; continue; }
+    if (!p.channel || p.channel.kind !== 'portal') {
+      p.channel = { kind: 'portal', t: PORTAL_CHARGE, max: PORTAL_CHARGE };
+    }
+    p.channel.t -= dt;
+    if (p.channel.t <= 0) {
+      p.channel = null;
+      p.alive = false;
+      p.escaped = true;
+      burst(p.x, p.y, 'rgba(150,230,255,.95)', 26, 160);
+      banner(p.name + ' 从传送门逃走了，你输了', 1800);
+      endGame(false, 'bot');
+    }
+  }
+}
+
+/* ---------------- 真人 ---------------- */
+function stepPlayer(dt) {
+  if (!me.alive) { return; }
+  if (me.doorCool > 0) { me.doorCool -= dt; }
+  if (me.flash > 0) { me.flash -= dt; }
+  if (me.doorFlashT > 0) { me.doorFlashT -= dt; }
+
+  /* 先记下“想往哪走”，撞墙判定会把这个值清零，开门要用原始输入 */
+  var inX = (keysDown.d ? 1 : 0) - (keysDown.a ? 1 : 0);
+  var inY = (keysDown.s ? 1 : 0) - (keysDown.w ? 1 : 0);
+  /* 读条：捡钥匙和充能传送门都一样——必须一直按住 F，
+     松手就清零；读条期间人不能动 */
+  if (me.channel) {
+    if (!fDown) {
+      me.channel = null;
+      banner('松手了，进度清零', 800);
+    } else {
+      me.channel.t -= dt;
+      if (me.channel.t <= 0) {
+        var ck = me.channel.kind;
+        me.channel = null;
+        if (ck === 'key') { finishPickup(); }
+        else if (ck === 'portal') { finishPortal(); }
+        if (!me.alive) { return; }
+      }
+    }
+  }
+
+
+  /* 一直按着 F 走到钥匙/传送门旁边，也直接开始读条，不用松手重按 */
+  if (fDown && !me.channel && state === 'playing') {
+    if (me.nearKey && !me.nearKey.taken) { startChannel('key', KEY_PICK); }
+    else if (me.nearPortal) { startChannel('portal', PORTAL_CHARGE); }
+  }
+
+  var ax = me.channel ? 0 : inX, ay = me.channel ? 0 : inY;   /* 读条时站定 */
+  if (ax || ay) {
+    var v = norm(ax, ay);
+    var check = me.scene === 'world' ? canOut : canIn;
+    var spd = me.speed;
+
+    moveBody(me, v.x * spd * dt, v.y * spd * dt, check, BODY_R);
+    me.dir = Math.atan2(v.y, v.x);
+  }
+  scene = me.scene;
+
+  /* 附近有没有自己的钥匙 / 传送门（给 F 用） */
+  me.nearKey = null;
+  if (me.scene === 'world' || me.scene === 'house') {
+    for (var ki = 0; ki < keys.length; ki++) {
+      var kk = keys[ki];
+      if (kk.taken || kk.owner !== 0) { continue; }
+      if ((kk.inHouse ? 'house' : 'world') !== me.scene) { continue; }
+      if (dist(me.x, me.y, kk.x, kk.y) < 26) { me.nearKey = kk; break; }
+    }
+  }
+
+  me.nearPortal = (me.scene === 'world' && me.keys >= KEY_N &&
+                   dist(me.x, me.y, PORTAL.x, PORTAL.y) < PORTAL_R + 26);
+
+  /* 门口不再自动吸人：贴近门就记下来，按 F 才真的进出 */
+  me.nearDoor = null;
+  var map = me.scene === 'world' ? DOOR_OUT : DOOR_IN;
+  var lim = me.scene === 'world' ? 26 : 24;
+  for (var s in map) {
+    if (dist(me.x, me.y, map[s].x, map[s].y) < lim) { me.nearDoor = s; break; }
+  }
+}
+
+/* 按 F 的互动：钥匙 > 传送门充能 > 进出屋 */
+function tryDoor() {
+  if (state !== 'playing' || !me || !me.alive) { return; }
+  if (me.channel) { return; }                    /* 正在读条，别打断 */
+  if (me.nearKey && !me.nearKey.taken) { startChannel('key', KEY_PICK); return; }
+  if (me.nearPortal) { startChannel('portal', PORTAL_CHARGE); return; }
+
+  if (me.nearDoor) {
+    if (me.scene === 'world') { enterHouse(me.nearDoor); } else { leaveHouse(me.nearDoor); }
+    return;
+  }
+  banner('走到钥匙 / 传送门 / 门口旁边再按 F', 900);
+}
+
+function startChannel(kind, dur) {
+  me.channel = { kind: kind, t: dur, max: dur };
+  banner(kind === 'key' ? '按住 F 别松手，捡钥匙中…' : '按住 F 别松手，充能中…', 1200);
+}
+
+/* 读条完成：捡钥匙 */
+function finishPickup() {
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i];
+    if (k.taken || k.owner !== 0) { continue; }
+    if ((k.inHouse ? 'house' : 'world') !== me.scene) { continue; }
+    if (dist(me.x, me.y, k.x, k.y) > 34) { continue; }
+    k.taken = true;
+    me.keys++;
+    burst(k.x, k.y, 'rgba(255,209,102,.95)', 16, 120);
+    popup(k.x, k.y - 12, '+1', '#ffd166');
+    banner('🔑 捡到钥匙 ' + me.keys + '/' + KEY_N, 1000);
+    if (me.keys >= KEY_N) { banner('三把齐了！去小道尽头的传送门按 F 充能', 1800); }
+    return;
+  }
+  banner('钥匙不在这儿了', 800);
+}
+
+/* 读条完成：传送门 */
+function finishPortal() {
+  if (me.keys < KEY_N) { return; }
+  if (dist(me.x, me.y, PORTAL.x, PORTAL.y) > PORTAL_R + 34) { banner('离开传送门太远了', 900); return; }
+  me.alive = false;
+  me.escaped = true;
+  burst(me.x, me.y, 'rgba(150,230,255,.95)', 30, 170);
+  endGame(true, 'escape');
+}
+/* ---------------- 人机 ---------------- */
+
+
+function chooseGoal(b) {
+  /* 跟屁虫：一半时间往真人附近凑 */
+  if (b.style && b.style.key === 'follower' && b.keys >= 1 && me && me.alive && me.scene === b.scene &&
+      dist(b.x, b.y, me.x, me.y) < 240 && Math.random() < 0.35) {
+    b.goal = { x: me.x + rand(-95, 95), y: me.y + rand(-95, 95),
+               inHouse: me.scene === 'house', spot: null };
+    return;
+  }
+  /* 你身上钥匙多了，人机也会被吸引，往你这边凑过来（制造被围的感觉） */
+  if (me && me.alive && me.keys >= 2 && b.scene === me.scene && Math.random() < 0.35) {
+    b.goal = { x: me.x + rand(-110, 110), y: me.y + rand(-110, 110),
+               inHouse: me.scene === 'house', spot: null };
+    return;
+  }
+  if (b.keys >= KEY_N) {
+    b.goal = { x: PORTAL.x, y: PORTAL.y, inHouse: false, spot: null };
+    return;
+  }
+  var curSpot = (b.goal && b.goal.spot && !b.goal.spot.done) ? b.goal.spot : null;
+  var best = null, bestD = 1e9, curD = 1e9;
+  for (var i = 0; i < b.spots.length; i++) {
+    var sp = b.spots[i];
+    if (sp.done) { continue; }
+    var d = dist(b.x, b.y, sp.x, sp.y);
+    var sameSc = (sp.inHouse ? 'house' : 'world') === b.scene;
+    if (!sameSc) { d += 300; }                 /* 换场景要跑一趟门，别来回折腾 */
+    if (ye.scene === 'world' && !sp.inHouse && dist(ye.x, ye.y, sp.x, sp.y) < 130) { d += 220; }  /* 别往他脸上凑 */
+    if (b.style) {
+      if (b.style.house && sp.inHouse) { d += b.style.house; }        /* 抄近道：先冲屋里 */
+      if (b.style.key === 'careful' && !sp.inHouse && ye.scene === 'world' &&
+          dist(ye.x, ye.y, sp.x, sp.y) < 150) { d += 420; }           /* 谨慎：不往叶初边上凑 */
+    }
+    /* 直线要穿过叶初的话等于让他堵在路中间，先别选 */
+    if (ye.scene === 'world' && !sp.inHouse && pointSegDist(ye.x, ye.y, b.x, b.y, sp.x, sp.y) < 95) { d += 380; }
+    /* 别跟别的活人机抢同一个点，省得几个凑成一堆 */
+    for (var q = 0; q < bots.length; q++) {
+      var oq = bots[q];
+      if (oq === b || !oq.alive || !oq.goal || !oq.goal.spot) { continue; }
+      if (oq.goal.spot.x === sp.x && oq.goal.spot.y === sp.y) { d += 320; }
+    }
+    if (curSpot && sp.x === curSpot.x && sp.y === curSpot.y) { curD = d; }
+    if (d < bestD) { bestD = d; best = sp; }
+  }
+  /* 刚选好的点先守着：除非新点明显更近，否则不换 */
+  if (curSpot && curD < 1e9 && b.keepT > 0 && best && !(best.x === curSpot.x && best.y === curSpot.y) && bestD > curD - 190) {
+    return;
+  }
+  if (!best) {
+    /* 都翻过了：回传送门附近守着 */
+    b.goal = { x: PORTAL.x + rand(-40, 40), y: PORTAL.y - 40, inHouse: false, spot: null };
+    return;
+  }
+  b.goalT = 0;
+  b.keepT = 1.1;
+  b.goal = { x: best.x, y: best.y, inHouse: !!best.inHouse, spot: best };
+}
+
+/* 离叶初 / 炮弹远一点 */
+/* 点到线段的距离：用来判断“这条路线是不是正好从叶初身边过” */
+function pointSegDist(px, py, ax, ay, bx, by) {
+  var dx = bx - ax, dy = by - ay;
+  var L = dx * dx + dy * dy;
+  var t = L > 0 ? ((px - ax) * dx + (py - ay) * dy) / L : 0;
+  t = t < 0 ? 0 : (t > 1 ? 1 : t);
+  return dist(px, py, ax + dx * t, ay + dy * t);
+}
+/* 朝某个方向前面还有多少空地（按人物碰撞半径算） */
+function freeAhead(b, ang, maxD) {
+  var chk = b.scene === 'world' ? canOut : canIn;
+  for (var d = 6; d <= maxD; d += 6) {
+    if (!chk(b.x + Math.cos(ang) * d, b.y + Math.sin(ang) * d, BODY_R)) { return d - 6; }
+  }
+  return maxD;
+}
+
+/* 逃跑方向：以“背离叶初”为底，±90° 里挑一条前面最空的，
+   免得一头顶在墙上被挤住不动 */
+function fleeDir(b) {
+  var base = Math.atan2(b.y - ye.y, b.x - ye.x);
+  /* 方向带保持：上一帧选的那条路还通就先别换，否则会在墙角左右横跳 */
+  if (b.fleeAng !== null && b.fleeHold > 0 && freeAhead(b, b.fleeAng, 60) > 26) {
+    return { x: Math.cos(b.fleeAng), y: Math.sin(b.fleeAng) };
+  }
+  var best = base, bestScore = -1e9;
+  var cur = dist(b.x, b.y, ye.x, ye.y);
+  for (var k = -5; k <= 5; k++) {              /* ±150°，够他绕过叶初 */
+    var a = base + k * Math.PI / 6;
+    var f = freeAhead(b, a, 84);
+    /* 跑出 70 像素后离他更远的方向才是真逃生路，光看面前空地会在死角里打转 */
+    var gain = dist(ye.x, ye.y, b.x + Math.cos(a) * 70, b.y + Math.sin(a) * 70) - cur;
+    var score = Math.min(f, 64) * 0.9 + clamp(gain, -30, 55) * 0.8 - Math.abs(k) * 3;
+    if (f < 26) { score -= 55; }               /* 一头撞墙的方向直接扣死 */
+    if (score > bestScore) { bestScore = score; best = a; }
+  }
+  /* 选出来的方向跟上一帧差得不多就沿用，避免左右抖 */
+  if (b.fleeAng !== null && b.fleeHold > 0) {
+    var dBest = Math.abs(((best - b.fleeAng + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+    if (dBest < Math.PI / 3) { best = b.fleeAng; }
+  }
+  b.fleeAng = best;
+  b.fleeHold = 0.5;
+  return { x: Math.cos(best), y: Math.sin(best) };
+}
+
+function dodge(b, dir) {
+  var out = { x: dir.x, y: dir.y };
+  /* 叶初：只有在同一个场景里才需要躲 */
+  if (ye && ye.scene === b.scene) {
+    var yeR = b.style ? b.style.yeR : 130;
+    var dy = dist(b.x, b.y, ye.x, ye.y);
+    if (b.fleeOn) {
+      /* 已经在跑：跑够远（超过 yeR+45）才算安全，而且挑空路跑 */
+      return fleeDir(b);
+    }
+    if (dy < yeR) {
+      var away = norm(b.x - ye.x, b.y - ye.y);
+      var w = clamp((yeR - dy) / (yeR * 0.6), 0, 1) * 0.95;
+      out.x = out.x * (1 - w) + away.x * w;
+      out.y = out.y * (1 - w) + away.y * w;
+    }
+  }
+  /* 炮弹只在屋外飞 */
+  if (b.scene === 'world') {
+    for (var i = 0; i < shells.length; i++) {
+      var s = shells[i], d = dist(b.x, b.y, s.x, s.y);
+      if (d < 84) {
+        var aw = norm(b.x - s.x, b.y - s.y);
+        var w2 = clamp((84 - d) / 66, 0, 1) * 0.9;
+        out.x = out.x * (1 - w2) + aw.x * w2;
+        out.y = out.y * (1 - w2) + aw.y * w2;
+      }
+    }
+  }
+  return norm(out.x, out.y);
+}
+function separateBots() {
+  for (var i = 0; i < bots.length; i++) {
+    var a = bots[i];
+    if (!a.alive) { continue; }
+    for (var j = i + 1; j < bots.length; j++) {
+      var o = bots[j];
+      if (!o.alive || o.scene !== a.scene) { continue; }
+      var d = dist(a.x, a.y, o.x, o.y);
+      var gap = (a.yieldT > 0 || o.yieldT > 0) ? 30 : 46;
+      if (d >= gap) { continue; }
+      var nx = d > 0.001 ? (a.x - o.x) / d : 1;
+      var ny = d > 0.001 ? (a.y - o.y) / d : 0;
+      var push = (gap - d) * 0.5;
+      var chkW = a.scene === 'world' ? canOut : canIn;
+      if (chkW(a.x + nx * push, a.y + ny * push, BODY_R)) { a.x += nx * push; a.y += ny * push; }
+      if (chkW(o.x - nx * push, o.y - ny * push, BODY_R)) { o.x -= nx * push; o.y -= ny * push; }
+    }
+  }
+}
+function stepBots(dt) {
+  for (var i = 0; i < bots.length; i++) { stepBot(bots[i], dt); }
+  separateBots();
+}
+
+function stepBot(b, dt) {
+  if (!b.alive) { return; }
+  if (b.doorCool > 0) { b.doorCool -= dt; }
+  if (b.flash > 0) { b.flash -= dt; }
+  if (b.channel) { return; }          /* 传送门充能中：站定不动 */
+  if (b.keepT > 0) { b.keepT -= dt; }
+  if (b.fleeHold > 0) { b.fleeHold -= dt; }
+
+  /* 叶初贴过来就别站着了，先跑 */
+  if (b.rest > 0 && ye && ye.scene === b.scene) {
+    var yeRr = (b.style ? b.style.yeR : 130) + 40;
+    if (dist(b.x, b.y, ye.x, ye.y) < yeRr) {
+      b.rest = 0;
+      if (b.goal && b.goal.spot) { b.goal.spot.done = true; b.goal = null; }
+    }
+  }
+
+  /* 翻完一个点要“找一会儿”，不是瞬点 */
+  if (b.rest > 0) {
+    b.rest -= dt;
+    if (b.rest <= 0 && b.goal && b.goal.spot) { b.goal.spot.done = true; b.goal = null; }
+    return;
+  }
+
+  if (b.loiterT > 0) { b.loiterT -= dt; }
+  b.think -= dt;
+  if ((b.think <= 0 || !b.goal) && b.loiterT <= 0) {
+    b.think = rand(0.4, 0.75);
+    chooseGoal(b);
+  }
+  var goal = b.goal;
+  if (!goal) { return; }
+
+  /* 只有“卡住不动”才放弃：8 秒内没靠近 12 像素，说明被叶初堵住了；正常赶路不会误判 */
+  if (goal.spot) {
+    var dsp = dist(b.x, b.y, goal.spot.x, goal.spot.y);
+    if (b.goalBest === undefined || dsp < b.goalBest - 12) {
+      b.goalBest = dsp;
+      b.goalT = 0;
+    } else {
+      b.goalT = (b.goalT || 0) + dt;
+    }
+    if (b.goalT > 8) {
+      goal.spot.done = true;
+      b.goal = null;
+      b.goalT = 0;
+      b.goalBest = undefined;
+      return;
+    }
+  }
+
+  var wantHouse = !!goal.inHouse;
+  /* 逃跑状态带滞回：进了 yeR 就跑，跑到 yeR+65 才放松，放松后有 0.9 秒冷静期 */
+  if (ye && ye.scene === b.scene) {
+    var yeR0 = b.style ? b.style.yeR : 130;
+    var yd0 = dist(b.x, b.y, ye.x, ye.y);
+    if (b.fleeCalm > 0) { b.fleeCalm -= dt; }
+    if (yd0 < yeR0 * (b.fleeCalm > 0 ? 0.72 : 1)) { b.fleeOn = true; }
+    else if (yd0 > yeR0 + 65) { b.fleeOn = false; b.fleeCalm = 0.9; }
+  } else { b.fleeOn = false; }
+
+  var dir = null;
+
+  if (b.scene === 'world') {
+    if (wantHouse) {
+      var side = nearestSide(DOOR_OUT, b.x, b.y);
+      var dp = DOOR_OUT[side];
+      if (dist(b.x, b.y, dp.x, dp.y) < 25) { botEnterHouse(b, side); return; }
+      dir = followField(b, walkOut, dp.x, dp.y);
+    } else {
+      if (goal.spot && !goal.spot.done && dist(b.x, b.y, goal.spot.x, goal.spot.y) < 17) {
+        b.rest = rand(0.7, 1.9);          /* 停下翻找 */
+        return;
+      }
+      dir = followField(b, walkOut, goal.x, goal.y);
+    }
+  } else {
+    if (!wantHouse) {
+      var side2 = nearestSide(DOOR_IN, b.x, b.y);
+      var dp2 = DOOR_IN[side2];
+      if (dist(b.x, b.y, dp2.x, dp2.y) < 19) { botLeaveHouse(b, side2); return; }
+      dir = followField(b, walkIn, dp2.x, dp2.y);
+    } else {
+      if (goal.spot && !goal.spot.done && dist(b.x, b.y, goal.spot.x, goal.spot.y) < 17) {
+        b.rest = rand(0.7, 1.9);
+        return;
+      }
+      dir = followField(b, walkIn, goal.x, goal.y);
+    }
+  }
+
+  if (!dir) { return; }
+  dir = dodge(b, dir);
+
+
+
+  /* 叶初堵死唯一出口、四周都跑不掉时，站在原地等（别在原地来回蹭） */
+  if (b.fleeOn && ye && ye.scene === b.scene) {
+    var fdA = Math.atan2(dir.y, dir.x);
+    var ydNow = dist(b.x, b.y, ye.x, ye.y);
+    var yeNow = b.style ? b.style.yeR : 130;
+    if (ydNow > yeNow + 26) {
+      var openWays = 0;
+      for (var fo = -3; fo <= 3; fo++) {                 /* 逃跑方向 ±90° 扫一遍 */
+        if (freeAhead(b, fdA + fo * Math.PI / 6, 56) >= 42) { openWays++; }
+      }
+      if (openWays === 0) {
+        if (!(b.fleeWait > 0)) { b.fleeWait = 0.01; }     /* 刚被堵死：先站住 */
+        else if (b.fleeWait < 1.6) { b.fleeWait += dt; return; }
+        else { b.fleeWait = 0; }                          /* 等太久了就硬着头皮挪 */
+      } else if (b.fleeWait > 0 && b.fleeWait < 1.6 && openWays >= 2) {
+        b.fleeWait = 0;                                    /* 路开了就走 */
+      }
+    }
+  }
+
+  /* ---- 迎面相遇：编号大的让路，别对着顶死 ---- */
+  var near = null, nd = 1e9;
+  for (var qi = 0; qi < bots.length; qi++) {
+    var qb = bots[qi];
+    if (qb === b || !qb.alive || qb.scene !== b.scene) { continue; }
+    var qd = dist(b.x, b.y, qb.x, qb.y);
+    if (qd < 54 && qd < nd) { nd = qd; near = qb; }
+  }
+  var headOn = false;
+  /* 真·迎面才让：对方得在我正前方，而且我俩是反着走的 */
+  var aheadDot = near ? Math.cos(Math.atan2(near.y - b.y, near.x - b.x) - b.moveAng) : 0;
+  var oppDot = near ? Math.cos(near.moveAng - b.moveAng) : 0;
+  if (near && near.rest <= 0 && aheadDot > 0.45 && oppDot < -0.3) {
+    headOn = true;
+    if (b.idx > near.idx) {                       /* 编号大的让，规则固定 */
+      if (b.yieldT <= 0.1) {                      /* 一次让路只选一次方向，免得抖 */
+        var rA = b.moveAng + Math.PI / 2, lA = b.moveAng - Math.PI / 2;
+        var fr = freeAhead(b, rA, 42), fl = freeAhead(b, lA, 42);
+        b.yieldAng = fr >= fl ? rA : lA;
+        if (Math.max(fr, fl) < 16) { b.yieldAng = b.moveAng + Math.PI; }   /* 两边都是墙就先退半步 */
+        b.yieldT = 0.62;
+        b.yieldFor = near;
+      }
+    } else if (b.yieldFor === near) {              /* 只取消让给这个人的那段，不影响同时让给别人 */
+      b.yieldT = 0;
+      b.yieldFor = null;
+    }
+  }
+  if (b.yieldT > 0) { b.yieldT -= dt; }
+
+  /* 侧向排斥：只在不是迎面时做，免得把人往墙上挤 */
+  if (!headOn) {
+    var sx = 0, sy = 0, sn = 0;
+    for (var oi = 0; oi < bots.length; oi++) {
+      var ob = bots[oi];
+      if (ob === b || !ob.alive || ob.scene !== b.scene) { continue; }
+      var od = dist(b.x, b.y, ob.x, ob.y);
+      if (od < 72 && od > 0.001) { sx += (b.x - ob.x) / od; sy += (b.y - ob.y) / od; sn++; }
+    }
+    if (sn) { dir = norm(dir.x + sx * 0.7, dir.y + sy * 0.7); }
+  }
+
+  var spdMul = 1;
+  if (b.yieldT > 0) {                             /* 让路：横着挪开，速度放慢 */
+    if (!b.yieldAng) { b.yieldAng = b.moveAng + Math.PI / 2; }
+    dir = norm(Math.cos(b.yieldAng), Math.sin(b.yieldAng));
+    spdMul = 0.45;
+  }
+
+  if (dir.x || dir.y) {
+    /* 限制转向速度：方向别一帧一个样，看起来就不抽了 */
+    var want = Math.atan2(dir.y, dir.x);
+    var diff = (want - b.moveAng + Math.PI * 3) % (Math.PI * 2) - Math.PI;
+    var lim = 9 * dt;
+    if (diff > lim) { want = b.moveAng + lim; }
+    else if (diff < -lim) { want = b.moveAng - lim; }
+    b.moveAng = want;
+    var check = b.scene === 'world' ? canOut : canIn;
+    var bs = b.speed * (b.style ? b.style.speed : 1) * spdMul;
+    moveBody(b, Math.cos(want) * bs * dt, Math.sin(want) * bs * dt, check, BODY_R);
+    b.dir = want;
+  }
+  /* 硬性防扎堆统一在 stepBots 里做（含静止的人机） */
+}
+/* ---------------- 主更新 ---------------- */
+function stepGame(dt) {
+  if (bannerT > 0) {
+    bannerT -= dt;
+    if (bannerT <= 0) { elBanner.classList.remove('show'); }
+  }
+  if (fade > 0) { fade = Math.max(0, fade - dt * 2.2); }
+
+
+  /* 心跳 & 边缘泛红：离叶初越近越急 */
+  if (state === 'playing' && me && me.alive && ye && ye.scene === me.scene) {
+    var yd = dist(me.x, me.y, ye.x, ye.y);
+    var close = clamp(1 - yd / 460, 0, 1);
+    dangerGlow += (close - dangerGlow) * Math.min(1, dt * 3);
+    if (yd < 460) {
+      hbT -= dt;
+      if (hbT <= 0) {
+        sfxHeart(close > 0.55 || berserk);
+        hbT = 0.42 + (1 - close) * 1.15;          /* 42ms~1.6s */
+      }
+    } else {
+      hbT = 0.2;
+    }
+  } else {
+    dangerGlow += (0 - dangerGlow) * Math.min(1, dt * 2);
+  }
+  rageGlow += ((berserk ? 1 : ex / EX_MAX) - rageGlow) * Math.min(1, dt * 2);
+
+  if (state !== 'playing') { stepFx(dt); return; }
+
+  time += dt;
+  var allp = players();
+  for (var pi = 0; pi < allp.length; pi++) { if (allp[pi].hitCool > 0) { allp[pi].hitCool -= dt; } }
+  stepPlayer(dt);
+  stepBots(dt);
+  stepYe(dt);
+  stepCannon(dt);
+  stepShells(dt);
+  stepPickup(dt);
+  stepPortal(dt);
+  stepExcite(dt);
+  stepFx(dt);
+  for (var i = 0; i < keys.length; i++) { keys[i].spin += dt * 1.6; }
+
+  if (!berserk) {
+    exAutoT -= dt;
+    if (exAutoT <= 0) { exAutoT = diff.auto; addExcite('auto'); }
+  }
+  hud();
+}
+
+function stepFx(dt) {
+  for (var i = pops.length - 1; i >= 0; i--) {
+    var p = pops[i];
+    p.y -= 24 * dt; p.life -= dt;
+    if (p.life <= 0) { pops.splice(i, 1); }
+  }
+  for (var j = fx.length - 1; j >= 0; j--) {
+    var f = fx[j];
+    f.x += f.vx * dt; f.y += f.vy * dt;
+    f.vx *= (1 - dt * 3.4); f.vy *= (1 - dt * 3.4);
+    f.life -= dt;
+    if (f.life <= 0) { fx.splice(j, 1); }
+  }
+  if (me && me.flash > 0) { me.flash -= dt; }
+  if (redFlash > 0) { redFlash = Math.max(0, redFlash - dt * 0.62); }
+}
+
+function hud() {
+  if (!me) { return; }
+  elKeyTxt.textContent = me.keys;
+  for (var i = 0; i < elKeyDots.length; i++) { elKeyDots[i].className = i < me.keys ? 'on' : ''; }
+  var t = Math.max(0, Math.floor(time));
+  var mm = Math.floor(t / 60), ss = t % 60;
+  elTimeTxt.textContent = mm + ':' + (ss < 10 ? '0' + ss : ss);
+  for (var j = 0; j < elExDots.length; j++) { elExDots[j].className = j < ex ? 'on' : ''; }
+  elExWrap.className = 'ex' + (berserk ? ' rage' : '');
+  if (elNextEx) {
+    if (berserk) {
+      elNextEx.textContent = '已暴走';
+      elNextEx.className = 'next rage';
+    } else {
+      elNextEx.textContent = Math.max(1, Math.ceil(exAutoT)) + 's';
+      elNextEx.className = 'next';
+    }
+  }
+  elHitTxt.textContent = me.hits;
+  elAliveTxt.textContent = alivePlayers().length;
+}
+
+function endGame(win, reason) {
+  state = 'over';
+  var title = document.getElementById('overTitle');
+  var sub = document.getElementById('overSub');
+  var stats = document.getElementById('overStats');
+  if (win) {
+    title.textContent = '你逃出去了！';
+    sub.textContent = '叶初的鱼塘再也关不住你了。';
+  } else if (reason === 'door') {
+    title.textContent = '门后是叶初';
+    sub.textContent = '你刚推开门，就迎面撞进了叶初的怀里...';
+  } else if (reason === 'doorShell') {
+    title.textContent = '门还没关上';
+    sub.textContent = '你刚推开门，炮弹就迎面糊了上来...';
+  } else if (reason === 'reason:叶初') {
+    title.textContent = '你被叶初抓住了';
+    sub.textContent = '别靠近他——碰到就当场阵亡。';
+  } else if (reason === 'reason:炮弹') {
+    title.textContent = '你被大炮轰倒了';
+    sub.textContent = '暴走之后那门大炮会一直追着你。';
+  } else if (reason === 'bot') {
+    title.textContent = '被人机抢先逃走了';
+    sub.textContent = '抢钥匙要快，别在屋子里磨蹭。';
+  } else {
+    title.textContent = '游戏结束';
+    sub.textContent = '再来一次试试？';
+  }
+  var left = 0;
+  for (var i = 0; i < bots.length; i++) { if (bots[i].alive) { left++; } }
+  var shownKeys = (endKeys === null) ? me.keys : endKeys;
+  stats.textContent = '钥匙 ' + shownKeys + '/' + KEY_N + '　·　用时 ' + elTimeTxt.textContent +
+    '　·　中弹 ' + me.hits + '/3　·　场上还剩 ' + left + ' 个人机';
+  if (reason !== 'door' && reason !== 'doorShell') { document.getElementById('over').classList.remove('blood'); }
+  document.getElementById('over').classList.remove('hidden');
+  elBanner.classList.remove('show');
+  elHint.textContent = '';
+}
+
+/* ============================================================
+ * 绘制
+ * ============================================================ */
+
+/* ---- 背景预渲染：室外 ---- */
+function drawTree(g, x, y, s, rng) {
+  var r = 15 * s;
+  g.save();
+  g.globalAlpha = 0.55;
+  g.fillStyle = '#000';
+  g.beginPath(); g.ellipse(x + 3, y + 6, r * 0.95, r * 0.7, 0, 0, Math.PI * 2); g.fill();
+  g.restore();
+
+  var dark = '#0b1712', mid = '#12241a', lite = '#1b3526';
+  g.fillStyle = dark;
+  g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  g.fillStyle = mid;
+  g.beginPath(); g.arc(x - r * 0.22, y - r * 0.24, r * 0.74, 0, Math.PI * 2); g.fill();
+  g.fillStyle = lite;
+  g.globalAlpha = 0.85;
+  g.beginPath(); g.arc(x - r * 0.34, y - r * 0.38, r * 0.42, 0, Math.PI * 2); g.fill();
+  g.globalAlpha = 1;
+  /* 几片高光叶子 */
+  for (var i = 0; i < 3; i++) {
+    g.globalAlpha = 0.3 + rng() * 0.25;
+    g.fillStyle = '#27492f';
+    g.beginPath();
+    g.arc(x + (rng() - 0.5) * r, y + (rng() - 0.5) * r, r * (0.16 + rng() * 0.14), 0, Math.PI * 2);
+    g.fill();
+  }
+  g.globalAlpha = 1;
+}
+
+function drawPathRect(g, r, idx) {
+  var grad = g.createLinearGradient(r.x, r.y, r.x, r.y + r.h);
+  grad.addColorStop(0, '#3c3529');
+  grad.addColorStop(0.5, '#4a4133');
+  grad.addColorStop(1, '#332d24');
+  g.fillStyle = grad;
+  g.fillRect(r.x, r.y, r.w, r.h);
+
+  /* 泥土颗粒 */
+  var rng = makeRng(977 + idx * 131);
+  for (var i = 0; i < Math.floor(r.w * r.h / 260); i++) {
+    var px = r.x + rng() * r.w, py = r.y + rng() * r.h;
+    g.globalAlpha = 0.06 + rng() * 0.12;
+    g.fillStyle = rng() < 0.5 ? '#8d7f63' : '#1d1912';
+    g.beginPath(); g.arc(px, py, 1 + rng() * 2.2, 0, Math.PI * 2); g.fill();
+  }
+  g.globalAlpha = 1;
+
+  /* 边缘压暗，像被树林咬过 */
+  g.save();
+  g.shadowColor = 'rgba(0,0,0,.85)';
+  g.shadowBlur = 16;
+  g.strokeStyle = 'rgba(0,0,0,.55)';
+  g.lineWidth = 6;
+  g.strokeRect(r.x - 1, r.y - 1, r.w + 2, r.h + 2);
+  g.restore();
+}
+
+function buildWorldBg() {
+  worldBg = document.createElement('canvas');
+  worldBg.width = WW * 2;
+  worldBg.height = WH * 2;
+  var g = worldBg.getContext('2d');
+  g.scale(2, 2);
+
+  /* 夜空底色 */
+  var bg = g.createLinearGradient(0, 0, 0, WH);
+  bg.addColorStop(0, '#0c1a22');
+  bg.addColorStop(0.45, '#08131a');
+  bg.addColorStop(1, '#040a0e');
+  g.fillStyle = bg;
+  g.fillRect(0, 0, WW, WH);
+
+  /* 血月（挂在地图上方的林子里） */
+  var mx = WW * 0.5, my = -40;
+  var moon = g.createRadialGradient(mx, my, 20, mx, my, 420);
+  moon.addColorStop(0, 'rgba(220,70,70,.30)');
+  moon.addColorStop(0.35, 'rgba(170,40,50,.12)');
+  moon.addColorStop(1, 'rgba(120,20,30,0)');
+  g.fillStyle = moon;
+  g.fillRect(0, 0, WW, WH);
+  g.fillStyle = 'rgba(232,96,96,.9)';
+  g.beginPath(); g.arc(mx, my, 52, 0, Math.PI * 2); g.fill();
+  g.fillStyle = 'rgba(255,170,150,.28)';
+  g.beginPath(); g.arc(mx - 14, my - 12, 26, 0, Math.PI * 2); g.fill();
+
+  /* 小道 */
+  for (var i = 0; i < PATH.length; i++) { drawPathRect(g, PATH[i], i); }
+
+  /* 树林（沿路铺满，路边留一点空） */
+  var rng = makeRng(20260101);
+  for (var gy = -14; gy < WH + 24; gy += 25) {
+    for (var gx = -14; gx < WW + 24; gx += 25) {
+      var tx = gx + rng() * 20 - 6, ty = gy + rng() * 20 - 6;
+      if (pathPad(tx, ty, 16)) { continue; }
+      if (inRect(HOUSE, tx, ty, 26)) { continue; }
+      drawTree(g, tx, ty, 0.72 + rng() * 0.62, rng);
+    }
+  }
+
+  /* 屋子里的暖光从小道里漏出来 */
+  var warm = g.createRadialGradient(520, 330, 8, 520, 330, 190);
+  warm.addColorStop(0, 'rgba(255,196,110,.20)');
+  warm.addColorStop(1, 'rgba(255,196,110,0)');
+  g.fillStyle = warm;
+  g.fillRect(0, 0, WW, WH);
+
+  drawHouseRoof(g);
+
+  /* 四周暗角 */
+  var vg = g.createRadialGradient(WW / 2, WH / 2, WW * 0.28, WW / 2, WH / 2, WW * 0.62);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,.72)');
+  g.fillStyle = vg;
+  g.fillRect(0, 0, WW, WH);
+}
+
+function drawHouseRoof(g) {
+  var h = HOUSE;
+  g.save();
+  /* 落影 */
+  g.globalAlpha = 0.65;
+  g.fillStyle = '#000';
+  g.beginPath();
+  g.ellipse(h.x + h.w / 2 + 4, h.y + h.h + 8, h.w * 0.62, 16, 0, 0, Math.PI * 2);
+  g.fill();
+  g.globalAlpha = 1;
+
+  /* 石基 */
+  g.fillStyle = '#2a2622';
+  g.fillRect(h.x - 6, h.y - 6, h.w + 12, h.h + 12);
+
+  /* 屋顶木板 */
+  var roof = g.createLinearGradient(h.x, h.y, h.x + h.w, h.y + h.h);
+  roof.addColorStop(0, '#6b4a30');
+  roof.addColorStop(0.5, '#553a25');
+  roof.addColorStop(1, '#3d2a1b');
+  g.fillStyle = roof;
+  g.fillRect(h.x, h.y, h.w, h.h);
+
+  g.strokeStyle = 'rgba(0,0,0,.35)';
+  g.lineWidth = 1.4;
+  for (var y = h.y + 10; y < h.y + h.h; y += 12) {
+    g.beginPath(); g.moveTo(h.x + 2, y); g.lineTo(h.x + h.w - 2, y); g.stroke();
+  }
+  /* 屋脊 */
+  g.strokeStyle = 'rgba(255,225,180,.22)';
+  g.lineWidth = 2.4;
+  g.beginPath(); g.moveTo(h.x + h.w / 2, h.y + 4); g.lineTo(h.x + h.w / 2, h.y + h.h - 4); g.stroke();
+
+  /* 烟囱 */
+  g.fillStyle = '#332b26';
+  g.fillRect(h.x + h.w - 30, h.y + 12, 16, 18);
+  g.fillStyle = 'rgba(0,0,0,.45)';
+  g.fillRect(h.x + h.w - 30, h.y + 12, 16, 4);
+
+  /* 门垫 / 门口光 */
+  var doors = [
+    { x: h.x, y: 330 }, { x: h.x + h.w, y: 330 }, { x: 520, y: h.y + h.h }
+  ];
+  for (var i = 0; i < doors.length; i++) {
+    var d = doors[i];
+    var lg = g.createRadialGradient(d.x, d.y, 2, d.x, d.y, 34);
+    lg.addColorStop(0, 'rgba(255,206,130,.42)');
+    lg.addColorStop(1, 'rgba(255,206,130,0)');
+    g.fillStyle = lg;
+    g.beginPath(); g.arc(d.x, d.y, 34, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#7a5433';
+    if (i < 2) { g.fillRect(d.x - 5, d.y - 13, 10, 26); }
+    else { g.fillRect(d.x - 13, d.y - 5, 26, 10); }
+  }
+
+  g.strokeStyle = 'rgba(255,220,170,.18)';
+  g.lineWidth = 2;
+  g.strokeRect(h.x, h.y, h.w, h.h);
+  g.restore();
+}
+
+/* ---- 背景预渲染：室内 ---- */
+function buildHouseBg() {
+  houseBg = document.createElement('canvas');
+  houseBg.width = WW * 2;
+  houseBg.height = WH * 2;
+  var g = houseBg.getContext('2d');
+  g.scale(2, 2);
+
+  g.fillStyle = '#05090c';
+  g.fillRect(0, 0, WW, WH);
+
+  /* 地板 */
+  g.fillStyle = '#4a3524';
+  g.fillRect(ROOM.x + WALL, ROOM.y + WALL, ROOM.w - WALL * 2, ROOM.h - WALL * 2);
+  g.strokeStyle = 'rgba(0,0,0,.30)';
+  g.lineWidth = 1.2;
+  for (var y = ROOM.y + WALL; y < ROOM.y + ROOM.h - WALL; y += 22) {
+    g.beginPath(); g.moveTo(ROOM.x + WALL, y); g.lineTo(ROOM.x + ROOM.w - WALL, y); g.stroke();
+  }
+  var rng = makeRng(4242);
+  for (var i = 0; i < 240; i++) {
+    g.globalAlpha = 0.05 + rng() * 0.07;
+    g.strokeStyle = '#2b1c10';
+    var x0 = ROOM.x + WALL + rng() * (ROOM.w - WALL * 2);
+    var y0 = ROOM.y + WALL + rng() * (ROOM.h - WALL * 2);
+    g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0 + 20 + rng() * 40, y0); g.stroke();
+  }
+  g.globalAlpha = 1;
+
+  /* 墙 */
+  g.fillStyle = '#2a2018';
+  g.fillRect(ROOM.x, ROOM.y, ROOM.w, WALL);
+  g.fillRect(ROOM.x, ROOM.y + ROOM.h - WALL, ROOM.w, WALL);
+  g.fillRect(ROOM.x, ROOM.y, WALL, ROOM.h);
+  g.fillRect(ROOM.x + ROOM.w - WALL, ROOM.y, WALL, ROOM.h);
+  g.fillStyle = 'rgba(255,220,170,.10)';
+  g.fillRect(ROOM.x, ROOM.y, ROOM.w, 4);
+
+  /* 三个门口：地板色的小门洞 + 灯光 */
+  var dmats = [
+    { x: ROOM.x + WALL, y: 330, w: 16, h: 40 },
+    { x: ROOM.x + ROOM.w - WALL, y: 330, w: 16, h: 40 },
+    { x: 520, y: ROOM.y + ROOM.h - WALL, w: 40, h: 16 }
+  ];
+  for (var m = 0; m < dmats.length; m++) {
+    var d = dmats[m];
+    g.fillStyle = '#6b4a2e';
+    g.fillRect(d.x - (d.w === 16 ? 0 : d.w / 2), d.y - (d.h === 40 ? d.h / 2 : 0), d.w, d.h);
+  }
+
+  /* 家具 */
+  drawFurnBed(g);
+  drawFurnWardrobe(g);
+  drawFurnTable(g);
+  drawFurnChest(g);
+  drawFurnShelf(g);
+
+  /* 中央吊灯光 */
+  var lamp = g.createRadialGradient(ROOM_CX, ROOM_CY, 10, ROOM_CX, ROOM_CY, 340);
+  lamp.addColorStop(0, 'rgba(255,205,130,.16)');
+  lamp.addColorStop(1, 'rgba(255,205,130,0)');
+  g.fillStyle = lamp;
+  g.fillRect(0, 0, WW, WH);
+
+  /* 暗角 */
+  var vg = g.createRadialGradient(WW / 2, WH / 2, 200, WW / 2, WH / 2, 620);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,.80)');
+  g.fillStyle = vg;
+  g.fillRect(0, 0, WW, WH);
+}
+
+function furnBase(g, f, c1, c2) {
+  g.save();
+  g.globalAlpha = 0.5;
+  g.fillStyle = '#000';
+  g.beginPath(); g.ellipse(f.x + f.w / 2 + 3, f.y + f.h + 5, f.w * 0.5, 9, 0, 0, Math.PI * 2); g.fill();
+  g.restore();
+  var gr = g.createLinearGradient(f.x, f.y, f.x, f.y + f.h);
+  gr.addColorStop(0, c1);
+  gr.addColorStop(1, c2);
+  g.fillStyle = gr;
+  g.fillRect(f.x, f.y, f.w, f.h);
+  g.strokeStyle = 'rgba(0,0,0,.4)';
+  g.lineWidth = 2;
+  g.strokeRect(f.x, f.y, f.w, f.h);
+}
+
+function drawFurnBed(g) {
+  var f = FURN[0];
+  furnBase(g, f, '#8d6b57', '#5d4335');
+  /* 被子 */
+  g.fillStyle = '#7b93b5';
+  g.fillRect(f.x + 6, f.y + 26, f.w - 12, f.h - 34);
+  g.strokeStyle = 'rgba(255,255,255,.16)';
+  g.lineWidth = 1.4;
+  for (var y = f.y + 38; y < f.y + f.h - 10; y += 12) {
+    g.beginPath(); g.moveTo(f.x + 8, y); g.lineTo(f.x + f.w - 8, y); g.stroke();
+  }
+  /* 枕头 */
+  g.fillStyle = '#e8e2d4';
+  g.fillRect(f.x + 12, f.y + 8, 44, 18);
+  g.fillRect(f.x + 62, f.y + 8, 44, 18);
+}
+
+function drawFurnWardrobe(g) {
+  var f = FURN[1];
+  furnBase(g, f, '#7a5334', '#4a3020');
+  g.strokeStyle = 'rgba(0,0,0,.45)';
+  g.lineWidth = 2;
+  g.strokeRect(f.x + f.w / 2 - 1, f.y + 4, 2, f.h - 8);
+  g.fillStyle = '#d8b06a';
+  g.beginPath(); g.arc(f.x + f.w / 2 - 9, f.y + f.h / 2, 3, 0, Math.PI * 2); g.fill();
+  g.beginPath(); g.arc(f.x + f.w / 2 + 9, f.y + f.h / 2, 3, 0, Math.PI * 2); g.fill();
+}
+
+function drawFurnTable(g) {
+  var f = FURN[2];
+  furnBase(g, f, '#9a7346', '#5b4025');
+  g.fillStyle = 'rgba(240,235,220,.14)';
+  g.fillRect(f.x + 8, f.y + 8, f.w - 16, f.h - 16);
+  /* 桌上的一盏小灯 */
+  g.fillStyle = '#3b2a1c';
+  g.beginPath(); g.arc(f.x + f.w / 2, f.y + f.h / 2, 9, 0, Math.PI * 2); g.fill();
+  g.fillStyle = 'rgba(255,205,120,.85)';
+  g.beginPath(); g.arc(f.x + f.w / 2, f.y + f.h / 2, 5, 0, Math.PI * 2); g.fill();
+}
+
+function drawFurnChest(g) {
+  var f = FURN[3];
+  furnBase(g, f, '#7d5a34', '#4a331d');
+  g.fillStyle = 'rgba(200,170,90,.75)';
+  g.fillRect(f.x + 6, f.y + f.h / 2 - 4, f.w - 12, 8);
+  g.fillStyle = '#c9a960';
+  g.fillRect(f.x + f.w / 2 - 6, f.y + f.h / 2 - 7, 12, 14);
+}
+
+function drawFurnShelf(g) {
+  var f = FURN[4];
+  furnBase(g, f, '#6f4b2c', '#412a17');
+  g.strokeStyle = 'rgba(0,0,0,.4)';
+  g.lineWidth = 1.6;
+  g.beginPath(); g.moveTo(f.x + 4, f.y + f.h / 2); g.lineTo(f.x + f.w - 4, f.y + f.h / 2); g.stroke();
+  for (var i = 0; i < 5; i++) {
+    g.fillStyle = ['#8aa1b8', '#b4855f', '#7ea47f', '#b58cae', '#c7bb8a'][i % 5];
+    var bx = f.x + 12 + i * ((f.w - 30) / 5);
+    g.fillRect(bx, f.y + 6, 12, f.h / 2 - 10);
+  }
+}
+
+/* ---- 每帧绘制 ---- */
+function drawFogSprite() {
+  fogSprite = document.createElement('canvas');
+  fogSprite.width = 256;
+  fogSprite.height = 256;
+  var g = fogSprite.getContext('2d');
+  var rg = g.createRadialGradient(128, 128, 10, 128, 128, 126);
+  rg.addColorStop(0, 'rgba(150,180,210,.20)');
+  rg.addColorStop(0.6, 'rgba(130,160,195,.09)');
+  rg.addColorStop(1, 'rgba(120,150,185,0)');
+  g.fillStyle = rg;
+  g.fillRect(0, 0, 256, 256);
+}
+
+function drawKeyAt(x, y, a, spin) {
+  ctx.save();
+  ctx.globalAlpha = a;
+  var gg = ctx.createRadialGradient(x, y, 1, x, y, 30);
+  gg.addColorStop(0, 'rgba(255,225,140,.55)');
+  gg.addColorStop(1, 'rgba(255,225,140,0)');
+  ctx.fillStyle = gg;
+  ctx.beginPath(); ctx.arc(x, y, 30, 0, Math.PI * 2); ctx.fill();
+
+  ctx.translate(x, y);
+  ctx.rotate(spin);
+  ctx.strokeStyle = '#ffd166';
+  ctx.lineWidth = 2.6;
+  ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(-4, 0, 4.2, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(0.4, 0); ctx.lineTo(10, 0);
+  ctx.moveTo(6.6, 0); ctx.lineTo(6.6, 4.4);
+  ctx.moveTo(9.6, 0); ctx.lineTo(9.6, 3.4);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawKeys(sc) {
+  if (!me) { return; }
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i];
+    if (k.owner !== 0) { continue; }                       /* 别人的钥匙看不见 */
+    if (k.inHouse !== (sc === 'house')) { continue; }
+    var a = 0;
+    if (me.scene === sc) {
+      var d = dist(me.x, me.y, k.x, k.y);
+      a = clamp((KEY_SEEN - d) / 64, 0, 1);
+    }
+    if (a <= 0.02) { continue; }
+    drawKeyAt(k.x, k.y, a, k.spin);
+  }
+}
+
+/* 钥匙罗盘：头顶一个箭头指向最近的钥匙 + 距离 */
+function drawCompass() {
+  if (!me || !me.alive) { return; }
+  if (me.keys >= 1) { return; }        /* 只有第一把钥匙给提示，后两把自己找 */
+  var best = null, bd = 1e9, other = 0;
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i];
+    if (k.taken || k.owner !== 0) { continue; }
+    if ((k.inHouse ? 'house' : 'world') !== me.scene) { other++; continue; }
+    var d = dist(me.x, me.y, k.x, k.y);
+    if (d < bd) { bd = d; best = k; }
+  }
+  var label = '', hot = false;
+  if (best) {
+    hot = bd < KEY_SEEN;
+    label = '🔑 ' + Math.round(bd / 10) + 'm';
+  } else if (other > 0) {
+    label = me.scene === 'world' ? '🔑 在屋里' : '🔑 在屋外';
+  } else {
+    return;
+  }
+  ctx.save();
+  ctx.font = 'bold 11px "PingFang SC","Microsoft YaHei",Arial,sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = hot ? '#ffd166' : 'rgba(205,228,255,.72)';
+  ctx.fillText(label, me.x, me.y - 22);
+  if (best) {
+    var a = Math.atan2(best.y - me.y, best.x - me.x);
+    var r1 = 27, r2 = 36;
+    ctx.strokeStyle = hot ? 'rgba(255,209,102,.95)' : 'rgba(180,215,255,.55)';
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(me.x + Math.cos(a) * r1, me.y + Math.sin(a) * r1);
+    ctx.lineTo(me.x + Math.cos(a) * r2, me.y + Math.sin(a) * r2);
+    ctx.stroke();
+    /* 箭头三角 */
+    var tipx = me.x + Math.cos(a) * r2, tipy = me.y + Math.sin(a) * r2;
+    ctx.beginPath();
+    ctx.moveTo(tipx, tipy);
+    ctx.lineTo(tipx - Math.cos(a - 0.5) * 6, tipy - Math.sin(a - 0.5) * 6);
+    ctx.lineTo(tipx - Math.cos(a + 0.5) * 6, tipy - Math.sin(a + 0.5) * 6);
+    ctx.closePath();
+    ctx.fillStyle = ctx.strokeStyle;
+    ctx.fill();
+    ctx.lineCap = 'butt';
+  }
+  ctx.restore();
+}
+
+function drawPortal() {
+  var t = time;
+  var x = PORTAL.x, y = PORTAL.y;
+  ctx.save();
+  /* 光柱 */
+  var col = ctx.createRadialGradient(x, y, 4, x, y, 96);
+  col.addColorStop(0, 'rgba(150,230,255,.42)');
+  col.addColorStop(0.5, 'rgba(110,190,255,.14)');
+  col.addColorStop(1, 'rgba(90,170,255,0)');
+  ctx.fillStyle = col;
+  ctx.beginPath(); ctx.arc(x, y, 96, 0, Math.PI * 2); ctx.fill();
+
+  ctx.translate(x, y);
+  for (var i = 0; i < 3; i++) {
+    var a = t * (0.9 + i * 0.5) + i * 2.1;
+    var r = 26 - i * 6;
+    ctx.strokeStyle = 'rgba(' + (150 + i * 30) + ',' + (225 - i * 25) + ',255,' + (0.9 - i * 0.22) + ')';
+    ctx.lineWidth = 2.6 - i * 0.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, a, a + 2.2);
+    ctx.stroke();
+  }
+  /* 中心 */
+  ctx.fillStyle = 'rgba(220,245,255,.95)';
+  ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawCannon() {
+  var x = cannon.x, y = cannon.y;
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.ellipse(x + 3, y + 8, 24, 10, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+
+  ctx.translate(x, y);
+  ctx.rotate(cannon.ang);
+  /* 炮管 */
+  var bar = ctx.createLinearGradient(0, -6, 0, 6);
+  bar.addColorStop(0, '#8d97a6');
+  bar.addColorStop(0.5, '#4c5665');
+  bar.addColorStop(1, '#2b323c');
+  ctx.fillStyle = bar;
+  ctx.fillRect(4, -7, 30, 14);
+  ctx.fillStyle = '#22282f';
+  ctx.fillRect(30, -8, 6, 16);
+  /* 炮口火光 */
+  if (berserk) {
+    var fl = 0.55 + Math.sin(time * 14) * 0.35;
+    var mg = ctx.createRadialGradient(38, 0, 1, 38, 0, 22);
+    mg.addColorStop(0, 'rgba(255,250,210,' + fl.toFixed(2) + ')');
+    mg.addColorStop(1, 'rgba(255,220,140,0)');
+    ctx.fillStyle = mg;
+    ctx.beginPath(); ctx.arc(38, 0, 22, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.rotate(-cannon.ang);
+  /* 轮子 + 底座 */
+  ctx.fillStyle = '#3a414c';
+  ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#5b6472';
+  ctx.beginPath(); ctx.arc(-9, 11, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(-9, -11, 6, 0, Math.PI * 2); ctx.fill();
+  if (berserk) {
+    ctx.strokeStyle = 'rgba(255,120,90,' + (0.5 + Math.sin(time * 8) * 0.25).toFixed(2) + ')';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawYe() {
+  var x = ye.x, y = ye.y;
+  ctx.save();
+  /* 兴奋光环 */
+  var aura = 18 + ye.rage * 26;
+  var ag = ctx.createRadialGradient(x, y, 2, x, y, aura);
+  var r0 = berserk ? 255 : 255, g0 = berserk ? 90 : (120 + ye.rage * 90), b0 = berserk ? 80 : 110;
+  ag.addColorStop(0, 'rgba(' + r0 + ',' + g0 + ',' + b0 + ',' + (0.30 + ye.rage * 0.30).toFixed(2) + ')');
+  ag.addColorStop(1, 'rgba(' + r0 + ',' + g0 + ',' + b0 + ',0)');
+  ctx.fillStyle = ag;
+  ctx.beginPath(); ctx.arc(x, y, aura, 0, Math.PI * 2); ctx.fill();
+
+  /* 影子 */
+  ctx.globalAlpha = 0.45;
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.ellipse(x + 2, y + 9, 13, 7, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+
+  /* 身体 */
+  var body = berserk ? '#e34b4b' : '#d94a5a';
+  ctx.fillStyle = ye.flash > 0 ? '#fff' : body;
+  ctx.beginPath(); ctx.arc(x, y, 13, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,.75)';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.arc(x, y, 13, 0, Math.PI * 2); ctx.stroke();
+
+  /* 脸（朝哪儿就看哪儿） */
+  var fx = x + Math.cos(ye.dir) * 4, fy = y + Math.sin(ye.dir) * 4;
+  ctx.fillStyle = 'rgba(255,245,235,.95)';
+  ctx.beginPath(); ctx.arc(fx, fy, 5.4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#2a1620';
+  ctx.beginPath(); ctx.arc(fx + Math.cos(ye.dir) * 1.6, fy + Math.sin(ye.dir) * 1.6, 1.6, 0, Math.PI * 2); ctx.fill();
+
+  /* 暴走时的火苗 */
+  if (berserk) {
+    for (var i = 0; i < 3; i++) {
+      var a2 = time * 6 + i * 2.1;
+      var fxp = x + Math.cos(a2) * 16, fyp = y + Math.sin(a2) * 16 - 4;
+      ctx.fillStyle = 'rgba(255,150,90,' + (0.5 + Math.sin(time * 10 + i) * 0.3).toFixed(2) + ')';
+      ctx.beginPath(); ctx.arc(fxp, fyp, 2.6 + Math.sin(time * 9 + i) * 1.2, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  ctx.restore();
+
+  /* 头顶的名牌：叶初 */
+  drawTag('叶初', x, y - 30, berserk ? '#ffb3b3' : '#ffd9e0', berserk);
+}
+
+/* 头顶文字：描边 + 纯色，深浅背景下都看得清 */
+function drawTag(text, x, y, color, hot) {
+  ctx.save();
+  ctx.font = 'bold 13px "PingFang SC","Microsoft YaHei",Arial,sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  if (hot) {
+    var gg = ctx.createRadialGradient(x, y, 2, x, y, 34);
+    gg.addColorStop(0, 'rgba(255,90,90,.34)');
+    gg.addColorStop(1, 'rgba(255,90,90,0)');
+    ctx.fillStyle = gg;
+    ctx.beginPath(); ctx.arc(x, y, 34, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 3.4;
+  ctx.strokeStyle = 'rgba(0,0,0,.78)';
+  ctx.strokeText(text, x, y);
+  ctx.fillStyle = color;
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
+function drawBody(p, showName) {
+  ctx.save();
+  ctx.globalAlpha = 0.42;
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.ellipse(p.x + 2, p.y + 8, 11, 6, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+
+  var c = p.flash > 0 ? '#fff' : p.color;
+  ctx.fillStyle = c;
+  ctx.beginPath(); ctx.arc(p.x, p.y, BODY_R, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = p.isMe ? 'rgba(255,255,255,.9)' : 'rgba(0,0,0,.35)';
+  ctx.lineWidth = p.isMe ? 2.2 : 1.4;
+  ctx.beginPath(); ctx.arc(p.x, p.y, BODY_R, 0, Math.PI * 2); ctx.stroke();
+
+  /* 朝向 */
+  ctx.fillStyle = 'rgba(255,255,255,.85)';
+  ctx.beginPath();
+  ctx.arc(p.x + Math.cos(p.dir) * 6, p.y + Math.sin(p.dir) * 6, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  /* 拿到的钥匙：头顶小点 */
+  for (var i = 0; i < p.keys; i++) {
+    ctx.fillStyle = '#ffd166';
+    ctx.beginPath(); ctx.arc(p.x - 8 + i * 8, p.y - 18, 2.6, 0, Math.PI * 2); ctx.fill();
+  }
+
+  if (showName) {
+    ctx.font = 'bold 11px "PingFang SC","Microsoft YaHei",Arial,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = p.isMe ? 'rgba(150,225,255,.95)' : 'rgba(220,230,245,.7)';
+    ctx.fillText(p.name, p.x, p.y - 28);
+  }
+  ctx.restore();
+}
+
+function drawShells() {
+  for (var i = 0; i < shells.length; i++) {
+    var s = shells[i];
+    var gr = ctx.createRadialGradient(s.x, s.y, 1, s.x, s.y, 18);
+    gr.addColorStop(0, 'rgba(255,255,235,.95)');
+    gr.addColorStop(0.4, 'rgba(255,243,176,.7)');
+    gr.addColorStop(1, 'rgba(255,220,140,0)');
+    ctx.fillStyle = gr;
+    ctx.beginPath(); ctx.arc(s.x, s.y, 18, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fffbe6';
+    ctx.beginPath(); ctx.arc(s.x, s.y, SHELL_R * 0.72, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+function drawFx() {
+  for (var i = 0; i < fx.length; i++) {
+    var f = fx[i];
+    var a = Math.max(0, f.life / f.max);
+    ctx.globalAlpha = a;
+    ctx.fillStyle = f.color;
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.size * (0.4 + a * 0.7), 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  for (var j = 0; j < pops.length; j++) {
+    var p = pops[j];
+    var pa = Math.max(0, p.life / p.max);
+    ctx.globalAlpha = pa;
+    ctx.font = 'bold 15px "PingFang SC","Microsoft YaHei",Arial,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0,0,0,.55)';
+    ctx.strokeText(p.text, p.x, p.y);
+    ctx.fillStyle = p.color;
+    ctx.fillText(p.text, p.x, p.y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawAtmos() {
+  /* 雾 */
+  if (fogSprite) {
+    for (var i = 0; i < 6; i++) {
+      var ph = time * 0.06 + i * 1.7;
+      var fx2 = ((ph % 1) * (WW + 400)) - 200;
+      var fy2 = 120 + Math.sin(ph * 2.2 + i) * 90 + i * 74;
+      ctx.globalAlpha = 0.5;
+      ctx.drawImage(fogSprite, fx2 - 160, fy2 - 160, 320, 320);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* 暴走/兴奋的红光 */
+  if (rageGlow > 0.02) {
+    var pulse = berserk ? (0.75 + Math.sin(time * 5) * 0.25) : 1;
+    var vg = ctx.createRadialGradient(WW / 2, WH / 2, WH * 0.22, WW / 2, WH / 2, WW * 0.60);
+    vg.addColorStop(0, 'rgba(190,30,40,0)');
+    vg.addColorStop(1, 'rgba(190,30,40,' + (rageGlow * 0.42 * pulse).toFixed(3) + ')');
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, WW, WH);
+  }
+
+  /* 叶初靠近：屏幕边缘泛红 + 脉动 */
+  if (dangerGlow > 0.02) {
+    var dp = 0.72 + Math.sin(time * (berserk ? 9 : 7)) * 0.28;
+    var dv = ctx.createRadialGradient(WW / 2, WH / 2, WW * 0.24, WW / 2, WH / 2, WW * 0.62);
+    dv.addColorStop(0, 'rgba(190,18,28,0)');
+    dv.addColorStop(1, 'rgba(190,18,28,' + (dangerGlow * 0.5 * dp).toFixed(3) + ')');
+    ctx.fillStyle = dv;
+    ctx.fillRect(0, 0, WW, WH);
+  }
+
+
+  /* 夜里整体的暗蓝压色 */
+  ctx.fillStyle = 'rgba(8,16,30,.16)';
+  ctx.fillRect(0, 0, WW, WH);
+}
+
+function draw() {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  ctx.setTransform(UNIT, 0, 0, UNIT, 0, 0);
+
+  if (scene === 'world') {
+    if (worldBg) { ctx.drawImage(worldBg, 0, 0, WW, WH); }
+    else { ctx.fillStyle = '#08131a'; ctx.fillRect(0, 0, WW, WH); }
+    drawPortal();
+
+    drawKeys('world');
+    drawCannon();
+    if (ye && ye.scene === 'world') { drawYe(); }
+    var all = players();
+    for (var i = 0; i < all.length; i++) {
+      if (all[i].alive && all[i].scene === 'world') { drawBody(all[i], !all[i].isMe); }
+    }
+    for (var ci = 0; ci < all.length; ci++) {
+      var cp = all[ci];
+      if (cp.alive && cp.channel && !cp.isMe && cp.scene === 'world') { drawBotCharge(cp); }
+    }
+    drawShells();
+  } else {
+    if (houseBg) { ctx.drawImage(houseBg, 0, 0, WW, WH); }
+    else { ctx.fillStyle = '#241a12'; ctx.fillRect(0, 0, WW, WH); }
+    drawKeys('house');
+    if (ye && ye.scene === 'house') { drawYe(); }
+    var all2 = players();
+    for (var j = 0; j < all2.length; j++) {
+      if (all2[j].alive && all2[j].scene === 'house') { drawBody(all2[j], !all2[j].isMe); }
+    }    for (var cj = 0; cj < all2.length; cj++) {
+      var cp2 = all2[cj];
+      if (cp2.alive && cp2.channel && !cp2.isMe && cp2.scene === 'house') { drawBotCharge(cp2); }
+    }
+  }
+
+  drawFx();
+  drawAtmos();
+
+
+  /* 场景切换黑场 */
+  if (fade > 0) {
+    ctx.fillStyle = 'rgba(0,0,0,' + Math.min(0.92, fade * 0.92).toFixed(3) + ')';
+    ctx.fillRect(0, 0, WW, WH);
+  }
+
+  /* 开门撞鬼：整屏血红，先一瞬间压满再慢慢褪 */
+  if (redFlash > 0) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    var ra = Math.min(0.95, redFlash * 0.8);
+    ctx.fillStyle = 'rgba(138,0,12,' + ra.toFixed(3) + ')';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    var rp = ctx.createRadialGradient(cv.width / 2, cv.height / 2, cv.width * 0.12,
+                                      cv.width / 2, cv.height / 2, cv.width * 0.72);
+    rp.addColorStop(0, 'rgba(0,0,0,' + (ra * 0.55).toFixed(3) + ')');
+    rp.addColorStop(0.55, 'rgba(0,0,0,0)');
+    rp.addColorStop(1, 'rgba(255,40,40,' + (ra * 0.5).toFixed(3) + ')');
+    ctx.fillStyle = rp;
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.setTransform(UNIT, 0, 0, UNIT, 0, 0);
+  }
+
+  /* 头顶提示：读条 > 钥匙 > 传送门 > 门口 */
+  if (state === 'playing' && me && me.alive) {
+    if (me.channel) {
+      var prog = 1 - me.channel.t / me.channel.max;
+      drawDoorPrompt(me.channel.kind === 'key' ? '捡钥匙' : '充能传送门', prog);
+    } else if (me.nearKey) {
+      drawDoorPrompt('按住 F 捡钥匙', 0);
+    } else if (me.nearPortal) {
+      drawDoorPrompt('按住 F 充能', 0);
+
+    } else if (me.nearDoor) {
+      drawDoorPrompt(me.scene === 'world' ? '进屋' : '出门', 0);
+    }
+    drawCompass();
+  }
+}
+
+/* 人机充能进度：和真人读条同一种横条样式，只在头顶画一条 */
+function drawBotCharge(p) {
+  var prog = Math.min(1, 1 - p.channel.t / p.channel.max);
+  var bw = 26, bh = 3;
+  var bx = p.x - bw / 2, by = p.y - 28;
+  ctx.save();
+  /* 底衬：站传送门上时也能看清 */
+  ctx.fillStyle = 'rgba(9,13,20,.55)';
+  ctx.fillRect(bx - 2, by - 2, bw + 4, bh + 4);
+  /* 轨道 + 进度，和 drawDoorPrompt 的读条一致 */
+  ctx.fillStyle = 'rgba(255,255,255,.16)';
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.fillStyle = '#ffd166';
+  ctx.fillRect(bx, by, bw * prog, bh);
+  ctx.restore();
+}
+
+/* 站在门口时的按键提示：小圆角块里一个 F，右边跟“进屋 / 出门” */
+function drawDoorPrompt(label, prog) {
+  var pulse = 0.55 + Math.sin(time * 4.2) * 0.25;
+  ctx.save();
+  ctx.font = 'bold 12px "PingFang SC","Microsoft YaHei",Arial,sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+
+  var capW = 16, capH = 16, gap = 6;
+  var tw = ctx.measureText(label).width;
+  var totalW = capW + gap + tw;
+  var cx = me.x - totalW / 2;          /* 整体居中在头顶 */
+  var cy = me.y - 44;
+
+  /* 底板 */
+  ctx.beginPath();
+  if (ctx.roundRect) { ctx.roundRect(cx - 7, cy - 12, totalW + 14, 24, 8); }
+  else { ctx.rect(cx - 7, cy - 12, totalW + 14, 24); }
+  ctx.fillStyle = 'rgba(9,13,20,.62)';
+  ctx.fill();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(255,209,102,' + pulse.toFixed(2) + ')';
+  ctx.stroke();
+
+  /* F 键帽 */
+  ctx.beginPath();
+  if (ctx.roundRect) { ctx.roundRect(cx, cy - capH / 2, capW, capH, 4); }
+  else { ctx.rect(cx, cy - capH / 2, capW, capH); }
+  ctx.fillStyle = 'rgba(255,209,102,' + (0.7 + pulse * 0.3).toFixed(2) + ')';
+  ctx.fill();
+  ctx.fillStyle = '#1b1205';
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 11px "PingFang SC","Microsoft YaHei",Arial,sans-serif';
+  ctx.fillText('F', cx + capW / 2, cy + 0.5);
+
+  /* 文字 */
+  ctx.textAlign = 'left';
+  ctx.font = 'bold 12px "PingFang SC","Microsoft YaHei",Arial,sans-serif';
+  ctx.fillStyle = '#ffe9a8';
+  ctx.fillText(label, cx + capW + gap, cy + 0.5);
+
+  /* 读条进度 */
+  if (prog && prog > 0) {
+    var bw = totalW + 14 - 8;
+    ctx.fillStyle = 'rgba(255,255,255,.16)';
+    ctx.fillRect(cx - 3, cy + 13, bw, 3);
+    ctx.fillStyle = '#ffd166';
+    ctx.fillRect(cx - 3, cy + 13, bw * Math.min(1, prog), 3);
+  }
+  ctx.restore();
+}
+/* ---------------- 主循环 ---------------- */
+var last = 0, acc = 0, lastAt = 0;
+function tick(ts) {
+  var now = (typeof ts === 'number' && ts > 0) ? ts
+    : ((window.performance && performance.now) ? performance.now() : Date.now());
+  if (!last) { last = now; }
+  if (now < last) { now = last; }
+  var dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
+  last = now;
+  lastAt = now;
+  acc = Math.min(acc + dt, 0.25);
+  var guard = 0;
+  while (acc >= TICK && guard++ < 14) { stepGame(TICK); acc -= TICK; }
+  if (acc < 0) { acc = 0; }
+  draw();
+}
+function loop(ts) { tick(ts); requestAnimationFrame(loop); }
+
+/* ---------------- 输入 ---------------- */
+window.addEventListener('keydown', function (e) {
+  var k = (e.key || '').toLowerCase();
+  if (k === 'w' || k === 'a' || k === 's' || k === 'd') { keysDown[k] = true; e.preventDefault(); }
+  else if (k === 'arrowup') { keysDown.w = true; e.preventDefault(); }
+  else if (k === 'arrowdown') { keysDown.s = true; e.preventDefault(); }
+  else if (k === 'arrowleft') { keysDown.a = true; e.preventDefault(); }
+  else if (k === 'arrowright') { keysDown.d = true; e.preventDefault(); }
+  else if (k === 'enter' && state !== 'playing') { if (state === 'intro' || state === 'over') { newGame(); } }
+  else if (k === 'f') { fDown = true; if (!e.repeat) { tryDoor(); } e.preventDefault(); }
+});
+window.addEventListener('keyup', function (e) {
+  var k = (e.key || '').toLowerCase();
+  if (k === 'w' || k === 'a' || k === 's' || k === 'd') { keysDown[k] = false; }
+  else if (k === 'arrowup') { keysDown.w = false; }
+  else if (k === 'arrowdown') { keysDown.s = false; }
+  else if (k === 'arrowleft') { keysDown.a = false; }
+  else if (k === 'arrowright') { keysDown.d = false; }
+  else if (k === 'f') { fDown = false; }
+});
+window.addEventListener('blur', function () { keysDown = Object.create(null); fDown = false; });
+
+
+/* ---------------- 启动 ---------------- */
+buildWorldBg();
+buildHouseBg();
+drawFogSprite();
+buildWalkGrid();
+
+if (touchOnly) {
+  state = 'blocked';
+  document.getElementById('intro').classList.add('hidden');
+  document.getElementById('over').classList.add('hidden');
+  document.getElementById('mobile').classList.remove('hidden');
+  document.getElementById('mobileBack').addEventListener('click', function () { location.href = '主页.html'; });
+}
+function startWithAudio(key) { audioInit(); newGame(key || diff.key); banner(diff.label + '模式 · 找齐 3 把钥匙逃出去', 1800); }
+document.getElementById('diffEasy').addEventListener('click', function () { startWithAudio('easy'); });
+document.getElementById('diffNormal').addEventListener('click', function () { startWithAudio('normal'); });
+document.getElementById('diffHard').addEventListener('click', function () { startWithAudio('hard'); });
+document.getElementById('retryBtn').addEventListener('click', function () { startWithAudio(diff.key); });
+window.addEventListener('keydown', function () { audioInit(); });
+window.addEventListener('pointerdown', function () { audioInit(); });
+
+/* 开场（还没点开始）先把人和人机摆好，面板后面能看到一个静止的鱼塘 */
+me = mkPlayer(0, true, { x: 148, y: 350 });
+bots = [
+  mkPlayer(1, false, { x: 902, y: 350 }),
+  mkPlayer(2, false, { x: 520, y: 470 }),
+  mkPlayer(3, false, { x: 262, y: 350 }),
+  mkPlayer(4, false, { x: 800, y: 350 })
+];
+keys = []; shells = []; fx = []; pops = [];
+ye = { x: YE_START.x, y: YE_START.y, dir: Math.PI / 2, scene: 'world',
+       intro: 2.6, target: null, wait: 0, flash: 0, rage: 0, aimTarget: null, heading: Math.PI / 2, guardT: 0, guardCool: rand(6, 12), guardPost: null, sprintT: 0, sprintCool: rand(4, 8),
+       goHouse: false, houseT: rand(14, 26), leaveT: 0, chaseT: 0, chaseBest: 1e9, giveUp: 0, field: null, fieldKey: '' };
+cannon = { x: CANNON0.x, y: CANNON0.y, ang: Math.PI, cool: 1.2, moving: false };
+
+resize();
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
+hud();
+requestAnimationFrame(loop);
+setInterval(function () {
+  var now = (window.performance && performance.now) ? performance.now() : Date.now();
+  if (now - lastAt < 100) { return; }
+  tick(now);
+}, 50);
+</script>
+<script src="../ui/yc-ui.js"></script>
+</body>
+</html>

@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>叶初小游戏</title>
+    <meta name="description" content="叶初小游戏 —— 绿茵足球、桌上足球、点球大师、CS 平面战场、星海突击、方块风暴、叶初的鱼塘、CS 观战等小游戏合集">
+    <meta name="theme-color" content="#2b3a4b">
+    <link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="叶初小游戏">
+    <meta property="og:title" content="叶初小游戏">
+    <meta property="og:description" content="绿茵足球、桌上足球、点球大师、CS 平面战场、星海突击、方块风暴、叶初的鱼塘、CS 观战等小游戏合集">
+    <meta property="og:url" content="https://vilotime.github.io/">
+    <meta property="og:image" content="https://vilotime.github.io/cover.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="叶初小游戏">
+    <meta name="twitter:description" content="绿茵足球、桌上足球、点球大师、CS 平面战场、星海突击、方块风暴、叶初的鱼塘、CS 观战等小游戏合集">
+    <meta name="twitter:image" content="https://vilotime.github.io/cover.png">
+    <script>
+        /* 提前决定主题，避免首屏闪白/闪黑 */
+        (function () {
+            var s = null;
+            try { s = localStorage.getItem('yc-theme'); } catch (e) {}
+            var dark = (s === 'dark') || (s !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+        })();
+    </script>
+    <style>
+        :root {
+            color-scheme: light;
+            --shell-bg: #ffffff;
+            --shell-content-bg: #e7edf5;
+            --shell-text: #1b2836;
+            --shell-muted: #6c7b8f;
+            --shell-hover: #eef3fa;
+            --shell-active-bg: rgba(79, 156, 249, .13);
+            --shell-btn-bg: #ffffff;
+            --shell-btn-border: #d7e0ec;
+            --shell-line: #e3eaf3;
+            --shell-accent: #4f9cf9;
+            --shell-shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 10px 24px -16px rgba(15, 23, 42, .3);
+        }
+        html[data-theme="dark"] {
+            color-scheme: dark;
+            --shell-bg: #161c26;
+            --shell-content-bg: #0f141a;
+            --shell-text: #dbe4f0;
+            --shell-muted: #8d9db2;
+            --shell-hover: #1e2734;
+            --shell-active-bg: rgba(90, 166, 255, .16);
+            --shell-btn-bg: #1b2230;
+            --shell-btn-border: #2f3b4d;
+            --shell-line: #24303f;
+            --shell-accent: #5aa6ff;
+            --shell-shadow: 0 1px 3px rgba(0, 0, 0, .5), 0 12px 28px -18px rgba(0, 0, 0, .8);
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", Arial, sans-serif;
+            display: flex;
+            height: 100vh;
+            margin: 0;
+            color: var(--shell-text);
+            background-color: var(--shell-content-bg);
+            -webkit-text-size-adjust: 100%;
+            transition: background-color .25s ease, color .25s ease;
+        }
+
+        /* ---------- 侧边栏 ---------- */
+        .sidebar {
+            width: 216px;
+            flex: 0 0 216px;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--shell-bg);
+            border-right: 1px solid var(--shell-line);
+            padding: 14px 12px 16px;
+            overflow-y: auto;
+            transition: background-color .25s ease, border-color .25s ease;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 2px 4px 12px;
+            border-bottom: 1px solid var(--shell-line);
+            margin-bottom: 12px;
+        }
+        .brand-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background-color: var(--shell-accent);
+            box-shadow: 0 0 0 4px rgba(79, 156, 249, .16);
+            flex: 0 0 auto;
+        }
+        .brand-name {
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            white-space: nowrap;
+        }
+        .brand-sub {
+            margin-left: auto;
+            font-size: 10px;
+            letter-spacing: 1px;
+            color: var(--shell-muted);
+        }
+
+        .theme-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            width: 100%;
+            margin: 0 0 14px;
+            padding: 7px 10px;
+            font-family: inherit;
+            font-size: 12px;
+            line-height: 1;
+            color: var(--shell-text);
+            background-color: var(--shell-btn-bg);
+            border: 1px solid var(--shell-btn-border);
+            border-radius: 9px;
+            cursor: pointer;
+            transition: background-color .2s ease, border-color .2s ease, transform .12s ease;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+        .theme-toggle:hover { border-color: var(--shell-accent); }
+        .theme-toggle:active { transform: scale(.98); }
+        .theme-icon { font-size: 13px; line-height: 1; }
+
+        .nav { display: flex; flex-direction: column; gap: 2px; }
+        .nav-group {
+            margin: 14px 0 6px;
+            padding-left: 10px;
+            font-size: 10.5px;
+            letter-spacing: 2px;
+            color: var(--shell-muted);
+            font-weight: 700;
+        }
+        .nav-group:first-child { margin-top: 2px; }
+        .sidebar a {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            padding: 8px 10px;
+            font-size: 13.5px;
+            line-height: 1.3;
+            text-decoration: none;
+            color: var(--shell-text);
+            border-radius: 9px;
+            transition: background-color .16s ease, color .16s ease;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+        .sidebar a .ic {
+            width: 18px;
+            flex: 0 0 18px;
+            text-align: center;
+            font-size: 14px;
+            line-height: 1;
+        }
+        .sidebar a .nm {
+            flex: 1 1 auto;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .sidebar a .tag {
+            flex: 0 0 auto;
+            font-size: 9.5px;
+            letter-spacing: .5px;
+            color: var(--shell-muted);
+            border: 1px solid var(--shell-line);
+            border-radius: 5px;
+            padding: 1px 4px;
+        }
+        .sidebar a:hover { background-color: var(--shell-hover); }
+        .sidebar a.active {
+            background-color: var(--shell-active-bg);
+            color: var(--shell-accent);
+            font-weight: 700;
+        }
+        .sidebar a.active::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 8px;
+            bottom: 8px;
+            width: 3px;
+            border-radius: 0 3px 3px 0;
+            background-color: var(--shell-accent);
+        }
+        .sidebar a.active .tag { color: var(--shell-accent); border-color: var(--shell-accent); }
+
+        /* 手机折叠导航专用控件（桌面隐藏） */
+        .nav-toggle { display: none; }
+        .mini-game { display: none; }
+        .nav-backdrop { display: none; }
+
+        /* ---------- 内容区 ---------- */
+        .content {
+            flex: 1 1 auto;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            padding: 12px 12px 12px 10px;
+        }
+        .gamebar {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 0 4px 10px;
+        }
+        .gb-ic {
+            font-size: 17px;
+            line-height: 1;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .16));
+        }
+        .gb-name {
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .gb-label {
+            margin-left: auto;
+            font-size: 11px;
+            letter-spacing: 1px;
+            color: var(--shell-muted);
+            white-space: nowrap;
+        }
+        .frame-wrap {
+            flex: 1 1 auto;
+            min-height: 0;
+            background-color: #0b1220;
+            border: 1px solid var(--shell-line);
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: var(--shell-shadow);
+        }
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+            background-color: #0b1220;
+        }
+        /* 换页时的加载遮罩（覆盖在画面之上，加载完就淡出） */
+        .frame-wrap { position: relative; }
+        .frame-loading {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            font-size: 13px;
+            letter-spacing: 1px;
+            color: #cfe0f7;
+            background-color: rgba(9, 15, 25, .82);
+            backdrop-filter: blur(2px);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity .18s ease, visibility .18s ease;
+            pointer-events: none;
+            z-index: 5;
+        }
+        .frame-loading.show { opacity: 1; visibility: visible; }
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(120, 180, 255, .28);
+            border-top-color: #4f9cf9;
+            border-radius: 50%;
+            animation: yc-spin .75s linear infinite;
+        }
+        @keyframes yc-spin { to { transform: rotate(360deg); } }
+
+        /* ---------- 手机：圆角抽屉式侧栏 ---------- */
+        @media (max-width: 768px) {
+            body {
+                flex-direction: column;
+                height: 100dvh;
+                overflow: hidden;
+            }
+
+            /* 顶部细工具条 */
+            .sidebar {
+                position: relative;
+                width: 100%;
+                flex: 0 0 auto;
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                gap: 10px;
+                height: 54px;
+                padding: 0 10px;
+                overflow: visible;
+                border-right: none;
+                border-bottom: 1px solid var(--shell-line);
+                z-index: 70;              /* 必须高于遮罩，否则抽屉会被遮罩的模糊盖住 */
+            }
+            .brand { display: none; }
+
+            .nav-toggle {
+                display: inline-flex;
+                flex: 0 0 auto;
+                align-items: center;
+                justify-content: center;
+                width: 38px;
+                height: 38px;
+                padding: 0;
+                border-radius: 11px;
+                background-color: var(--shell-btn-bg);
+                border: 1px solid var(--shell-btn-border);
+                cursor: pointer;
+                transition: border-color .2s ease, background-color .2s ease, transform .12s ease;
+                -webkit-tap-highlight-color: transparent;
+                touch-action: manipulation;
+            }
+            .nav-toggle:active { transform: scale(.94); }
+            .nav-toggle .bars,
+            .nav-toggle .bars::before,
+            .nav-toggle .bars::after {
+                content: "";
+                display: block;
+                width: 16px;
+                height: 2px;
+                border-radius: 2px;
+                background-color: var(--shell-text);
+                transition: transform .26s cubic-bezier(.22,.9,.3,1), opacity .18s ease;
+            }
+            .nav-toggle .bars { position: relative; }
+            .nav-toggle .bars::before { position: absolute; left: 0; top: -5px; }
+            .nav-toggle .bars::after { position: absolute; left: 0; top: 5px; }
+            .sidebar.open .nav-toggle { border-color: var(--shell-accent); background-color: var(--shell-active-bg); }
+            .sidebar.open .nav-toggle .bars { background-color: transparent; }
+            .sidebar.open .nav-toggle .bars::before { transform: translateY(5px) rotate(45deg); }
+            .sidebar.open .nav-toggle .bars::after { transform: translateY(-5px) rotate(-45deg); }
+
+            .mini-game {
+                display: flex;
+                flex: 1 1 auto;
+                align-items: center;
+                gap: 7px;
+                min-width: 0;
+                font-size: 14px;
+                font-weight: 700;
+                letter-spacing: .5px;
+            }
+            .mini-game .mi-ic { font-size: 15px; line-height: 1; flex: 0 0 auto; }
+            .mini-game .mi-nm {
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .theme-toggle {
+                flex: 0 0 auto;
+                width: 38px;
+                height: 38px;
+                padding: 0;
+                margin: 0;
+                border-radius: 11px;
+            }
+            .theme-text { display: none; }
+
+            /* ---------- 圆角抽屉面板 ---------- */
+            .nav {
+                position: fixed;
+                top: 62px;
+                left: 8px;
+                bottom: 8px;
+                width: min(78vw, 300px);
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+                padding: 10px;
+                background-color: var(--shell-bg);
+                border: 1px solid var(--shell-line);
+                border-radius: 20px;
+                box-shadow: 0 26px 52px -22px rgba(0, 0, 0, .55), 0 3px 10px rgba(0, 0, 0, .16);
+                overflow-y: auto;
+                overscroll-behavior: contain;
+                -webkit-overflow-scrolling: touch;
+                z-index: 1;
+                transform: translateX(-118%) scale(.96);
+                opacity: 0;
+                visibility: hidden;
+                pointer-events: none;
+                /* 关闭时：先播完收回动画，最后才真正隐藏 */
+                transition:
+                    transform .34s cubic-bezier(.22, .9, .3, 1),
+                    opacity .24s ease,
+                    visibility 0s linear .34s;
+            }
+            .sidebar.open .nav {
+                transform: translateX(0) scale(1);
+                opacity: 1;
+                visibility: visible;
+                pointer-events: auto;
+                /* 打开时：立即可见，动画跑完再收尾 */
+                transition:
+                    transform .34s cubic-bezier(.22, .9, .3, 1),
+                    opacity .24s ease,
+                    visibility 0s linear 0s;
+            }
+
+            /* 逐项入场动画 */
+            .sidebar.open .nav > * {
+                animation: yc-navIn .30s cubic-bezier(.22, .9, .3, 1) both;
+            }
+            .sidebar.open .nav > *:nth-child(1) { animation-delay: .03s; }
+            .sidebar.open .nav > *:nth-child(2) { animation-delay: .06s; }
+            .sidebar.open .nav > *:nth-child(3) { animation-delay: .09s; }
+            .sidebar.open .nav > *:nth-child(4) { animation-delay: .12s; }
+            .sidebar.open .nav > *:nth-child(5) { animation-delay: .15s; }
+            .sidebar.open .nav > *:nth-child(6) { animation-delay: .18s; }
+            .sidebar.open .nav > *:nth-child(7) { animation-delay: .21s; }
+            .sidebar.open .nav > *:nth-child(8) { animation-delay: .24s; }
+            .sidebar.open .nav > *:nth-child(9) { animation-delay: .27s; }
+            .sidebar.open .nav > *:nth-child(n+10) { animation-delay: .30s; }
+
+            @keyframes yc-navIn {
+                from { opacity: 0; transform: translateX(-12px); }
+                to { opacity: 1; transform: translateX(0); }
+            }
+
+            .nav-group {
+                margin: 12px 0 6px;
+                padding-left: 8px;
+            }
+            .nav-group:first-child { margin-top: 2px; }
+
+            .sidebar a {
+                flex: 0 0 auto;
+                gap: 9px;
+                padding: 11px 12px;
+                font-size: 14px;
+                border-radius: 12px;
+            }
+            .sidebar a.active { border-radius: 12px; }
+            .sidebar a.active::before {
+                display: block;
+                top: 10px;
+                bottom: 10px;
+                border-radius: 0 3px 3px 0;
+            }
+            .sidebar a .tag { display: inline-block; }
+
+            /* 遮罩：淡入淡出 */
+            .nav-backdrop {
+                display: block;
+                position: fixed;
+                inset: 0;
+                background-color: rgba(8, 14, 24, .48);
+                z-index: 55;
+                opacity: 0;
+                visibility: hidden;
+                transition: opacity .26s ease, visibility .26s ease;
+            }
+            .nav-backdrop.show { opacity: 1; visibility: visible; }
+
+            .content { flex: 1 1 auto; min-height: 0; padding: 8px; }
+            .gamebar { display: none; }
+            .frame-wrap { border-radius: 10px; }
+        }
+    </style>
+
+</head>
+<body>
+    <div class="sidebar" id="sidebar">
+        <button type="button" class="nav-toggle" id="navToggle" aria-label="展开菜单" aria-expanded="false">
+            <span class="bars" aria-hidden="true"></span>
+        </button>
+        <div class="mini-game">
+            <span class="mi-ic" id="miniIcon" aria-hidden="true">🏠</span>
+            <span class="mi-nm" id="miniName">主页</span>
+        </div>
+        <div class="brand">
+            <span class="brand-dot" aria-hidden="true"></span>
+            <span class="brand-name">叶初小游戏</span>
+            <span class="brand-sub" data-game-count>11 款</span>
+        </div>
+
+        <button type="button" class="theme-toggle" id="themeToggle" title="切换主题">
+            <span class="theme-icon" aria-hidden="true">🖥️</span>
+            <span class="theme-text">跟随系统</span>
+        </button>
+
+        <nav class="nav" id="nav">
+            <a href="proF/主页.html" target="gameFrame" data-icon="🏠" data-name="主页" class="active">
+                <span class="ic" aria-hidden="true">🏠</span><span class="nm">主页</span>
+            </a>
+
+<!-- nav:start 以下入口由 games.json 生成；加游戏只改 games.json -->
+            <div class="nav-group">⚽ 足球</div>
+            <a href="proF/11人足球.html" target="gameFrame" data-icon="🏟️" data-name="绿茵足球">
+              <span class="ic" aria-hidden="true">🏟️</span><span class="nm">绿茵足球</span>
+            </a>
+            <a href="proF/玩家对战足球.html" target="gameFrame" data-icon="⚔️" data-name="桌上足球 · 对战">
+              <span class="ic" aria-hidden="true">⚔️</span><span class="nm">桌上足球 · 对战</span><span class="tag">电脑</span>
+            </a>
+            <a href="proF/双人足球.html" target="gameFrame" data-icon="🤖" data-name="桌上足球 · 人机">
+              <span class="ic" aria-hidden="true">🤖</span><span class="nm">桌上足球 · 人机</span>
+            </a>
+            <a href="proF/人机对战足球.html" target="gameFrame" data-icon="👀" data-name="桌上足球 · 观战">
+              <span class="ic" aria-hidden="true">👀</span><span class="nm">桌上足球 · 观战</span>
+            </a>
+            <a href="proF/任意球练习.html" target="gameFrame" data-icon="🥅" data-name="点球大师">
+              <span class="ic" aria-hidden="true">🥅</span><span class="nm">点球大师</span>
+            </a>
+            <div class="nav-group">🎯 射击</div>
+            <a href="proF/CS平面版.html" target="gameFrame" data-icon="🎯" data-name="CS 平面战场">
+              <span class="ic" aria-hidden="true">🎯</span><span class="nm">CS 平面战场</span><span class="tag">电脑</span>
+            </a>
+            <a href="proF/CS秘密行动.html" target="gameFrame" data-icon="🔫" data-name="CS 秘密行动">
+              <span class="ic" aria-hidden="true">🔫</span><span class="nm">CS 秘密行动</span><span class="tag">电脑</span>
+            </a>
+            <a href="proF/叶初打飞机.html" target="gameFrame" data-icon="✈️" data-name="星海突击">
+              <span class="ic" aria-hidden="true">✈️</span><span class="nm">星海突击</span>
+            </a>
+            <a href="proF/CS观战.html" target="gameFrame" data-icon="👀" data-name="CS 观战">
+              <span class="ic" aria-hidden="true">👀</span><span class="nm">CS 观战</span>
+            </a>
+            <div class="nav-group">🧩 休闲</div>
+            <a href="proF/俄罗斯方块.html" target="gameFrame" data-icon="🧩" data-name="方块风暴">
+              <span class="ic" aria-hidden="true">🧩</span><span class="nm">方块风暴</span>
+            </a>
+            <a href="proF/叶初的鱼塘.html" target="gameFrame" data-icon="🐟" data-name="叶初的鱼塘">
+              <span class="ic" aria-hidden="true">🐟</span><span class="nm">叶初的鱼塘</span><span class="tag">电脑</span>
+            </a>
+<!-- nav:end -->
+        </nav>
+    </div>
+
+    <div class="nav-backdrop" id="navBackdrop"></div>
+
+    
+    <div class="content">
+        <div class="gamebar">
+            <span class="gb-ic" id="gbIcon" aria-hidden="true">🏠</span>
+            <span class="gb-name" id="gbName">主页</span>
+            <span class="gb-label">当前游戏 · 点左侧切换</span>
+        </div>
+        <div class="frame-wrap">
+            <iframe name="gameFrame" id="gameFrame" src="proF/主页.html" title="游戏画面"></iframe>
+            <div class="frame-loading" id="frameLoading">
+                <span class="spinner" aria-hidden="true"></span>
+                <span id="frameLoadingText">加载中…</span>
+            </div>
+        </div>
+    </div>
+
+<script>
+/* ---------- 导航高亮 + 顶部当前游戏 ---------- */
+(function () {
+    var nav = document.getElementById('nav');
+    var gbIcon = document.getElementById('gbIcon');
+    var gbName = document.getElementById('gbName');
+    var frame = document.getElementById('gameFrame');
+    var baseTitle = '叶初小游戏';
+    var miniIcon = document.getElementById('miniIcon');
+    var miniName = document.getElementById('miniName');
+    /* 侧栏入口由 games.json 动态重建，所以每次现取，不缓存 NodeList */
+    function getLinks() { return nav.querySelectorAll('a'); }
+    var currentFile = '主页.html';
+    /* 顶部游戏条 + 手机工具条上的当前游戏名一起更新 */
+    function setBar(icon, name) {
+        gbIcon.textContent = icon;
+        gbName.textContent = name;
+        if (miniIcon) { miniIcon.textContent = icon; }
+        if (miniName) { miniName.textContent = name; }
+    }
+
+    function decodeSafe(s) {
+        try { return decodeURIComponent(s); } catch (e) { return s; }
+    }
+    function findLinkByFile(file) {
+        var target = decodeSafe(file || '');
+        var links = getLinks();
+        for (var i = 0; i < links.length; i++) {
+            var href = links[i].getAttribute('href') || '';
+            var tail = decodeSafe(href.split('/').pop());
+            if (tail === target) { return links[i]; }
+        }
+        return null;
+    }
+
+    function highlight(link, updateTitle) {
+        var links = getLinks();
+        for (var i = 0; i < links.length; i++) { links[i].classList.remove('active'); }
+        if (!link) {
+            setBar('🏠', '主页');
+            document.title = baseTitle;
+            return;
+        }
+        link.classList.add('active');
+        setBar(link.getAttribute('data-icon') || '🎮', link.getAttribute('data-name') || link.textContent.trim());
+        if (updateTitle !== false) {
+            var nm = link.getAttribute('data-name') || '';
+            document.title = nm && nm !== '主页' ? nm + ' · ' + baseTitle : baseTitle;
+        }
+        /* 让当前项在窄屏横向导航里可见 */
+        try {
+            if (nav.scrollWidth > nav.clientWidth || link.scrollIntoView) {
+                link.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+            }
+        } catch (e) {}
+    }
+
+    /* 事件委托：入口是动态生成的，绑在 nav 上才不会失效 */
+    nav.addEventListener('click', function (e) {
+        var a = e.target.closest ? e.target.closest('a') : null;
+        if (!a) { return; }
+        highlight(a, true);
+        showLoading(a.getAttribute('data-name'));
+    });
+
+    /* 内嵌页加载完后同步一次（同源时能拿到真实地址，比如从主页点卡片进去） */
+    frame.addEventListener('load', function () {
+        hideLoading();
+        var file = null;
+        try {
+            var path = frame.contentWindow.location.pathname || '';
+            file = decodeSafe(path.split('/').pop() || '');
+        } catch (e) { return; }
+        if (!file) { return; }
+        currentFile = file;
+        var link = findLinkByFile(file);
+        if (link) { highlight(link, true); }
+        else {
+            /* 认不出的页面（比如备份页），只显示文件名 */
+            var links = getLinks();
+            for (var j = 0; j < links.length; j++) { links[j].classList.remove('active'); }
+            setBar('📄', decodeURIComponent(file).replace(/\.html$/i, ''));
+            document.title = decodeURIComponent(file).replace(/\.html$/i, '') + ' · ' + baseTitle;
+        }
+    });
+
+    /* 主页里点卡片时，由主页 postMessage 通知（跨域 / file:// 也能生效） */
+    window.addEventListener('message', function (e) {
+        var d = e && e.data;
+        if (!d || !d.ycNav) { return; }
+        currentFile = d.ycNav;
+        var link = findLinkByFile(d.ycNav);
+        if (link) { highlight(link, true); return; }
+        /* 找不到对应导航（比如以后的隐藏页），就按名字显示 */
+        var links = getLinks();
+        for (var j = 0; j < links.length; j++) { links[j].classList.remove('active'); }
+        var nm = d.name || decodeSafe(String(d.ycNav).split('/').pop()).replace(/\.html$/i, '');
+        setBar(d.icon || '🎮', nm);
+        document.title = nm ? nm + ' · ' + baseTitle : baseTitle;
+    });
+
+    /* ---------- 加载遮罩：点导航就先盖上，页面加载完再撤 ---------- */
+    var loading = document.getElementById('frameLoading');
+    var loadingText = document.getElementById('frameLoadingText');
+    var showAt = 0;
+
+    function showLoading(name) {
+        if (!loading) { return; }
+        if (loadingText) { loadingText.textContent = name ? '正在打开 ' + name + '…' : '加载中…'; }
+        showAt = Date.now();
+        loading.classList.add('show');
+    }
+    function hideLoading() {
+        if (!loading) { return; }
+        var wait = Math.max(0, 300 - (Date.now() - showAt));   /* 至少显示 300ms，避免闪一下 */
+        setTimeout(function () { loading.classList.remove('show'); }, wait);
+    }
+
+    /* ---------- 预取：悬停 / 聚焦时立刻拉，空闲时把剩下的全拉进缓存 ---------- */
+    var prefetched = {};
+    function prefetch(href) {
+        if (!href || prefetched[href]) { return; }
+        prefetched[href] = 1;
+        try {
+            var l = document.createElement('link');
+            l.rel = 'prefetch';
+            l.href = href;
+            if (l.as !== undefined) { l.as = 'document'; }
+            document.head.appendChild(l);
+        } catch (e) {
+            try { fetch(href, { cache: 'force-cache', priority: 'low' }); } catch (e2) {}
+        }
+    }
+    /* 同样用事件委托，动态生成的入口也有悬停预取 */
+    function prefetchFrom(e) {
+        var a = e.target.closest ? e.target.closest('a') : null;
+        if (!a) { return; }
+        prefetch(a.getAttribute('href'));
+    }
+    nav.addEventListener('mouseover', prefetchFrom, { passive: true });
+    nav.addEventListener('touchstart', prefetchFrom, { passive: true });
+    nav.addEventListener('focusin', prefetchFrom);
+    /* 空闲时把其余游戏页也预取好，之后切换基本是瞬开。
+       省流量模式 / 2G 网络下不自动预取，只保留悬停预取。 */
+    var conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection || null;
+    var slowNet = !!(conn && (conn.saveData || /(^|-)2g$/.test(conn.effectiveType || '')));
+    function prefetchAll() {
+        if (slowNet) { return; }
+        var idle = window.requestIdleCallback || function (fn) { setTimeout(fn, 1200); };
+        idle(function () {
+            var links = getLinks();
+            for (var i = 0; i < links.length; i++) { prefetch(links[i].getAttribute('href')); }
+        }, { timeout: 3000 });
+    }
+    prefetchAll();
+
+    /* 打开时默认高亮主页 */
+    highlight(findLinkByFile('主页.html') || getLinks()[0], false);
+
+    /* 侧栏入口被 games.json 重建后调用：恢复当前高亮 + 补预取 */
+    window.__ycNavSync = function () {
+        var link = findLinkByFile(currentFile);
+        highlight(link || getLinks()[0], false);
+        prefetchAll();
+    };
+})();
+
+/* ---------- 手机折叠式导航 ---------- */
+(function () {
+    var sidebar = document.getElementById('sidebar');
+    var toggle = document.getElementById('navToggle');
+    var backdrop = document.getElementById('navBackdrop');
+    var nav = document.getElementById('nav');
+    if (!sidebar || !toggle) { return; }
+
+    function setOpen(open) {
+        sidebar.classList.toggle('open', open);
+        if (backdrop) { backdrop.classList.toggle('show', open); }
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    toggle.addEventListener('click', function () {
+        setOpen(!sidebar.classList.contains('open'));
+    });
+    if (backdrop) {
+        backdrop.addEventListener('click', function () { setOpen(false); });
+    }
+    if (nav) {
+        /* 选了游戏就收起菜单 */
+        nav.addEventListener('click', function (e) {
+            var a = e.target.closest ? e.target.closest('a') : null;
+            if (a) { setOpen(false); }
+        });
+    }
+    window.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' || e.key === 'Esc') { setOpen(false); }
+    });
+    window.addEventListener('resize', function () {
+        if (window.innerWidth > 768) { setOpen(false); }
+    });
+})();
+
+/* ---------- 主题切换 ---------- */
+(function () {
+    var KEY = 'yc-theme';
+    var root = document.documentElement;
+    var mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+    var btn = document.getElementById('themeToggle');
+
+    function stored() {
+        try { return localStorage.getItem(KEY); } catch (e) { return null; }
+    }
+    function resolved() {
+        var s = stored();
+        if (s === 'dark' || s === 'light') { return s; }
+        return (mq && mq.matches) ? 'dark' : 'light';
+    }
+    function apply() {
+        var mode = resolved();
+        root.setAttribute('data-theme', mode);
+        if (!btn) { return; }
+        var s = stored();
+        var label = s === 'dark' ? '深色' : (s === 'light' ? '浅色' : '跟随系统');
+        var icon = s === 'dark' ? '🌙' : (s === 'light' ? '☀️' : '🖥️');
+        btn.querySelector('.theme-icon').textContent = icon;
+        btn.querySelector('.theme-text').textContent = label;
+        var tip = s
+            ? '当前：' + label + '（点击切换为' + (mode === 'dark' ? '浅色' : '深色') + '，右键恢复跟随系统）'
+            : '当前：跟随系统（点击切换主题）';
+        btn.setAttribute('title', tip);
+        btn.setAttribute('aria-label', tip);
+    }
+    function save(mode) {
+        try {
+            if (mode) { localStorage.setItem(KEY, mode); } else { localStorage.removeItem(KEY); }
+        } catch (e) {}
+        apply();
+    }
+    /* 把主题立刻推给内嵌的游戏页面（同源时生效） */
+    function pushToFrame() {
+        try {
+            var f = document.querySelector('iframe[name="gameFrame"]');
+            if (f && f.contentWindow && typeof f.contentWindow.__ycApplyTheme === 'function') {
+                f.contentWindow.__ycApplyTheme();
+            }
+        } catch (e) {}
+    }
+    function commit(mode) {
+        save(mode);
+        pushToFrame();
+    }
+
+    if (btn) {
+        btn.addEventListener('click', function () {
+            commit(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+        });
+        btn.addEventListener('contextmenu', function (e) {
+            e.preventDefault();
+            commit(null);
+        });
+    }
+
+    /* 供内嵌页面调用 */
+    window.__ycApplyTheme = apply;
+
+    apply();
+
+    /* 与内嵌的主页页面互相同步 */
+    window.addEventListener('storage', function (e) {
+        if (!e || e.key === KEY || e.key === null) { apply(); }
+    });
+    /* 兜底：即使 storage 事件没有及时送达，也能把主题对齐 */
+    setInterval(function () {
+        if (root.getAttribute('data-theme') !== resolved()) { apply(); }
+    }, 1000);
+    if (mq) {
+        var onSystemChange = function () { if (!stored()) { apply(); } };
+        if (mq.addEventListener) { mq.addEventListener('change', onSystemChange); }
+        else if (mq.addListener) { mq.addListener(onSystemChange); }
+    }
+})();
+</script>
+
+<script src="./games.js"></script>
+<script>
+/* 侧栏入口和「11 款」全部由 games.json 渲染 / 填充；
+   HTML 里保留的静态入口和数字只是没网络（file:// 直开）时的兜底。 */
+if (window.YCGames) {
+    YCGames.load('./games.json').then(function (ds) {
+        YCGames.renderNav(document.getElementById('nav'), ds);
+        YCGames.applyCounts(document, ds);
+        if (typeof window.__ycNavSync === 'function') { window.__ycNavSync(); }
+    }).catch(function () {});
+}
+</script>
+
+</body>
+</html>

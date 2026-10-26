@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>CS 平面战场</title>
+<link rel="stylesheet" href="../ui/yc-ui.css">
+<style>
+  #hud { align-items: flex-start; }
+  .hpwrap { display: flex; align-items: center; gap: 8px; }
+  .hpbar {
+    position: relative; width: clamp(64px, 16vw, 110px); height: 9px;
+    border-radius: 999px; background: rgba(255,255,255,.14); overflow: hidden;
+  }
+  .hpbar i {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 100%;
+    background: linear-gradient(90deg, #38d39f, #8ef0c4);
+    transition: width .12s linear;
+  }
+  .hpbar i.mid { background: linear-gradient(90deg, #ffd166, #ffe6a3); }
+  .hpbar i.low { background: linear-gradient(90deg, #ff6b6b, #ffb199); }
+  #hud b { font-variant-numeric: tabular-nums; }
+  #hud .chip { white-space: nowrap; }
+  /* 窄屏：HP 条缩短、中间标题隐藏，保证一行放得下 */
+  @media (max-width: 640px) {
+    #hud { font-size: 12px; gap: 6px; }
+    #hud .chip { padding: 4px 8px; }
+    #hud .chip:nth-child(2) { display: none; }
+    .hpbar { width: clamp(48px, 14vw, 76px); }
+  }
+</style>
+</head>
+<body data-pc-only="1">
+<div id="wrap">
+  <div id="stage">
+    <canvas id="cv"></canvas>
+
+    <div id="hud">
+      <div class="chip">
+        <div class="hpwrap"><span class="dot" style="background:#4f9cf9"></span>我方 <b id="hpMe">20</b>
+          <span class="hpbar"><i id="barMe"></i></span>
+        </div>
+      </div>
+      <div class="chip">第 <b id="roundTxt">1</b> 回合 · <b id="scoreTxt">0 : 0</b></div>
+      <div class="chip">
+        <div class="hpwrap"><span class="dot" style="background:#ff5d5d"></span>敌方 <b id="hpAi">20</b>
+          <span class="hpbar"><i id="barAi"></i></span>
+        </div>
+      </div>
+    </div>
+
+    <div id="banner"></div>
+    <div id="hint"></div>
+
+    
+    <div class="overlay" id="intro">
+      <div class="panel">
+        <h1>CS 平面战场</h1>
+        <p>你和一个人机互相射击：每回合各 20 点血、中一枪 -1，先打空对方血量的拿下这一回合，<b>先拿 5 个回合的人赢得整场</b>。</p>
+        <p><b>移动</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>　<b>瞄准</b> 鼠标　<b>开火</b> 按住左键，或按住 <kbd>Q</kbd>（有射速上限，别一直扣着不放）</p>
+        <p>绿色区域是墙，子弹和人都穿不过去。</p>
+        <button class="btn" id="startBtn" type="button">开始游戏</button>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="over">
+      <div class="panel">
+        <h1 id="overTitle">游戏结束</h1>
+        <p>我方剩余 <b id="finalMe">0</b>　敌方剩余 <b id="finalAi">0</b></p>
+        <p id="overComment"></p>
+        <button class="btn" id="retryBtn" type="button">再来一局</button>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="mobile">
+      <div class="panel">
+        <h1>这个游戏只能在电脑上玩</h1>
+        <p>「CS 平面战场」需要键盘走位 + 鼠标瞄准射击，手机 / 平板上没法正常操作。</p>
+        <p>请用电脑打开本页面，或回主页挑个手机能玩的游戏。</p>
+        <button class="btn" id="mobileBack" type="button">返回主页</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+ * CS 平面战场 · 按原版规则重写（Canvas + 统一 UI）
+ *   原版规则（从工程里还原）：
+ *     · 玩家 20 血、人机 20 血，中一枪 -1，血量 < 1 判负
+ *     · 玩家 WASD 每帧移动 1 像素，始终朝鼠标方向
+ *     · 按住鼠标左键或 Q → 每帧从枪口打出一发子弹（朝准星方向）
+ *     · 子弹每帧前进随机 30~50 像素，撞到绿色墙体消失
+ *     · 人机每帧随机转向 random(1,360)° 后随机移动 30~50 像素
+ *     · 人机准星每帧朝玩家移动 0.9 像素，贴到玩家身上就开枪
+ * ============================================================ */
+var W = 480, H = 360;                 /* 舞台尺寸（原 Scratch 舞台） */
+var TICK = 1 / 30;                    /* 原版按 30 帧/秒运行 */
+
+var HP_MAX = 20;
+var WIN_SCORE = 5;                     /* 先拿下 5 个回合的人赢下整场 */
+var PLAYER_FIRE = 0.066;               /* 真人射速上限：约 15 发/秒（原来每帧一发 = 30 发/秒） */
+
+/* 人机手感参数（想再调强弱就改这几个数） */
+var AI_TRACK = 2.6;                    /* 有视野时准星每帧追多少像素 */
+var AI_TRACK_ALERT = 5.0;               /* 刚被打到时 */
+var AI_TOL = 18;                        /* 准星离预判点多近才扣扳机 */
+var AI_TOL_ALERT = 26;
+var AI_FIRE = 0.071;                    /* 人机射速：约 14 发/秒 */
+var AI_CLOSE = 80;                      /* 贴到多少距离开始后撤 */
+var AI_LEAD = 0.8;                      /* 预判提前量系数（1 = 满提前，0.8 略收一点避免过冲） */
+var AI_PLANT = 0;                       /* 准星够准时站住不动（0 = 不站住） */
+var AI_FAR = 190;                       /* 多远开始压上 */
+var scoreMe = 0, scoreAi = 0, roundNo = 0, roundT = 0;
+var PLAYER_SPAWN = { x: -159, y: -10 };
+var AI_SPAWN = { x: 159, y: -5 };
+var AI_SPEED = 30;                     /* 和玩家一样：30 帧 × 每帧 1 像素 */
+
+/* ============================================================
+ * 地图：用矩形手工重画（和原版布局大致一致）
+ *   · 外墙一圈，中间一块近似八边形的掩体
+ *   · 全部用矩形定义 → 碰撞和画面 100% 一致，不会有“看起来是墙却能穿”的漏洞
+ * ============================================================ */
+/* ============================================================
+ * 地图：全部由矩形定义，画面和碰撞都用这一份数据
+ *   · 外面一圈厚墙
+ *   · 正中一块长方形掩体（横的一条，挡住整个中路）
+ *   · 左上 / 右下各一个箱子，绕圈有掩护但不会把人堵死
+ *   isWall() / buildBackground() / F2 调试叠加 全读这个数组，
+ *   所以“画出来的墙”和“判定为墙的地方”永远一致。
+ * ============================================================ */
+var WALLS = [
+  /* 外墙（内沿：左 -212 / 右 212 / 上 148 / 下 -148，和 isWall 的越界判定对齐） */
+  { x: 0,    y: 163,  w: 480, h: 30 },     /* 上 */
+  { x: 0,    y: -163, w: 480, h: 30 },     /* 下 */
+  { x: -227, y: 0,    w: 30,  h: 360 },    /* 左 */
+  { x: 227,  y: 0,    w: 30,  h: 360 },    /* 右 */
+
+  /* 正中：一块 176×96 的长方形掩体（x -88..88，y -48..48）
+     左右各留 124 的过道，上下各留 100，两边出生点离它都是 71 */
+  { x: 0,    y: 0,    w: 176, h: 96 },
+
+  /* 两个箱子：一个在上道、一个在下道，位置镜像，谁都不吃亏 */
+  { x: 146,  y: 100,  w: 64,  h: 26 },     /* 上道（y 87..113，在 48..148 之内） */
+  { x: -146, y: -100, w: 64,  h: 26 }      /* 下道（y -113..-87，在 -148..-48 之内） */
+];
+/* ---------- 画布 ---------- */
+var cv = document.getElementById('cv');
+var st = document.getElementById('stage');
+var ctx = cv.getContext('2d');
+var UNIT = 1;                          /* 一个舞台单位等于多少个物理像素 */
+
+var bgCanvas = null;
+var showMask = false;                  /* F2：把墙面涂红，方便看判定 */
+
+/* 点是否落在墙里 */
+function isWall(x, y) {
+  for (var i = 0; i < WALLS.length; i++) {
+    var w = WALLS[i];
+    if (x > w.x - w.w / 2 && x < w.x + w.w / 2 &&
+        y > w.y - w.h / 2 && y < w.y + w.h / 2) { return true; }
+  }
+  /* 场地外也算墙 */
+  if (x < -W / 2 + 12 || x > W / 2 - 12 || y < -H / 2 + 12 || y > H / 2 - 12) { return true; }
+  return false;
+}
+
+/* 人物能不能站在这个位置（圆心 + 一圈采样，避免半个身子插进墙里） */
+function canStand(x, y, r) {
+  if (isWall(x, y)) { return false; }
+  for (var i = 0; i < 8; i++) {
+    var a = i * Math.PI / 4;
+    if (isWall(x + Math.cos(a) * r, y + Math.sin(a) * r)) { return false; }
+  }
+  return true;
+}
+
+/* 附近找一个能站的位置（出生点万一在墙里就往外挪） */
+function findOpenNear(x, y, r) {
+  if (canStand(x, y, r)) { return { x: x, y: y }; }
+  for (var rad = 6; rad <= 160; rad += 6) {
+    for (var i = 0; i < 16; i++) {
+      var a = i * Math.PI / 8;
+      var nx = x + Math.cos(a) * rad, ny = y + Math.sin(a) * rad;
+      if (canStand(nx, ny, r)) { return { x: nx, y: ny }; }
+    }
+  }
+  return { x: x, y: y };
+}
+
+/* ============================================================
+ * 视线 / 走位辅助
+ * ============================================================ */
+
+/* 两点之间有没有墙挡着（沿直线每 6 像素采样一次） */
+function hasLOS(x1, y1, x2, y2) {
+  var dx = x2 - x1, dy = y2 - y1;
+  var dist = len(dx, dy);
+  var steps = Math.max(1, Math.ceil(dist / 6));
+  for (var i = 1; i < steps; i++) {
+    var t = i / steps;
+    if (isWall(x1 + dx * t, y1 + dy * t)) { return false; }
+  }
+  return true;
+}
+
+/* 从 (x,y) 朝 ang 方向一直走，最近的墙还有多远 */
+function freeDist(x, y, ang, maxD) {
+  var step = 4;
+  for (var d = step; d <= maxD; d += step) {
+    if (isWall(x + Math.cos(ang) * d, y + Math.sin(ang) * d)) { return d - step; }
+  }
+  return maxD;
+}
+
+/* 在偏好方向 ±120° 里挑一个“能走又朝目标”的方向 */
+function pickBestDir(x, y, pref, tx, ty, maxD) {
+  var best = pref, bestScore = -1e9;
+  for (var i = -8; i <= 8; i++) {
+    var a = pref + i * (Math.PI / 12);            /* 每档 15° */
+    var fd = freeDist(x, y, a, maxD);
+    if (fd < 12) { continue; }                     /* 前面就是墙，直接排除 */
+    var look = Math.min(fd, 34);                   /* 前瞻 34 像素 */
+    var nx = x + Math.cos(a) * look;
+    var ny = y + Math.sin(a) * look;
+    var score = fd * 0.9 - len(tx - nx, ty - ny) * 0.55 - Math.abs(i) * 2.2;
+    if (score > bestScore) { bestScore = score; best = a; }
+  }
+  return best;
+}
+
+/* ============================================================
+ * 背景（一次性画好，之后每帧直接贴图）
+ * ============================================================ */
+function buildBackground() {
+  var S = 2, W2 = W * S, H2 = H * S;
+  bgCanvas = document.createElement('canvas');
+  bgCanvas.width = W2;
+  bgCanvas.height = H2;
+  var g = bgCanvas.getContext('2d');
+
+  /* 地面：以场地中心为圆心往外变暗（左右完全对称，不会一边亮一边死黑） */
+  var grad = g.createRadialGradient(W2 / 2, H2 / 2, W2 * 0.08, W2 / 2, H2 / 2, W2 * 0.62);
+  grad.addColorStop(0, '#101c28');
+  grad.addColorStop(0.6, '#0a1220');
+  grad.addColorStop(1, '#05080f');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, W2, H2);
+
+  /* 网格 */
+  g.strokeStyle = 'rgba(110,170,230,0.065)';
+  g.lineWidth = 1;
+  for (var gx = 0; gx <= W; gx += 20) {
+    g.beginPath(); g.moveTo(gx * S, 0); g.lineTo(gx * S, H2); g.stroke();
+  }
+  for (var gy = 0; gy <= H; gy += 20) {
+    g.beginPath(); g.moveTo(0, gy * S); g.lineTo(W2, gy * S); g.stroke();
+  }
+
+  /* 墙体：投影 + 上亮下暗的绿 */
+  g.save();
+  g.shadowColor = 'rgba(0,0,0,0.8)';
+  g.shadowBlur = 9 * S;
+  g.shadowOffsetX = 0;
+  g.shadowOffsetY = 4 * S;
+  g.fillStyle = '#12301f';
+  for (var i = 0; i < WALLS.length; i++) {
+    var w = WALLS[i];
+    g.fillRect((w.x - w.w / 2 + W / 2) * S, (H / 2 - w.y - w.h / 2) * S, w.w * S, w.h * S);
+  }
+  g.restore();
+
+  for (var j = 0; j < WALLS.length; j++) {
+    var r = WALLS[j];
+    var rx = (r.x - r.w / 2 + W / 2) * S;
+    var ry = (H / 2 - r.y - r.h / 2) * S;
+    var rw = r.w * S, rh = r.h * S;
+    var lg = g.createLinearGradient(0, ry, 0, ry + rh);
+    lg.addColorStop(0, '#5a9c74');
+    lg.addColorStop(1, '#1d3a26');
+    g.fillStyle = lg;
+    g.fillRect(rx, ry, rw, rh);
+    /* 顶边高光 */
+    g.fillStyle = 'rgba(190,240,205,0.22)';
+    g.fillRect(rx, ry, rw, 3 * S);
+    /* 描边 */
+    g.strokeStyle = 'rgba(150,200,165,0.25)';
+    g.lineWidth = 1.5 * S;
+    g.strokeRect(rx, ry, rw, rh);
+  }
+
+  /* 暗角 */
+  var vg = g.createRadialGradient(W2 / 2, H2 / 2, W2 * 0.3, W2 / 2, H2 / 2, W2 * 0.78);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.55)');
+  g.fillStyle = vg;
+  g.fillRect(0, 0, W2, H2);
+}
+/* ---------- 画布 ---------- */
+function resize() {
+  var vw = window.innerWidth, vh = window.innerHeight;
+  var s = Math.min((vw - 24) / W, (vh - 24) / H);
+  s = Math.max(0.4, s);
+  var dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(W * s * dpr);
+  cv.height = Math.round(H * s * dpr);
+  cv.style.width = Math.round(W * s) + 'px';
+  cv.style.height = Math.round(H * s) + 'px';
+  st.style.width = cv.style.width;
+  st.style.height = cv.style.height;
+  UNIT = s * dpr;
+}
+
+/* ---------- 状态 ---------- */
+var state = 'intro';                  /* intro | playing | over */
+var me, ai, aiCross, bullets, popups, particles;
+var aim = { x: 0, y: 60 };            /* 准星（鼠标） */
+var firing = false, qDown = false;
+var meFireCool = 0;                    /* 真人开火冷却 */
+var keys = Object.create(null);
+var bannerTimer = 0, hitFlash = 0, shake = 0;
+
+/* 纯触屏设备（手机 / 平板）判定 */
+function isTouchOnlyDevice() {
+  try {
+    var tp = navigator.maxTouchPoints || 0;
+    var ua = navigator.userAgent || '';
+    var mobileUA = /Android|iPhone|iPad|iPod|Mobile|Tablet|Silk|Kindle/i.test(ua);
+    if (window.matchMedia) {
+      var coarse = window.matchMedia('(pointer: coarse)').matches;
+      var noHover = window.matchMedia('(hover: none)').matches;
+      if (coarse && noHover) { return true; }
+      if (mobileUA) { return true; }
+    }
+    return mobileUA || (tp > 0 && window.matchMedia && !window.matchMedia('(any-pointer: fine)').matches);
+  } catch (e) { return false; }
+}
+var touchOnly = isTouchOnlyDevice();
+
+var elHpMe = document.getElementById('hpMe');
+var elHpAi = document.getElementById('hpAi');
+var elBarMe = document.getElementById('barMe');
+var elBarAi = document.getElementById('barAi');
+var elBanner = document.getElementById('banner');
+var elHint = document.getElementById('hint');
+
+function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+function len(x, y) { return Math.sqrt(x * x + y * y); }
+function rand(a, b) { return a + Math.random() * (b - a); }
+function rad(d) { return d * Math.PI / 180; }
+
+function banner(t, ms) {
+  elBanner.textContent = t;
+  elBanner.classList.add('show');
+  bannerTimer = (ms || 900) / 1000;
+}
+
+function hud() {
+  var m = Math.max(0, Math.round(me ? me.hp : HP_MAX));
+  var a = Math.max(0, Math.round(ai ? ai.hp : HP_MAX));
+  elHpMe.textContent = m;
+  elHpAi.textContent = a;
+  elBarMe.style.width = (m / HP_MAX * 100) + '%';
+  elBarAi.style.width = (a / HP_MAX * 100) + '%';
+  elBarMe.className = m <= 5 ? 'low' : (m <= 10 ? 'mid' : '');
+  elBarAi.className = a <= 5 ? 'low' : (a <= 10 ? 'mid' : '');
+  var st = document.getElementById('scoreTxt');
+  if (st) { st.textContent = scoreMe + ' : ' + scoreAi; }
+  var rt = document.getElementById('roundTxt');
+  if (rt) { rt.textContent = Math.max(1, roundNo); }
+}
+
+function popup(x, y, text, color) {
+  popups.push({ x: x, y: y, text: text, color: color, life: 0.8, max: 0.8 });
+}
+
+function burst(x, y, color, n, speed) {
+  for (var i = 0; i < (n || 8); i++) {
+    var a = Math.random() * Math.PI * 2, sp = (speed || 70) * (0.4 + Math.random());
+    particles.push({
+      x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+      life: 0.2 + Math.random() * 0.28, max: 0.48, color: color, size: 1.2 + Math.random() * 1.8
+    });
+  }
+}
+
+/* ---------- 一场比赛：先拿 5 回合 ---------- */
+function startMatch() {
+  if (touchOnly) { return; }
+  scoreMe = 0; scoreAi = 0; roundNo = 0;
+  startRound();
+}
+
+/* 开一回合：摆回出生点、血加满 */
+function startRound() {
+  roundNo++;
+  roundT = 0;
+  var ps = findOpenNear(PLAYER_SPAWN.x, PLAYER_SPAWN.y, 10);
+  var as = findOpenNear(AI_SPAWN.x, AI_SPAWN.y, 10);
+  me = { x: ps.x, y: ps.y, hp: HP_MAX, dir: 0, flash: 0 };
+  ai = { x: as.x, y: as.y, hp: HP_MAX, dir: 0, flash: 0, legLeft: 0, speed: 45, aimDir: Math.PI, fireCool: 0.8, strafeDir: 1, sees: false, alert: 0 };
+  aiCross = { x: -45, y: -10 };
+  bullets = []; popups = []; particles = [];
+  aim = { x: 0, y: 60 };
+  /* 注意：这里不清 keys / firing / qDown。
+     浏览器只在你“按下”和“松开”时发事件，回合切换时清掉的话，
+     一直按住的 WASD（或 Q）就得松手再按一次才会生效。 */
+  meFireCool = 0;
+  bannerTimer = 0; hitFlash = 0; shake = 0;
+  state = 'playing';
+  document.getElementById('intro').classList.add('hidden');
+  document.getElementById('over').classList.add('hidden');
+  elHint.textContent = '先拿下 5 个回合获胜 · WASD 移动 · 鼠标瞄准 · 按住左键 / Q 开火';
+  banner('第 ' + roundNo + ' 回合', 1000);
+  hud();
+}
+
+/* 一回合结束：记分 → 到 5 分就分胜负，否则停一下再开下一回合 */
+function roundOver(winner) {
+  if (roundT > 0) { return; }
+  if (winner === 'me') { scoreMe++; } else { scoreAi++; }
+  var win = (scoreMe >= WIN_SCORE || scoreAi >= WIN_SCORE);
+  hud();
+  if (win) { matchOver(scoreMe >= WIN_SCORE); return; }
+  roundT = 1.9;
+  banner((winner === 'me' ? '你拿下这回合 ' : '被拿下一回合 ') + scoreMe + ' : ' + scoreAi, 1400);
+}
+
+function matchOver(win) {
+  state = 'over';
+  elHint.textContent = '';
+  document.getElementById('overTitle').textContent = win ? '你赢下了这场对决！' : '你输掉了这场对决';
+  document.getElementById('finalMe').textContent = scoreMe;
+  document.getElementById('finalAi').textContent = scoreAi;
+  document.getElementById('overComment').textContent = win
+    ? '先到 5 分——你比叶初的人机稳。'
+    : '先到 5 分，下一场换个角度绕掩体再来。';
+  document.getElementById('over').classList.remove('hidden');
+  elBanner.classList.remove('show');
+}
+
+/* 兼容旧名字 */
+function gameOver(win) { matchOver(win); }
+function startGame() { startMatch(); }
+
+/* ---------- 子弹 ---------- */
+/* 枪口位置：沿瞄准方向从身体往外最多 11 像素，遇到墙就停在墙前。
+   否则贴着薄墙开枪时，子弹会直接生成在墙的另一侧，看起来像穿墙。 */
+function muzzlePoint(x, y, dir, maxDist) {
+  var best = { x: x, y: y, blocked: false };
+  for (var d = 5; d <= (maxDist || 11); d += 1) {
+    var nx = x + Math.cos(dir) * d;
+    var ny = y + Math.sin(dir) * d;
+    if (isWall(nx, ny)) { best.blocked = true; break; }
+    best.x = nx;
+    best.y = ny;
+  }
+  return best;
+}
+
+function spawnBullet(owner, x, y, dir) {
+  bullets.push({ owner: owner, x: x, y: y, dir: dir, speed: rand(30, 50) });
+}
+
+function stepBullets(dt) {
+  for (var i = bullets.length - 1; i >= 0; i--) {
+    var b = bullets[i];
+    b.speed = rand(30, 50);           /* 每帧重新随机，和原版一致 */
+
+    /* 子弹一帧能走 30~50 像素，必须沿路径逐点检测：
+       先判墙（不然穿过薄墙），再判人（不然贴脸开枪会从人身上穿过去） */
+    var fromX = b.x, fromY = b.y;
+    var toX = b.x + Math.cos(b.dir) * b.speed;
+    var toY = b.y + Math.sin(b.dir) * b.speed;
+    var dead = false;
+    var tgt = (b.owner === 'me') ? ai : me;
+    var steps = Math.max(1, Math.ceil(len(toX - fromX, toY - fromY) / 3));
+    for (var s2 = 1; s2 <= steps; s2++) {
+      var tt = s2 / steps;
+      var sx = fromX + (toX - fromX) * tt;
+      var sy = fromY + (toY - fromY) * tt;
+
+      /* ① 撞墙 */
+      if (isWall(sx, sy)) {
+        burst(sx, sy, b.owner === 'me' ? 'rgba(255,220,150,.85)' : 'rgba(255,150,140,.85)', 3, 60);
+        dead = true;
+        b.x = sx; b.y = sy;
+        break;
+      }
+
+      /* ② 打中人（沿路径判定，近距离也不会漏） */
+      if (tgt && tgt.hp > 0 && len(sx - tgt.x, sy - tgt.y) < 11) {
+        if (b.owner === 'me') {
+          ai.hp -= 1;
+          ai.flash = 0.16;
+          /* 被打了：准星立刻甩向玩家，并进入警戒 */
+          ai.alert = 0.9;
+          aiCross.x += (me.x - aiCross.x) * 0.55;
+          aiCross.y += (me.y - aiCross.y) * 0.55;
+          ai.memX = me.x;
+          ai.memY = me.y;
+          popup(ai.x, ai.y + 12, '-1', '#ff8a7a');
+          burst(sx, sy, 'rgba(255,180,120,.95)', 6, 110);
+        } else {
+          me.hp -= 1;
+          me.flash = 0.16;
+          hitFlash = 0.2;
+          shake = Math.min(4, shake + 1.6);
+          popup(me.x, me.y + 12, '-1', '#7fd0ff');
+          burst(sx, sy, 'rgba(255,110,110,.95)', 6, 110);
+        }
+        dead = true;
+        b.x = sx; b.y = sy;
+        hud();
+        break;
+      }
+    }
+
+    if (!dead) { b.x = toX; b.y = toY; }
+    if (!dead && (b.x < -W / 2 - 20 || b.x > W / 2 + 20 || b.y < -H / 2 - 20 || b.y > H / 2 + 20)) {
+      dead = true;
+    }
+    if (dead) { bullets.splice(i, 1); }
+  }
+}
+/* ---------- 逻辑（30 帧/秒） ---------- */
+function stepGame(dt) {
+  if (bannerTimer > 0) {
+    bannerTimer -= dt;
+    if (bannerTimer <= 0) { elBanner.classList.remove('show'); }
+  }
+  if (hitFlash > 0) { hitFlash -= dt; }
+  if (shake > 0) { shake = Math.max(0, shake - dt * 22); }
+  if (state !== 'playing') { updateFx(dt); return; }
+
+  /* 回合之间的停顿 */
+  if (roundT > 0) {
+    roundT -= dt;
+    updateFx(dt);
+    if (roundT <= 0) { startRound(); }
+    return;
+  }
+
+  /* 玩家：WASD 每帧 1 像素，朝向准星；撞墙就停（可以顺着墙滑动） */
+  var ax = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
+  var ay = (keys.w ? 1 : 0) - (keys.s ? 1 : 0);
+  if (ax && !canStand(me.x + ax, me.y, 10)) { ax = 0; }
+  if (ay && !canStand(me.x, me.y + ay, 10)) { ay = 0; }
+  me.x += ax;
+  me.y += ay;
+  me.x = clamp(me.x, -W / 2 + 6, W / 2 - 6);
+  me.y = clamp(me.y, -H / 2 + 6, H / 2 - 6);
+  me.dir = Math.atan2(aim.y - me.y, aim.x - me.x);
+
+  /* 开火：按住左键或 Q，但有射速上限（枪会“过热”） */
+  meFireCool -= dt;
+  if ((firing || qDown) && meFireCool <= 0) {
+    meFireCool = PLAYER_FIRE;
+    var mp = muzzlePoint(me.x, me.y, me.dir, 11);
+    spawnBullet('me', mp.x, mp.y, me.dir + rand(-0.02, 0.02));
+  }
+
+  /* ================= 人机 AI ================= */
+  var seen = hasLOS(ai.x, ai.y, me.x, me.y);
+  ai.sees = seen;
+  if (seen) { ai.memX = me.x; ai.memY = me.y; }      /* 记住最后看到的位置 */
+  if (ai.fireCool > 0) { ai.fireCool -= dt; }      /* 不减成负数，避免歇一会后连发“还债” */
+  if (ai.alert > 0) { ai.alert -= dt; }
+  if (ai.flash > 0) { ai.flash -= dt; }
+
+  /* 被子弹擦身而过就立刻换向侧闪 */
+  if (ai.legLeft > 0.05) {
+    for (var bi = 0; bi < bullets.length; bi++) {
+      var bb = bullets[bi];
+      if (bb.owner === 'me' && len(bb.x - ai.x, bb.y - ai.y) < 34) {
+        ai.legLeft = 0;
+        ai.strafeDir = -ai.strafeDir;
+        break;
+      }
+    }
+  }
+
+  /* 对枪时先站稳：准星稳住了才打得准，也让“对枪”更像对枪 */
+  var aimErrNow = len(aiCross.x - me.x, aiCross.y - me.y);
+  var plant = AI_PLANT > 0 && seen && aimErrNow < AI_PLANT;
+  ai.plant = plant;
+
+  /* 走位：有视野就保持交火距离并侧移，没视野就朝记忆点推进 */
+  if (!plant && (ai.legLeft <= 0 || ai.legLeft === undefined)) {
+    var toP = Math.atan2(me.y - ai.y, me.x - ai.x);
+    var dist2 = len(me.x - ai.x, me.y - ai.y);
+    var baseDir;
+    if (seen) {
+      if (dist2 < AI_CLOSE) { baseDir = toP + Math.PI + rand(-0.45, 0.45); }   /* 太近后撤 */
+      else if (dist2 > AI_FAR) { baseDir = toP + rand(-0.35, 0.35); }         /* 太远压上 */
+      else { baseDir = toP + ai.strafeDir * Math.PI / 2 + rand(-0.5, 0.5); }  /* 中距离侧移 */
+      if (Math.random() < 0.22) { ai.strafeDir = -ai.strafeDir; }
+    } else {
+      var mx = ai.memX === undefined ? me.x : ai.memX;
+      var my = ai.memY === undefined ? me.y : ai.memY;
+      baseDir = Math.atan2(my - ai.y, mx - ai.x) + rand(-0.55, 0.55);
+    }
+    /* 如果自己离墙太近，先在偏好方向里加一点“远离墙”的修正 */
+    var wallAway = 0, wallBest = 1e9;
+    for (var wi = 0; wi < 8; wi++) {
+      var wa = wi * Math.PI / 4;
+      var wd = freeDist(ai.x, ai.y, wa, 40);
+      if (wd < wallBest) { wallBest = wd; wallAway = wa; }
+    }
+    if (wallBest < 18) { baseDir = wallAway; }             /* 快贴墙了就朝空地走 */
+    var tgtX = seen ? me.x : (ai.memX === undefined ? me.x : ai.memX);
+    var tgtY = seen ? me.y : (ai.memY === undefined ? me.y : ai.memY);
+    ai.dir = pickBestDir(ai.x, ai.y, baseDir, tgtX, tgtY, 110);
+    ai.legLeft = rand(30, 52);
+  }
+
+  if (!plant) {
+    var stp = Math.min(ai.legLeft, AI_SPEED * dt);          /* 与玩家同速：每秒 30 像素 */
+    var nax = ai.x + Math.cos(ai.dir) * stp;
+    var nay = ai.y + Math.sin(ai.dir) * stp;
+    if (canStand(nax, nay, 10)) {
+      ai.x = nax;
+      ai.y = nay;
+      ai.legLeft -= stp;
+    } else {
+      /* 前面是墙：朝左右各试一下，能滑过去就沿墙走，实在不行才重选方向 */
+      var slid = false;
+      var turns = [Math.PI / 2, -Math.PI / 2, Math.PI / 4, -Math.PI / 4, Math.PI / 3, -Math.PI / 3];
+      for (var ti = 0; ti < turns.length && !slid; ti++) {
+        var na = ai.dir + turns[ti];
+        var sx2 = ai.x + Math.cos(na) * stp;
+        var sy2 = ai.y + Math.sin(na) * stp;
+        if (canStand(sx2, sy2, 10)) {
+          ai.dir = na;
+          ai.x = sx2;
+          ai.y = sy2;
+          ai.legLeft -= stp;
+          slid = true;
+        }
+      }
+      if (!slid) { ai.legLeft = 0; }                        /* 周围都是墙：重新选方向 */
+    }
+  }  ai.x = clamp(ai.x, -W / 2 + 6, W / 2 - 6);
+  ai.y = clamp(ai.y, -H / 2 + 6, H / 2 - 6);
+
+  /* 预判：先估出你在往哪跑（每帧位移），子弹飞过去要几帧就往前带几帧 */
+  if (ai.px !== undefined) {
+    ai.vx = (ai.vx || 0) * 0.72 + (me.x - ai.px) * 0.28;
+    ai.vy = (ai.vy || 0) * 0.72 + (me.y - ai.py) * 0.28;
+  }
+  ai.px = me.x; ai.py = me.y;
+
+  /* 准星：有视野时锁玩家（快一点），没视野时朝记忆点摸索 */
+  var alerting = ai.alert > 0;                 /* 刚被打过：立刻反击 */
+  var tx, ty;
+  if (seen || alerting) {
+    /* 往前带：子弹平均每帧飞 40px，这段距离玩家能跑几帧就补几帧 */
+    var flyFrames = len(me.x - ai.x, me.y - ai.y) / 40;
+    tx = me.x + (ai.vx || 0) * flyFrames * AI_LEAD;
+    ty = me.y + (ai.vy || 0) * flyFrames * AI_LEAD;
+  } else {
+    tx = (ai.memX === undefined ? me.x : ai.memX);
+    ty = (ai.memY === undefined ? me.y : ai.memY);
+  }
+  var ddx = tx - aiCross.x, ddy = ty - aiCross.y;
+  var dd = len(ddx, ddy);
+  var crossSpd = alerting ? AI_TRACK_ALERT : (seen ? AI_TRACK : 0.9);
+  if (dd > 0.0001) {
+    aiCross.x += ddx / dd * crossSpd;
+    aiCross.y += ddy / dd * crossSpd;
+  }
+
+  /* 人物始终朝着自己的准星 */
+  ai.aimDir = Math.atan2(aiCross.y - ai.y, aiCross.x - ai.x);
+
+  /* 准星压在预判点上、且真的看得见（不隔墙开枪），就点射 */
+  if (seen && len(tx - aiCross.x, ty - aiCross.y) < (alerting ? AI_TOL_ALERT : AI_TOL) && ai.fireCool <= 0) {
+    var mp2 = muzzlePoint(ai.x, ai.y, ai.aimDir, 11);
+    spawnBullet('ai', mp2.x, mp2.y, ai.aimDir + rand(-0.025, 0.025));
+    ai.fireCool += AI_FIRE;                        /* 累加式：射速可以不是整帧的整数倍 */
+  }
+  stepBullets(dt);
+
+  if (me.hp < 1) { roundOver('ai'); return; }
+  if (ai.hp < 1) { roundOver('me'); return; }
+
+  updateFx(dt);
+}
+
+function updateFx(dt) {
+  for (var i = popups.length - 1; i >= 0; i--) {
+    var p = popups[i];
+    p.y += 26 * dt;
+    p.life -= dt;
+    if (p.life <= 0) { popups.splice(i, 1); }
+  }
+  for (var j = particles.length - 1; j >= 0; j--) {
+    var pt = particles[j];
+    pt.x += pt.vx * dt; pt.y += pt.vy * dt;
+    pt.vx *= (1 - dt * 3); pt.vy *= (1 - dt * 3);
+    pt.life -= dt;
+    if (pt.life <= 0) { particles.splice(j, 1); }
+  }
+  if (me && me.flash > 0) { me.flash -= dt; }
+}
+
+/* ---------- 绘制 ---------- */
+function drawMap() {
+  if (bgCanvas) {
+    ctx.drawImage(bgCanvas, -W / 2, -H / 2, W, H);
+  } else {
+    ctx.fillStyle = '#0a1220';
+    ctx.fillRect(-W / 2, -H / 2, W, H);
+  }
+}
+
+function drawAgent(x, y, ang, hostile, flash) {
+  var r = 9;
+  var body = hostile ? (flash ? '#ffd9d2' : '#c2453a') : (flash ? '#ffd0d0' : '#3f5f8f');
+  var helm = hostile ? (flash ? '#ffe8e2' : '#8c2b22') : (flash ? '#ffe0e0' : '#2b4468');
+
+  ctx.beginPath();
+  ctx.ellipse(x + 1, y - 1.5, r * 0.95, r * 0.85, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.fill();
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(ang);
+
+  ctx.beginPath();
+  ctx.ellipse(0, 0, r * 0.92, r * 0.8, 0, 0, Math.PI * 2);
+  ctx.fillStyle = body;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(3, 0, r * 0.46, 0, Math.PI * 2);
+  ctx.fillStyle = helm;
+  ctx.fill();
+
+  ctx.fillStyle = '#22293a';
+  ctx.fillRect(r * 0.55, -1.3, r * 1.15, 2.6);
+
+  ctx.restore();
+}
+
+function drawBulletsLayer() {
+  for (var i = 0; i < bullets.length; i++) {
+    var b = bullets[i];
+    var tx = b.x - Math.cos(b.dir) * 10, ty = b.y - Math.sin(b.dir) * 10;
+    ctx.strokeStyle = b.owner === 'me' ? 'rgba(255,215,120,0.95)' : 'rgba(255,120,110,0.95)';
+    ctx.lineWidth = 2.4;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(tx, ty);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+  }
+}
+
+function drawAim() {
+  var x = aim.x, y = aim.y;
+  ctx.strokeStyle = 'rgba(79,156,249,0.95)';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(79,156,249,0.95)'; ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(x - 14, y); ctx.lineTo(x - 10, y);
+  ctx.moveTo(x + 10, y); ctx.lineTo(x + 14, y);
+  ctx.moveTo(x, y - 14); ctx.lineTo(x, y - 10);
+  ctx.moveTo(x, y + 10); ctx.lineTo(x, y + 14);
+  ctx.stroke();
+}
+
+function drawText(s, x, y, size, color, bold) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(1, -1);
+  ctx.fillStyle = color;
+  ctx.font = (bold ? 'bold ' : '') + size + 'px "PingFang SC", "Microsoft YaHei", Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(s, 0, 0);
+  ctx.restore();
+}
+
+function draw() {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, cv.width, cv.height);
+
+  var ox = 0, oy = 0;
+  if (shake > 0.05) { ox = rand(-shake, shake); oy = rand(-shake, shake); }
+  ctx.setTransform(UNIT, 0, 0, -UNIT, cv.width / 2 + ox * UNIT, cv.height / 2 + oy * UNIT);
+
+  drawMap();
+  if (showMask) {
+    ctx.save();
+    ctx.globalAlpha = 0.42;
+    ctx.fillStyle = '#ff4d4d';
+    for (var wi = 0; wi < WALLS.length; wi++) {
+      var ww = WALLS[wi];
+      ctx.fillRect(ww.x - ww.w / 2, ww.y - ww.h / 2, ww.w, ww.h);
+    }
+    ctx.restore();
+  }
+  if (state === 'playing' || state === 'over') {
+    if (ai) { drawAgent(ai.x, ai.y, ai.aimDir === undefined ? ai.dir : ai.aimDir, true, ai.flash > 0); }
+    if (me) { drawAgent(me.x, me.y, me.dir, false, me.flash > 0); }
+
+    drawBulletsLayer();
+  }
+
+  for (var i = 0; i < particles.length; i++) {
+    var p = particles[i];
+    var a = Math.max(0, p.life / p.max);
+    ctx.globalAlpha = a;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * (0.4 + a * 0.8), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  for (var j = 0; j < popups.length; j++) {
+    var pp = popups[j];
+    var pa = Math.max(0, pp.life / pp.max);
+    ctx.globalAlpha = pa;
+    drawText(pp.text, pp.x, pp.y, 15, pp.color, true);
+  }
+  ctx.globalAlpha = 1;
+
+  if (state === 'playing') { drawAim(); }
+
+  if (hitFlash > 0) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    var va = Math.min(0.38, hitFlash * 1.5);
+    var vg = ctx.createRadialGradient(cv.width / 2, cv.height / 2, cv.width * 0.22, cv.width / 2, cv.height / 2, cv.width * 0.72);
+    vg.addColorStop(0, 'rgba(255,60,60,0)');
+    vg.addColorStop(1, 'rgba(255,60,60,' + va.toFixed(3) + ')');
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, cv.width, cv.height);
+  }
+}
+
+/* ---------- 主循环：逻辑 30Hz，渲染跟随刷新率 ---------- */
+var last = 0, acc = 0, lastAt = 0;
+function tick(ts) {
+  var now = (typeof ts === 'number' && ts > 0) ? ts : ((window.performance && performance.now) ? performance.now() : Date.now());
+  if (!last) { last = now; }
+  if (now < last) { now = last; }
+  var dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
+  last = now;
+  lastAt = now;
+  acc = Math.min(acc + dt, 0.25);
+  var guard = 0;
+  while (acc >= TICK && guard++ < 8) { stepGame(TICK); acc -= TICK; }
+  if (acc < 0) { acc = 0; }
+  draw();
+}
+function loop(ts) { tick(ts); requestAnimationFrame(loop); }
+
+/* ---------- 输入 ---------- */
+function pointerToUnits(e) {
+  var rect = cv.getBoundingClientRect();
+  var px = (e.clientX - rect.left) / rect.width;
+  var py = (e.clientY - rect.top) / rect.height;
+  return { x: px * W - W / 2, y: H / 2 - py * H };
+}
+
+cv.addEventListener('pointermove', function (e) {
+  var p = pointerToUnits(e);
+  aim.x = p.x; aim.y = p.y;
+});
+cv.addEventListener('pointerdown', function (e) {
+  var p = pointerToUnits(e);
+  aim.x = p.x; aim.y = p.y;
+  firing = true;
+  e.preventDefault();
+});
+window.addEventListener('pointerup', function () { firing = false; });
+cv.addEventListener('pointercancel', function () { firing = false; });
+cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+window.addEventListener('keydown', function (e) {
+  var k = (e.key || '').toLowerCase();
+  if (k === 'w' || k === 'a' || k === 's' || k === 'd') { keys[k] = true; e.preventDefault(); }
+  else if (k === 'arrowup') { keys.w = true; e.preventDefault(); }
+  else if (k === 'arrowdown') { keys.s = true; e.preventDefault(); }
+  else if (k === 'arrowleft') { keys.a = true; e.preventDefault(); }
+  else if (k === 'arrowright') { keys.d = true; e.preventDefault(); }
+  else if (k === 'q') { qDown = true; e.preventDefault(); }
+  else if (k === 'f2') { showMask = !showMask; if (typeof banner === 'function') { banner(showMask ? '墙体判定叠加：ON' : '墙体判定叠加：OFF', 900); } e.preventDefault(); }
+  else if (k === 'enter' && (state === 'intro' || state === 'over')) { startGame(); }
+});
+window.addEventListener('keyup', function (e) {
+  var k = (e.key || '').toLowerCase();
+  if (k === 'w' || k === 'a' || k === 's' || k === 'd') { keys[k] = false; }
+  else if (k === 'arrowup') { keys.w = false; }
+  else if (k === 'arrowdown') { keys.s = false; }
+  else if (k === 'arrowleft') { keys.a = false; }
+  else if (k === 'arrowright') { keys.d = false; }
+  else if (k === 'q') { qDown = false; }
+});
+window.addEventListener('blur', function () {
+  keys = Object.create(null);
+  firing = false; qDown = false;
+});
+
+document.getElementById('startBtn').addEventListener('click', startMatch);
+document.getElementById('retryBtn').addEventListener('click', startMatch);
+
+
+/* ---------- 启动 ---------- */
+buildBackground();
+if (touchOnly) {
+  state = 'blocked';
+  document.getElementById('intro').classList.add('hidden');
+  document.getElementById('over').classList.add('hidden');
+  document.getElementById('mobile').classList.remove('hidden');
+  document.getElementById('mobileBack').addEventListener('click', function () {
+    location.href = '主页.html';
+  });
+}
+me = { x: PLAYER_SPAWN.x, y: PLAYER_SPAWN.y, hp: HP_MAX, dir: 0, flash: 0 };
+ai = { x: AI_SPAWN.x, y: AI_SPAWN.y, hp: HP_MAX, dir: 0, flash: 0, legLeft: 0, speed: 45, aimDir: Math.PI, fireCool: 0.8, strafeDir: 1, sees: false, alert: 0 };
+aiCross = { x: -45, y: -10 };
+bullets = []; popups = []; particles = [];
+hud();
+resize();
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
+requestAnimationFrame(loop);
+setInterval(function () {
+  var now = (window.performance && performance.now) ? performance.now() : Date.now();
+  if (now - lastAt < 100) { return; }
+  tick(now);
+}, 50);
+</script>
+<script src="../ui/yc-ui.js"></script>
+</body>
+</html>
