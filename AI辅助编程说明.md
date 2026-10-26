@@ -33,11 +33,11 @@ ui/                UI 库两个文件 + 说明，只读，别改
 ## 1. 安装 DSH
 
 1. 打开DSH官网 [DeepSeek Harness | Explore the limits of intelligence](https://www.deepseek.com/en/harness/)。
-2. 点击“下载Windows版”。
+2. 下载对应版本的安装包，并按照提示进行安装。
 
 ---
 
-## 2. 打开游戏包
+## 2. 打开压缩包
 
 1. 把拿到的压缩包解压到本地任意目录，例如 `D:\games\我的游戏\`。
 2. 打开 DSH，用「**打开文件夹 / 工作区**」选这个目录 —— **不要只打开 `example.html` 单个文件**，否则 AI 读不到 `AGENTS.md` 和 `ui/`。
