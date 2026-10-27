@@ -3,13 +3,11 @@
   "site": {"name":"叶初小游戏","dir":"proF/","homepage":"proF/主页.html","repo":"https://github.com/vilotime/vilotime.github.io","pagesUrl":"https://vilotime.github.io/"},
   "categories": [
     {
-      "key": "casual",
-      "icon": "🧩",
-      "name": "休闲",
+      "key": "adventure",
+      "icon": "🗺️",
+      "name": "冒险",
       "games": [
-        {"file":"proF/叶初的鱼塘.html","name":"叶初的鱼塘","icon":"🐟","desc":"夜闯老宅 · 抢钥匙逃出鱼塘","pcOnly":true,"c1":"#2b8a7a","c2":"#124a44"},
-        {"file":"proF/俄罗斯方块.html","name":"方块风暴","icon":"🧩","desc":"消行冲分 · 幽灵落点","pcOnly":false,"c1":"#c04bd8","c2":"#6d2280"},
-        {"file":"proF/叶初打飞机.html","name":"星海突击","icon":"✈️","desc":"竖版弹幕 · 闪避走位","pcOnly":false,"c1":"#4f6bd8","c2":"#24307a"}
+        {"file":"proF/叶初的鱼塘.html","name":"叶初的鱼塘","icon":"🐟","desc":"夜闯老宅 · 抢钥匙逃出鱼塘","pcOnly":true,"c1":"#2b8a7a","c2":"#124a44"}
       ]
     },
     {
@@ -29,6 +27,15 @@
       "games": [
         {"file":"proF/CS战场.html","name":"CS 战场","icon":"🎯","desc":"平面对枪 / 观战 · 开局选模式","pcOnly":false,"c1":"#4a6fa5","c2":"#22344f"},
         {"file":"proF/CS秘密行动.html","name":"CS 秘密行动","icon":"🔫","desc":"一波波清剿 · 战术走位","pcOnly":true,"c1":"#6b7a3a","c2":"#3a4520"}
+      ]
+    },
+    {
+      "key": "casual",
+      "icon": "🧩",
+      "name": "休闲",
+      "games": [
+        {"file":"proF/俄罗斯方块.html","name":"方块风暴","icon":"🧩","desc":"消行冲分 · 幽灵落点","pcOnly":false,"c1":"#c04bd8","c2":"#6d2280"},
+        {"file":"proF/叶初打飞机.html","name":"星海突击","icon":"✈️","desc":"竖版弹幕 · 闪避走位","pcOnly":false,"c1":"#4f6bd8","c2":"#24307a"}
       ]
     }
   ]
