@@ -9,6 +9,13 @@
   #hud { align-items: center; }
   #hud .chip { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
   #hud b { color: #ffd166; font-variant-numeric: tabular-nums; }
+  /* 暴走屋内倒计时：直接接在「时间·兴奋」那个 chip 末尾，跟其它信息同一行 */
+  #hud .house { display: none; align-items: center; gap: 5px; color: #f0b9b9; }
+  #hud .house.show { display: flex; }
+  #hud .house b { color: #d61f2f; }
+  #hud .house.urgent { animation: houseBlink .9s ease-in-out infinite; }
+  #hud .house.urgent b { color: #a50c17; }
+  @keyframes houseBlink { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
   #intro .diffnote { font-size: 11.5px; opacity: .72; margin-top: 10px; }
   #intro .diffs { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
   #intro .diffs .btn {
@@ -61,6 +68,7 @@
         兴奋
         <span class="ex" id="exDots"><i></i><i></i><i></i></span>
         <span class="next" id="nextEx">30s</span>
+        <span class="house" id="houseWrap"><span class="dot" style="background:#d61f2f"></span>屋内 <b id="houseTxt">15.00s</b></span>
       </div>
       <div class="chip">
         <span class="dot" style="background:#fff3b0"></span>中弹 <b id="hitTxt">0</b>/3
@@ -81,6 +89,7 @@
         <p><b>第一把钥匙</b>头顶的箭头会给你指方向，后两把自己找。</p>
         <p>⚠ 别碰叶初——碰到当场阵亡。他会自己进屋、也会跟进来，还会<b>守在门口</b>。他的<b>兴奋值会自己涨</b>；你或人机凑到他身边待满 3 秒也会 +1。<b>兴奋 1 格他看得更远，2 格开始小跑冲刺</b>；满 3 格暴走，屋旁的大炮改成<b>三连扇形</b>轰你。中 3 发炮弹也会死。等你身上<b>拿到 2 把钥匙，他能远远闻到味道</b>，追你会不择手段。</p>
         <p>同场 4 个人机也在各找各的 3 把钥匙，谁先带齐钥匙、在传送门充能满 5 秒谁赢（人机也要充能）。</p>
+        <p>⚠ <b>暴走之后屋里也不安全</b>：单次在屋内待满 <b>15 秒</b>就开始挨炮弹（每 2 秒 1 发，中 3 发一样死），出门立刻重新计时。进屋后顶栏会亮起红色倒计时，屋里也能看到墙被砸出的火光和裂纹。</p>
         <p class="diffnote">难度只影响三件事：叶初的移动速度、兴奋值自动 +1 的间隔、大炮射速。</p>
         <div class="diffs">
           <button class="btn ghost" id="diffEasy" type="button">简单<small>40 秒 +1</small></button>
@@ -426,6 +435,11 @@ var state = 'intro';            /* intro | playing | over | blocked */
 var me = null, bots = [], keys = [], shells = [], fx = [], pops = [];
 var ye = null, cannon = null;
 var time = 0, ex = 0, berserk = false, rageGlow = 0;
+/* 暴走之后屋里不再安全：单次停留超过 HOUSE_LIMIT 秒就开始挨炮弹 */
+var HOUSE_LIMIT = 15.0;            /* 秒 */
+var HOUSE_DMG_GAP = 2.0;           /* 超时后每隔多久掉 1 点血 */
+var houseStayT = 0, houseDmgT = 0; /* 本次进屋已待时长 / 下次掉血倒计时 */
+var houseHits = [], houseHitT = 2.5;  /* 屋内看到的“墙被砸中”纯视觉特效 */
 var endKeys = null;             /* 阵亡瞬间手上的钥匙数：结算界面要如实显示 */
 var exAutoT = 30;               /* 距离下一次自动 +1 还有多少秒 */
 var hbT = 0;                    /* 下一次心跳的间隔 */
@@ -449,6 +463,8 @@ var elExWrap = document.getElementById('exDots');
 var elNextEx = document.getElementById('nextEx');
 var elHitTxt = document.getElementById('hitTxt');
 var elAliveTxt = document.getElementById('aliveTxt');
+var elHouseWrap = document.getElementById('houseWrap');
+var elHouseTxt = document.getElementById('houseTxt');
 
 function isTouchOnlyDevice() {
   try {
@@ -648,6 +664,7 @@ function newGame(diffKey) {
   exAutoT = diff.auto; botExCool = 0; endKeys = null;
   document.getElementById('over').classList.remove('blood');
   shells = []; fx = []; pops = [];
+  houseStayT = 0; houseDmgT = 0; houseHits = []; houseHitT = 2.5;
 
   scene = 'world';
 
@@ -1753,6 +1770,7 @@ function stepGame(dt) {
   stepShells(dt);
   stepPickup(dt);
   stepPortal(dt);
+  stepHouseDanger(dt);
   stepExcite(dt);
   stepFx(dt);
   for (var i = 0; i < keys.length; i++) { keys[i].spin += dt * 1.6; }
@@ -1762,6 +1780,94 @@ function stepGame(dt) {
     if (exAutoT <= 0) { exAutoT = diff.auto; addExcite('auto'); }
   }
   hud();
+}
+
+/* ---------------- 暴走：屋内不再安全 ---------------- */
+/* 两条规则：① 单次在屋内超过 HOUSE_LIMIT 秒开始持续挨炮弹；② 屋里能看到墙被砸中的火光。
+   计时只在“暴走 + 玩家在屋内”时累加，出门或不在暴走状态就清零。 */
+function stepHouseDanger(dt) {
+  /* 边缘中弹特效：任何场景都要衰减，只有进屋才会新生成 */
+  for (var i = houseHits.length - 1; i >= 0; i--) {
+    var h = houseHits[i];
+    h.t -= dt;
+    for (var j = 0; j < h.dust.length; j++) {
+      var d = h.dust[j];
+      d.x += d.vx * dt; d.y += d.vy * dt; d.vy += 26 * dt;
+    }
+    if (h.t <= 0) { houseHits.splice(i, 1); }
+  }
+
+  var inHouse = !!(me && me.alive && me.scene === 'house');
+  if (!berserk || !inHouse) {
+    houseStayT = 0;                                  /* 出门 / 不暴走：这次停留作废 */
+    houseDmgT = 0;
+    return;
+  }
+
+  houseStayT += dt;
+
+  /* 外面的炮弹一下下砸在房子上 */
+  houseHitT -= dt;
+  if (houseHitT <= 0) {
+    houseHitT = rand(1.2, 2.8);
+    spawnHouseHit();
+  }
+
+  /* 超过上限：每 HOUSE_DMG_GAP 秒掉 1 点血，够 3 次一样会死 */
+  if (houseStayT >= HOUSE_LIMIT) {
+    if (houseStayT - dt < HOUSE_LIMIT) {
+      banner('躲屋里太久了，炮弹开始砸进来', 1600);
+      houseDmgT = 0.6;                               /* 第一次给一点点反应时间 */
+    }
+    houseDmgT -= dt;
+    if (houseDmgT <= 0) {
+      houseDmgT = HOUSE_DMG_GAP;
+      hurtInHouse();
+    }
+  }
+}
+
+function hurtInHouse() {
+  if (!me || !me.alive) { return; }
+  me.hits++;
+  me.hitCool = 0.5;
+  me.flash = 0.25;
+  popup(me.x, me.y - 14, '-' + me.hits + '/3', '#fff3b0', me.scene);
+  burst(me.x, me.y, 'rgba(255,140,120,.95)', 14, 130, me.scene);
+  if (me.hits >= HIT_MAX) { killPlayer(me, '屋内'); }
+}
+
+/* 屋内视角：炮弹砸的是“这间屋子”的墙（ROOM 四边），不是屏幕边缘 */
+function spawnHouseHit() {
+  var side = Math.floor(Math.random() * 4);          /* 0 上 1 下 2 左 3 右 */
+  var x, y, base, mid = WALL * 0.5;
+  if (side === 0) {
+    x = rand(ROOM.x + WALL, ROOM.x + ROOM.w - WALL); y = ROOM.y + mid; base = Math.PI / 2;
+  } else if (side === 1) {
+    x = rand(ROOM.x + WALL, ROOM.x + ROOM.w - WALL); y = ROOM.y + ROOM.h - mid; base = -Math.PI / 2;
+  } else if (side === 2) {
+    x = ROOM.x + mid; y = rand(ROOM.y + WALL, ROOM.y + ROOM.h - WALL); base = 0;
+  } else {
+    x = ROOM.x + ROOM.w - mid; y = rand(ROOM.y + WALL, ROOM.y + ROOM.h - WALL); base = Math.PI;
+  }
+
+  var cracks = [], dust = [], n = 3 + Math.floor(Math.random() * 3);
+  for (var i = 0; i < n; i++) {
+    var a1 = base + rand(-0.85, 0.85), a2 = a1 + rand(-0.55, 0.55);
+    var l1 = rand(9, 22), l2 = rand(16, 42);
+    cracks.push({
+      bx: x + Math.cos(a1) * l1, by: y + Math.sin(a1) * l1,
+      cx: x + Math.cos(a2) * l2, cy: y + Math.sin(a2) * l2,
+      w: rand(1, 2.3)
+    });
+  }
+  for (var k = 0; k < 7; k++) {
+    dust.push({
+      x: x + rand(-9, 9), y: y + rand(-9, 9),
+      vx: rand(-26, 26), vy: rand(-20, 34), size: rand(.9, 2.1)
+    });
+  }
+  houseHits.push({ x: x, y: y, t: 0.6, max: 0.6, cracks: cracks, dust: dust });
 }
 
 function stepFx(dt) {
@@ -1801,6 +1907,19 @@ function hud() {
   }
   elHitTxt.textContent = me.hits;
   elAliveTxt.textContent = alivePlayers().length;
+
+  /* 暴走时在屋内：倒计时接在「时间·兴奋」末尾，占的还是同一行 */
+  if (elHouseWrap) {
+    var showHouse = !!(berserk && me.alive && me.scene === 'house');
+    if (showHouse) {
+      var remain = HOUSE_LIMIT - houseStayT;
+      var over = remain <= 0;
+      elHouseTxt.textContent = over ? '危险' : (Math.max(0, remain).toFixed(2) + 's');
+      elHouseWrap.className = over ? 'house show urgent' : 'house show';
+    } else {
+      elHouseWrap.className = 'house';
+    }
+  }
 }
 
 function endGame(win, reason) {
@@ -1823,6 +1942,9 @@ function endGame(win, reason) {
   } else if (reason === 'reason:炮弹') {
     title.textContent = '你被大炮轰倒了';
     sub.textContent = '暴走之后那门大炮会一直追着你。';
+  } else if (reason === 'reason:屋内') {
+    title.textContent = '屋里也躲不住了';
+    sub.textContent = '暴走之后，单次躲进屋子超过 30 秒就会被炮弹砸中。';
   } else if (reason === 'bot') {
     title.textContent = '被人机抢先逃走了';
     sub.textContent = '抢钥匙要快，别在屋子里磨蹭。';
@@ -2496,6 +2618,43 @@ function drawFx() {
   ctx.globalAlpha = 1;
 }
 
+function drawHouseHits() {
+  /* 暴走时屋外的炮弹砸在墙上：屋内看就是画面边缘的火光 + 裂纹 + 落灰 */
+  for (var i = 0; i < houseHits.length; i++) {
+    var h = houseHits[i];
+    var a = Math.max(0, h.t / h.max);
+    var r = 30 + (1 - a) * 30;
+
+    var g = ctx.createRadialGradient(h.x, h.y, 2, h.x, h.y, r);
+    g.addColorStop(0, 'rgba(255,246,214,' + (0.9 * a).toFixed(3) + ')');
+    g.addColorStop(0.45, 'rgba(255,190,90,' + (0.55 * a).toFixed(3) + ')');
+    g.addColorStop(1, 'rgba(255,120,40,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(h.x, h.y, r, 0, Math.PI * 2); ctx.fill();
+
+    ctx.globalAlpha = a * 0.8;
+    ctx.strokeStyle = 'rgba(48,30,20,.92)';
+    ctx.lineCap = 'round';
+    for (var c = 0; c < h.cracks.length; c++) {
+      var cr = h.cracks[c];
+      ctx.lineWidth = cr.w;
+      ctx.beginPath();
+      ctx.moveTo(h.x, h.y);
+      ctx.lineTo(cr.bx, cr.by);
+      ctx.lineTo(cr.cx, cr.cy);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = 'rgba(226,210,186,.85)';
+    for (var k = 0; k < h.dust.length; k++) {
+      var d = h.dust[k];
+      ctx.globalAlpha = a * 0.7;
+      ctx.beginPath(); ctx.arc(d.x, d.y, d.size, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
 function drawAtmos() {
   /* 雾只在屋外：屋里没有雾，进屋后不该再看见外面的雾片 */
   if (fogSprite && scene === 'world') {
@@ -2569,6 +2728,7 @@ function draw() {
       var cp2 = all2[cj];
       if (cp2.alive && cp2.channel && !cp2.isMe && cp2.scene === 'house') { drawBotCharge(cp2); }
     }
+    drawHouseHits();
   }
 
   drawFx();
