@@ -7,6 +7,9 @@
 <link rel="stylesheet" href="../ui/yc-ui.css">
 <style>
   #hud .chip b { color: #7ad0ff; }
+  /* 顶部信息全部靠右：Token 紧挨计时器，两颗胶囊顶边对齐 */
+  #hud { justify-content: flex-end; align-items: flex-start; }
+  #hud .hud-right { display: flex; align-items: flex-start; gap: 8px; }
   #hint { color: #d8f0c8; }
   #over.win .panel h1 { color: #b6ff9a; text-shadow: 0 0 18px rgba(120,255,120,.6); }
   #over.win .panel p { color: #cfe8c0; }
@@ -20,8 +23,10 @@
     <canvas id="cv"></canvas>
 
     <div id="hud">
-      <div class="chip">Token <b id="sunCount">100</b></div>
-      <div class="chip" id="clock">02:30</div>
+      <div class="hud-right">
+        <div class="chip">Token <b id="sunCount">100</b></div>
+        <div class="chip" id="clock">02:30</div>
+      </div>
     </div>
 
     <div id="banner"></div>
