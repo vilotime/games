@@ -76,7 +76,6 @@
         <h1>这个游戏只能在电脑上玩</h1>
         <p>「逃离馨斋1010」需要键盘操作，手机 / 平板上没法正常玩。</p>
         <p>请用电脑打开本页面。</p>
-        <button class="btn" id="mobileBack" type="button">返回主页</button>
       </div>
     </div>
   </div>
@@ -117,6 +116,7 @@
   var CHECK_AFTER = 11;            /* 在宿舍里待超过这么久，才可能把宿管引过来 */
   var CHECK_CD = 22;              /* 两次查寝之间的冷却 */
   var CHECK_SCAN = 3.2;           /* 手电扫视时长 */
+  var LOBBY_BACK = { x: 370, y: 462 };  /* 一楼楼梯口（原路回十楼）的位置 */
 
   /* ============================================================
      1. 画布与自适应
@@ -826,20 +826,38 @@
     lobbySc = {
       box: { x0: 230, y0: 120, x1: 670, y1: 470 },
       gate: { x0: 410, y0: 120, x1: 490, y1: 120 },
-      viaStairs: !!viaStairs, stepAcc: 0
+      viaStairs: !!viaStairs, stepAcc: 0,
+      back: null                       /* 楼梯口：走楼梯下来才有，可以原路回十楼 */
     };
     player.x = 450; player.y = 440;
     player.stun = 0;
     player.inv = Math.max(player.inv, 0.8);
     holdT = 0; holdId = '';
     elFloor.textContent = '1F';
-    banner(viaStairs ? '摸黑下楼，视野很小' : '电梯直达一楼', 1500);
+    banner(viaStairs ? '摸黑下楼，左下角有楼梯口' : '电梯直达一楼', 1600);
   }
 
   function useStairs() {
-    /* 楼梯：不读条，但之后视野只有 100px，每走一步扣体力 */
+    /* 楼梯：不读条，但之后视野只有 100px，每走一步扣体力；回来时回到楼梯口 */
     tone(300, 0.2, 0.1, 'sine', 180);
+    var bx = player.x, by = player.y;
     enterLobby(true);
+    lobbySc.back = { x: bx, y: by };
+  }
+
+  /* 从一楼的楼梯口原路返回十楼（钥匙不够时不会被困死在一楼） */
+  function goBackUp() {
+    if (!lobbySc || !lobbySc.back) { return; }
+    player.x = lobbySc.back.x;
+    player.y = lobbySc.back.y;
+    scene = 'corridor';
+    lobbySc = null;
+    blockFn = null;
+    holdT = 0; holdId = ''; curTarget = null;
+    elFloor.textContent = '10F';
+    player.inv = Math.max(player.inv, 1.2);
+    tone(320, 0.18, 0.1, 'sine', 220);
+    banner('回到十楼', 1200);
   }
 
   function useElev() {
@@ -1184,13 +1202,21 @@
     }
 
     var nearGate = dist2(player.x, player.y, 450, box.y0 + 10) < 52 * 52;
-    curTarget = nearGate ? { type: 'gate', label: 'F 长按 5 秒开门禁' } : null;
+    var nearBack = !!(lobbySc.back &&
+      dist2(player.x, player.y, LOBBY_BACK.x, LOBBY_BACK.y) < 46 * 46);
+
+    if (nearBack) { curTarget = { type: 'back', label: 'F 从楼梯回十楼' }; }
+    else if (nearGate) { curTarget = { type: 'gate', label: 'F 长按 5 秒开门禁' }; }
+    else { curTarget = null; }
+
+    /* 楼梯口：原路返回楼上 */
+    if (nearBack && fEdge) { fEdge = false; goBackUp(); return; }
 
     if (nearGate && keys['f']) {
       if (player.keys < NEED_KEY) {
         if (!lobbySc.denied) {
           lobbySc.denied = true;
-          banner('门禁需要 3 把钥匙', 1400);
+          banner('门禁需要 3 把钥匙，可以从楼梯口先上楼', 1700);
           sfxDeny();
         }
         holdT = 0; holdId = '';
@@ -1933,6 +1959,28 @@
     ctx.textBaseline = 'middle';
     ctx.fillText('门禁 · 长按 F', 450, box.y0 + 30);
 
+    /* 楼梯口（走楼梯下来才有）：原路回十楼 */
+    if (lobbySc.back) {
+      var bk = LOBBY_BACK;
+      ctx.fillStyle = '#182234';
+      ctx.fillRect(bk.x - 44, box.y1 - 26, 88, 22);
+      ctx.strokeStyle = 'rgba(160,190,230,.6)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(bk.x - 43, box.y1 - 25, 86, 20);
+      for (var bi = 0; bi < 4; bi++) {
+        var by = box.y1 - 23 + bi * 4.5;
+        ctx.beginPath();
+        ctx.moveTo(bk.x - 38, by);
+        ctx.lineTo(bk.x + 38, by);
+        ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(200,222,248,.8)';
+      ctx.font = '700 11px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('楼梯口 · F 回十楼', bk.x, box.y1 - 42);
+    }
+
     drawParts();
     drawPlayer();
 
@@ -1966,11 +2014,6 @@
   document.getElementById('startBtn').addEventListener('click', start);
   document.getElementById('retryBtn').addEventListener('click', start);
   document.getElementById('winBtn').addEventListener('click', start);
-  /* 只在电脑上玩：手机拦截页上的返回按钮，跳回同目录的游戏墙 */
-  var mb = document.getElementById('mobileBack');
-  if (mb) {
-    mb.addEventListener('click', function () { location.href = '主页.html'; });
-  }
 
   reset();                                  /* 先准备好世界，开场画面背后就是真实地图 */
 
