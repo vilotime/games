@@ -180,9 +180,18 @@
   var AREA_G = [
     { g: [13, 65, 93, 75], kind: 'corridor',
       open: [{ s: 'B', a: 86, b: 93 }] },
-    { g: [86, 30.5, 93, 65], kind: 'corridor',
-      open: [{ s: 'T', a: 86, b: 93 }, { s: 'B', a: 86, b: 93 }] },
-    { g: [50, 10, 93, 30.5], kind: 'open',
+    { g: [86, 19, 93, 65], kind: 'corridor',
+      open: [{ s: 'T', a: 86, b: 93 }, { s: 'B', a: 86, b: 93 },
+             { s: 'L', a: 19, b: 42 }] },
+    /* 1008 正下方：先是楼梯门（安全出口），再往下是加大的电梯间 */
+    { g: [82.1667, 39, 86, 42], kind: 'stairs',
+      open: [{ s: 'R', a: 39, b: 42 }] },
+    { g: [78, 29, 86, 39], kind: 'elev',
+      open: [{ s: 'R', a: 29, b: 39 }] },
+    /* 1001 对面：厕所（能走进去、没有出口），和电梯间一样大 */
+    { g: [78, 19, 86, 29], kind: 'wc',
+      open: [{ s: 'R', a: 19, b: 29 }] },
+    { g: [50, 2, 93, 19], kind: 'open',
       open: [{ s: 'T', a: 86, b: 93 }] }
   ];
 
@@ -191,7 +200,8 @@
 
   /* 每一排宿舍：沿哪条轴排、排布跨度、贴走廊的那条边（门就开在这条边上）
      顶部走廊：北侧双数、南侧单数，正对的两间房号相邻（1054|1053 … 1020|1019）
-     右侧走廊：西侧双数、东侧单数（1018|1017 … 1002|1001，1010 正对 1009） */
+     右侧走廊：北段也是左右成对（1018|1017 … 1008|1007，1010 正对 1009），
+     南段 1007–1001 单排全在东侧（走廊左侧就是一面空墙）。 */
   var ROWS = [
     { nums: ['1054', '1052', '1050', '1048', '1046', '1044', '1042', '1040', '1038',
              '1036', '1034', '1032', '1030', '1028', '1026', '1024', '1022', '1020'],
@@ -199,10 +209,13 @@
     { nums: ['1053', '1051', '1049', '1047', '1045', '1043', '1041', '1039', '1037',
              '1035', '1033', '1031', '1029', '1027', '1025', '1023', '1021', '1019'],
       axis: 'x', span: [13, 82], edge: 'T', at: 65 },
-    { nums: ['1002', '1004', '1006', '1008', '1010', '1012', '1014', '1016', '1018'],
-      axis: 'y', span: [30.5, 65], edge: 'R', at: 86 },
-    { nums: ['1001', '1003', '1005', '1007', '1009', '1011', '1013', '1015', '1017'],
-      axis: 'y', span: [30.5, 65], edge: 'L', at: 93 }
+    /* 右侧走廊西侧：只有北段 6 间（双数），从南往北 1008 → 1018 */
+    { nums: ['1008', '1010', '1012', '1014', '1016', '1018'],
+      axis: 'y', span: [42, 65], edge: 'R', at: 86 },
+    /* 右侧走廊东侧：整排 12 间，从南往北 1001 → 1017（南段单排，北段与西侧成对） */
+    { nums: ['1001', '1002', '1003', '1004', '1005', '1006', '1007',
+             '1009', '1011', '1013', '1015', '1017'],
+      axis: 'y', span: [19, 65], edge: 'L', at: 93 }
   ];
 
   /* 由每一排生成宿舍网格矩形：[房号, x0, y0, x1, y1]
@@ -234,20 +247,20 @@
 
   /* 设施（都放在走廊地面上，不占宿舍的位置） */
   var FAC_G = [
-    { t: 'stairs', g: [14, 66, 19, 73] },      /* 楼梯 1（顶部走廊西端） */
-    { t: 'stairs', g: [66, 66, 71, 73] },      /* 楼梯 2（顶部走廊东段） */
-    { t: 'stairs', g: [88, 36, 91, 42] },      /* 楼梯 3（右侧走廊中间） */
-    { t: 'elev',   g: [76, 66, 80, 73] },      /* 电梯 1（顶部走廊东端） */
-    { t: 'elev',   g: [88, 50, 91, 56] },      /* 电梯 2（右侧走廊中间） */
-    { t: 'exit',   g: [20, 68, 22, 72] },      /* 安全出口（装饰） */
-    { t: 'exit',   g: [89, 68, 91, 72] },
-    { t: 'exit',   g: [78, 14, 80, 18] }
+    { t: 'stairs', g: [14, 66, 19, 73] },       /* 楼梯 1（顶部走廊西端） */
+    { t: 'stairs', g: [66, 66, 71, 73] },       /* 楼梯 2（顶部走廊东段） */
+    { t: 'stairs', g: [82.4, 39.2, 85.6, 41.8], custom: 1 }, /* 楼梯门 = 安全出口（电梯间上面） */
+    { t: 'elev',   g: [76, 66, 80, 73] },       /* 电梯 1（顶部走廊东端） */
+    { t: 'elev',   g: [78.6, 30, 85.4, 38.4], custom: 1 }, /* 电梯间（里面两部电梯） */
+    { t: 'exit',   g: [20, 68, 22, 72] },       /* 安全出口（装饰） */
+    { t: 'exit',   g: [89, 68, 91, 72] }
   ];
 
   /* ============================================================
      5. 数据展开到世界像素
      ============================================================ */
   var areas = [], rooms = [], facs = [], worldRect = { x0: 0, y0: 0, x1: W, y1: H };
+  var wcRect = null, elevRoomRect = null, stairNicheRect = null;
 
   (function buildMap() {
     var i, a, o, r, xs = [], ys = [];
@@ -263,6 +276,9 @@
       }
       areas.push({ p: r, kind: a.kind, opens: opens });
       xs.push(r.x0, r.x1); ys.push(r.y0, r.y1);
+      if (a.kind === 'elev') { elevRoomRect = r; }
+      if (a.kind === 'wc') { wcRect = r; }
+      if (a.kind === 'stairs') { stairNicheRect = r; }
     }
 
     for (i = 0; i < ROOM_G.length; i++) {
@@ -275,9 +291,12 @@
       xs.push(r.x0, r.x1); ys.push(r.y0, r.y1);
     }
 
+
+
     for (i = 0; i < FAC_G.length; i++) {
       r = pxRect(FAC_G[i].g);
-      facs.push({ t: FAC_G[i].t, p: r, cx: (r.x0 + r.x1) / 2, cy: (r.y0 + r.y1) / 2 });
+      facs.push({ t: FAC_G[i].t, p: r, cx: (r.x0 + r.x1) / 2, cy: (r.y0 + r.y1) / 2,
+                  custom: !!FAC_G[i].custom });
     }
 
     for (i = 0; i < xs.length; i++) {
@@ -491,9 +510,9 @@
     sups.push(makeSup([
       { x: gx(20), y: gy(70) },
       { x: gx(90), y: gy(70) },
-      { x: gx(90), y: gy(32) },
-      { x: gx(60), y: gy(18) },
-      { x: gx(90), y: gy(32) },
+      { x: gx(90), y: gy(24) },
+      { x: gx(60), y: gy(10) },
+      { x: gx(90), y: gy(24) },
       { x: gx(90), y: gy(70) }
     ], '巡楼'));
   }
@@ -751,7 +770,8 @@
       var pad = (f.t === 'exit') ? 16 : 10;
       if (player.x > f.p.x0 - pad && player.x < f.p.x1 + pad &&
           player.y > f.p.y0 - pad && player.y < f.p.y1 + pad) {
-        d = dist2(player.x, player.y, f.cx, f.cy);
+        /* 站进设施范围里就算贴身（电梯间这种大房间，别拿中心点算距离） */
+        d = 0;
         if (d < bd) {
           bd = d;
           var label = 'F 走楼梯下楼';
@@ -903,6 +923,33 @@
     return false;
   }
 
+  /* 被宿管撞开：只往能站的地方推，绝不把人顶进墙里 */
+  function knockBack(s) {
+    var ax = s.x - player.x, ay = s.y - player.y;
+    var al = Math.sqrt(ax * ax + ay * ay) || 1;
+    var ux = -ax / al, uy = -ay / al;
+    var steps = [30, 24, 18, 12, 6];
+    for (var i = 0; i < steps.length; i++) {
+      var nx = player.x + ux * steps[i];
+      var ny = player.y + uy * steps[i];
+      if (circleOk(nx, ny, player.r)) { player.x = nx; player.y = ny; return; }
+    }
+    /* 四面都推不动就原地不动，总比卡在墙里好 */
+  }
+
+  /* 兜底：万一玩家被挤进了不可行走的地方，就近拉回能站的位置 */
+  function rescuePlayer() {
+    if (circleOk(player.x, player.y, player.r)) { return; }
+    for (var rad = 10; rad <= 260; rad += 10) {
+      for (var i = 0; i < 16; i++) {
+        var a = i * Math.PI * 2 / 16;
+        var nx = player.x + Math.cos(a) * rad;
+        var ny = player.y + Math.sin(a) * rad;
+        if (circleOk(nx, ny, player.r)) { player.x = nx; player.y = ny; return; }
+      }
+    }
+  }
+
   function updateSup(s, dt) {
     if (s.stun > 0) { s.stun -= dt; return; }
 
@@ -939,10 +986,7 @@
       if (dist2(s.x, s.y, player.x, player.y) < 26 * 26) {
         hitPlayer(34);
         s.stun = 0.9;
-        var ax = s.x - player.x, ay = s.y - player.y;
-        var al = Math.sqrt(ax * ax + ay * ay) || 1;
-        player.x = clamp(player.x - ax / al * 26, worldRect.x0 + 20, worldRect.x1 - 20);
-        player.y = clamp(player.y - ay / al * 26, worldRect.y0 + 20, worldRect.y1 - 20);
+        knockBack(s);
       }
       return;
     }
@@ -990,6 +1034,7 @@
 
   function updateCorridor(dt) {
     movePlayer(dt);
+    rescuePlayer();          /* 兜底：被挤进不可走区域就拉回来 */
     updateParts(dt);
 
     /* 臭袜子：踩上去眩晕 2 秒并发出惨叫 */
@@ -1347,6 +1392,7 @@
     var col = '#101725';
     if (a.kind === 'stairs') { col = '#151d2b'; }
     if (a.kind === 'elev') { col = '#1a2231'; }
+    if (a.kind === 'wc') { col = '#0e1520'; }
     if (a.kind === 'open') { col = '#0d141f'; }
 
     ctx.fillStyle = col;
@@ -1390,6 +1436,117 @@
         ctx.stroke();
       }
     }
+  }
+
+  /* 电梯间：房间里靠下摆两部电梯 */
+  function drawElevRoom() {
+    var r = elevRoomRect;
+    if (!r) { return; }
+    var w = r.x1 - r.x0, h = r.y1 - r.y0;
+
+    /* 房间轮廓 */
+    ctx.strokeStyle = 'rgba(120,150,190,.45)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(r.x0 + 3, r.y0 + 3, w - 6, h - 6);
+
+    /* 两部电梯门，并排在房间下方 */
+    var gap = 8, pad = 10;
+    var dw = (w - pad * 2 - gap) / 2;
+    var dh = Math.min(46, h * 0.28);
+    var dy = r.y1 - dh - 10;
+    for (var i = 0; i < 2; i++) {
+      var dx = r.x0 + pad + i * (dw + gap);
+      ctx.fillStyle = '#202a3c';
+      ctx.fillRect(dx, dy, dw, dh);
+      ctx.strokeStyle = 'rgba(255,209,102,.7)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(dx + 1, dy + 1, dw - 2, dh - 2);
+      /* 电梯门缝 */
+      ctx.beginPath();
+      ctx.moveTo(dx + dw / 2, dy + 5);
+      ctx.lineTo(dx + dw / 2, dy + dh - 5);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = 'rgba(190,215,245,.8)';
+    ctx.font = '700 11px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('电梯间', (r.x0 + r.x1) / 2, r.y0 + 20);
+  }
+
+  /* 楼梯门：电梯间上面那间，挂安全出口的牌子 */
+  function drawStairNiche() {
+    var r = stairNicheRect;
+    if (!r) { return; }
+    var w = r.x1 - r.x0, h = r.y1 - r.y0;
+
+    ctx.fillStyle = '#151d2b';
+    ctx.fillRect(r.x0 + 2, r.y0 + 2, w - 4, h - 4);
+    ctx.strokeStyle = 'rgba(160,190,230,.5)';
+    ctx.lineWidth = 1.5;
+    for (var i = 0; i < 3; i++) {
+      var y = r.y0 + h * (i + 1) / 4;
+      ctx.beginPath();
+      ctx.moveTo(r.x0 + 5, y);
+      ctx.lineTo(r.x1 - 5, y);
+      ctx.stroke();
+    }
+
+    /* 安全出口牌 */
+    ctx.fillStyle = 'rgba(32,120,80,.95)';
+    ctx.fillRect(r.x0 + 6, r.y0 + 4, w - 12, 13);
+    ctx.fillStyle = '#d8ffe9';
+    ctx.font = '700 9px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('安全出口', (r.x0 + r.x1) / 2, r.y0 + 10.5);
+  }
+
+  /* 1001 对面的厕所：能走进去的区域，没有出口，「厕所」两个字标在房间里 */
+  function drawWc() {
+    var r = wcRect;
+    if (!r) { return; }
+    var w = r.x1 - r.x0, h = r.y1 - r.y0;
+    var cx = (r.x0 + r.x1) / 2, cy = (r.y0 + r.y1) / 2;
+
+    /* 房间轮廓 */
+    ctx.strokeStyle = 'rgba(120,150,190,.4)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(r.x0 + 3, r.y0 + 3, w - 6, h - 6);
+
+    /* 三个隔间（靠里侧） */
+    var sx = r.x0 + w * 0.46;
+    ctx.strokeStyle = 'rgba(120,150,190,.4)';
+    ctx.lineWidth = 1.5;
+    for (var i = 1; i <= 3; i++) {
+      var y = r.y0 + h * i / 4;
+      ctx.beginPath();
+      ctx.moveTo(r.x0 + 5, y);
+      ctx.lineTo(sx, y);
+      ctx.stroke();
+    }
+    /* 隔断竖线 */
+    ctx.beginPath();
+    ctx.moveTo(sx, r.y0 + 5);
+    ctx.lineTo(sx, r.y1 - 5);
+    ctx.stroke();
+
+    /* 洗手台（靠走廊那侧） */
+    ctx.fillStyle = '#1b2536';
+    ctx.fillRect(sx + 8, r.y0 + 10, Math.max(10, r.x1 - sx - 18), h - 20);
+
+    /* 「厕所」两个字 */
+    ctx.fillStyle = 'rgba(6,11,20,.88)';
+    ctx.fillRect(cx - 30, cy - 16, 60, 32);
+    ctx.strokeStyle = 'rgba(120,190,255,.5)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(cx - 30, cy - 16, 60, 32);
+    ctx.fillStyle = '#dbeaff';
+    ctx.font = '700 17px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('厕所', cx, cy);
   }
 
   /* 房门：所有宿舍长得一模一样，不透露哪间有钥匙 */
@@ -1577,10 +1734,16 @@
 
     /* 设施 */
     for (i = 0; i < facs.length; i++) {
+      if (facs[i].custom) { continue; }       /* 电梯间 / 楼梯门自己画 */
       r = facs[i].p;
       if (r.x1 < camL - 60 || r.x0 > camR + 60 || r.y1 < camT - 60 || r.y0 > camB + 60) { continue; }
       drawFac(facs[i]);
     }
+
+    /* 1008 下面：楼梯门（安全出口）在上、电梯间在下；1001 对面是厕所 */
+    drawStairNiche();
+    drawElevRoom();
+    drawWc();
 
     /* 地上的臭袜子 */
     for (i = 0; i < traps.length; i++) {
@@ -1828,19 +1991,19 @@
     ctx.fillText('柜子', (c.x0 + c.x1) / 2, c.y0 - 9);
   }
 
-  /* 手电扫视的角度（以门为圆心，向上扫 ±46°） */
+  /* 手电扫视的角度（以门为圆心，向上扫 ±36°） */
   function beamAngle(t) {
-    return -Math.PI / 2 + Math.sin(t * 2.0) * 0.8;
+    return -Math.PI / 2 + Math.sin(t * 2.0) * 0.62;
   }
 
-  /* 玩家是否站在光柱里 */
+  /* 玩家是否站在光柱里（半角 19.5°，贴着门两侧站就是安全的） */
   function inBeam(px, py, ang) {
     var dx = px - ROOM_DOOR.x, dy = py - ROOM_DOOR.y;
     var d = Math.sqrt(dx * dx + dy * dy);
     if (d > 340 || d < 1) { return false; }
     var a = Math.atan2(dy, dx);
     var diff = Math.abs(((a - ang + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
-    return diff < 0.42;
+    return diff < 0.34;
   }
 
   function drawBeam() {
@@ -1852,7 +2015,7 @@
     g.addColorStop(1, 'rgba(255,232,150,0)');
     ctx.beginPath();
     ctx.moveTo(ROOM_DOOR.x, ROOM_DOOR.y);
-    ctx.arc(ROOM_DOOR.x, ROOM_DOOR.y, 340, ang - 0.42, ang + 0.42);
+    ctx.arc(ROOM_DOOR.x, ROOM_DOOR.y, 340, ang - 0.34, ang + 0.34);
     ctx.closePath();
     ctx.fillStyle = g;
     ctx.fill();
@@ -2014,3 +2177,7 @@
 </script>
 </body>
 </html>
+
+
+
+
