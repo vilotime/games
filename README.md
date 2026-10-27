@@ -1,6 +1,6 @@
 # 叶初小游戏
 
-一系列纯 Canvas 写的小游戏，外壳是一个侧栏 + iframe 的静态页，没有构建步骤、没有后端、没有依赖，
+通过Vibe Coding，按照一定范式构建的纯 Canvas 小游戏，外壳是一个侧栏 + iframe 的静态页，没有构建步骤、没有后端、没有依赖，
 直接 GitHub Pages 托管：<https://vilotime.github.io/>
 
 > **想邀请别人用 AI 帮忙做游戏？** [`AI辅助编程说明.md`](AI辅助编程说明.md) 是给**制作方**看的说明书，
@@ -12,28 +12,19 @@
 
 ```
 .
-├─ index.html           外壳：侧栏导航 + <iframe name="gameFrame">
-├─ games.json           ★ 游戏清单（唯一数据源，加游戏只改这里）
-├─ games.js             清单渲染器：读 json → 主页卡片 + 侧栏入口 + 数量
-├─ tools/
-│  ├─ export-games.js   校验 json + 同步静态兜底 HTML（也负责改各处数量）
-│  ├─ dev.js            本地预览服务器（走 http，json 实时生效 + 监听自动同步）
-│  ├─ sync.ps1          一键同步：node tools/export-games.js 的 Powershell 包装
-│  └─ sync.cmd          双击运行上面那个 ps1（自带执行策略放行）
-├─ ui/                  ★ 游戏 UI 库（可整包复制给别的项目，见 ui/README.md）
-├─ proF/                各游戏页面 + 主页卡片页
-│  ├─ 主页.html         iframe 里显示的游戏墙
-│  └─ *.html            8 款游戏 / 入口页，每个一个文件
-├─ pack/                ★ 对外制作包：压成 zip 发给合作者（见 AI辅助编程说明.md）
-├─ assets/              站点图标与分享图（只被 index.html 的 <head> 引用）
-│  ├─ favicon.png       浏览器标签页图标 64×64（叶片标识）
-│  ├─ apple-touch-icon.png  iOS 主屏幕图标 180×180（同一片叶子，留 23% 安全边距）
-│  ├─ favicon-old.png / apple-touch-icon-old.png  换图标前的旧版本，确认新版没问题就可以删
-│  ├─ share-square.png  分享卡片缩略图 500×500（og:image，微信会裁成正方形）
-│  └─ cover.png         横版分享缩略图 1200×630（twitter:image）
-├─ AI辅助编程说明.md     邀请别人用 AI 做游戏的流程、两种提示词写法、收包验收
-├─ README.md            本文件
+├─ index.html      外壳：侧栏导航 + iframe
+├─ games.json      ★ 游戏清单（唯一数据源，加游戏只改这里）
+├─ games.js        清单渲染器：读 json → 主页卡片 / 侧栏入口 / 数量
+├─ tools/          维护脚本（清单同步、本地预览）
+├─ ui/             ★ UI 库（可整包复制给别的项目）
+├─ proF/           游戏页面 + 主页游戏墙
+├─ pack/           ★ 对外制作包（压成 zip 发给合作者）
+├─ assets/         站点图标与分享图
+└─ *.md            文档（本文件、AI辅助编程说明.md）
 ```
+
+> 这里只列**顶层结构**，不列具体文件和数量 —— 加游戏、换图标、加脚本都不会让这段过期。
+> 每个目录里有什么，直接看目录；`ui/` 的用法见 `ui/README.md`。
 
 ## 加一款游戏
 
@@ -162,12 +153,12 @@ powershell -File tools/sync.ps1      # 上面第一条的 PowerShell 包装，�
 .\tools\sync.ps1 -NoPause     # 跑完不停留（给脚本调用）
 ```
 
-**自动填数量**用的三种属性（静态兜底里已经写好，运行时由 `applyCounts()` 更新）：
+**自动填数量**用的三种属性（静态兜底里已经写好，运行时由 `applyCounts()` 更新；数字由脚本写，不用手抄）：
 
 ```html
-<b data-game-total>8</b>                          <!-- 只写数字 -->
-<span class="brand-sub" data-game-count>8 款</span>
-<span class="num" data-game-cat="football">3 款</span>   <!-- 按分类 key -->
+<b data-game-total>N</b>                          <!-- 只写数字 -->
+<span class="brand-sub" data-game-count>N 款</span>
+<span class="num" data-game-cat="football">N 款</span>   <!-- 按分类 key -->
 ```
 
 ## 游戏页面约定
