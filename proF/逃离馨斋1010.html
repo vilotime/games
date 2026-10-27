@@ -76,6 +76,7 @@
         <h1>这个游戏只能在电脑上玩</h1>
         <p>「逃离馨斋1010」需要键盘操作，手机 / 平板上没法正常玩。</p>
         <p>请用电脑打开本页面。</p>
+        <button class="btn" id="mobileBack" type="button">返回主页</button>
       </div>
     </div>
   </div>
@@ -1965,6 +1966,11 @@
   document.getElementById('startBtn').addEventListener('click', start);
   document.getElementById('retryBtn').addEventListener('click', start);
   document.getElementById('winBtn').addEventListener('click', start);
+  /* 只在电脑上玩：手机拦截页上的返回按钮，跳回同目录的游戏墙 */
+  var mb = document.getElementById('mobileBack');
+  if (mb) {
+    mb.addEventListener('click', function () { location.href = '主页.html'; });
+  }
 
   reset();                                  /* 先准备好世界，开场画面背后就是真实地图 */
 

@@ -400,7 +400,9 @@ if (isTouchOnlyDevice()) {
 ### C. 只能在电脑上玩（键盘 / 鼠标必需）
 
 1. `<body data-pc-only="1">` —— 只负责在手机上隐藏 `#hud` / `#hint` / `#banner`；
-2. 拦截面板自己写在页面里（**不要放"返回主页"按钮**，这个包里没有主页）：
+2. 拦截面板自己写在页面里，**面板上必须带一个「返回主页」按钮**（这个游戏最终会被放进站点
+   `proF/` 目录，同目录里就有 `主页.html`，所以按钮写成 `location.href = '主页.html'` 就行；
+   在包里直接双击时点它会 404，属正常，不影响验收）：
 
 ```html
 <div class="overlay hidden" id="mobile">
@@ -408,8 +410,16 @@ if (isTouchOnlyDevice()) {
     <h1>这个游戏只能在电脑上玩</h1>
     <p>「显示名」需要键盘 / 鼠标，手机 / 平板上没法正常操作。</p>
     <p>请用电脑打开本页面。</p>
+    <button class="btn" id="mobileBack" type="button">返回主页</button>
   </div>
 </div>
+```
+
+```js
+/* 拦截面板的返回按钮：放进站点 proF/ 后就能跳回主页 */
+document.getElementById('mobileBack').addEventListener('click', function () {
+  location.href = '主页.html';
+});
 ```
 
 ```js
