@@ -1,0 +1,1980 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>逃离馨斋1010</title>
+<link rel="stylesheet" href="../ui/yc-ui.css">
+<style>
+  /* 本游戏专属微调：只碰 HUD 与弹层，不改 ../ui/yc-ui.css */
+  #hud > div { display: flex; align-items: center; gap: 6px; }
+  .chip .bar {
+    display: inline-block; width: 74px; height: 7px; margin-left: 6px;
+    border-radius: 4px; background: rgba(255,255,255,.15); vertical-align: middle; overflow: hidden;
+  }
+  .chip .bar i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #ff5d5d, #ffb347); }
+  #stChip .bar i { background: linear-gradient(90deg, #2f7bf6, #9fe0ff); }
+
+  /* 死亡结算：整屏血红 */
+  #over.blood { background: rgba(96,0,10,.88); }
+  #over.blood .panel h1 { color: #ffd2d2; text-shadow: 0 0 18px rgba(255,40,40,.75); font-size: 19px; letter-spacing: .5px; }
+  #over.blood .panel p { color: #f0b9b9; }
+  #over.blood .btn { background: linear-gradient(135deg, #a11426, #e0313f); box-shadow: 0 8px 22px rgba(200,30,50,.5); }
+
+  @media (max-width: 760px), (max-height: 620px) {
+    .chip .bar { width: 42px; height: 6px; margin-left: 4px; }
+    #over.blood .panel h1 { font-size: 14px; }
+  }
+</style>
+</head>
+<body data-pc-only="1">
+<div id="wrap">
+  <div id="stage">
+    <canvas id="cv"></canvas>
+
+    <div id="hud">
+      <div>
+        <div class="chip" id="hpChip">生命<span class="bar"><i id="hpBar"></i></span></div>
+        <div class="chip" id="stChip">体力<span class="bar"><i id="stBar"></i></span></div>
+      </div>
+      <div>
+        <div class="chip">钥匙 <b id="keyNum">0</b>/3</div>
+        <div class="chip" id="floorChip">10F</div>
+      </div>
+    </div>
+
+    <div id="banner"></div>
+    <div id="hint">WASD 移动 · Shift 奔跑 · F 交互</div>
+
+    <div class="overlay" id="intro">
+      <div class="panel">
+        <h1>逃离馨斋1010</h1>
+        <p>你在 1010 宿舍醒来，楼里断电了。</p>
+        <p>集齐 3 把钥匙，从电梯或楼梯下楼。</p>
+        <button class="btn" id="startBtn" type="button">开始游戏</button>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="over">
+      <div class="panel">
+        <h1>被宿管阿姨逮住了！明天教务处见！</h1>
+        <p id="overStats"></p>
+        <button class="btn" id="retryBtn" type="button">再来一局</button>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="win">
+      <div class="panel">
+        <h1>逃出去了</h1>
+        <p id="winStats"></p>
+        <button class="btn" id="winBtn" type="button">再来一局</button>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="mobile">
+      <div class="panel">
+        <h1>这个游戏只能在电脑上玩</h1>
+        <p>「逃离馨斋1010」需要键盘操作，手机 / 平板上没法正常玩。</p>
+        <p>请用电脑打开本页面。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../ui/yc-ui.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  /* ============================================================
+     0. 基础常量
+     ============================================================ */
+  var G = 16;                      /* 一个网格单位 = 16 世界像素 */
+  var GX0 = 4, GYTOP = 85;         /* 网格 → 世界像素的翻转原点（网格 Y 向上，屏幕 Y 向下） */
+  var W = 900, H = 560;            /* 逻辑视口尺寸 */
+  var FOG_R = 250;                 /* 玩家视野半径（设计文档：250px） */
+  var FOG_STAIR = 100;             /* 走楼梯后的极端黑暗（设计文档：100px） */
+  var FOG_ROOM = 250;              /* 宿舍内部视野（六人寝比走廊还大，给足一点） */
+  var NEED_KEY = 3;                /* 成功逃离所需钥匙（设计文档：至少 3 把） */
+  var NEED_ELEV = 4;               /* 电梯会收走一把钥匙，所以手里要有 4 把 */
+  var HOLD_ELEV = 3, HOLD_GATE = 5;
+  var MAX_KEY = 10;                /* 设计文档：钥匙总数不超过 10 把 */
+
+  /* 宿舍内部：统一的六人寝竖长方形模板 */
+  var ROOM_BOX = { x0: 250, y0: 60, x1: 650, y1: 540 };
+  var ROOM_DOOR = { x: 450, y: 540 };            /* 门在下方正中 */
+  var ROOM_ITEM = { x: 450, y: 330 };            /* 道具刷在房间中间 */
+  var BUNK = [                                   /* 三张竖放的上下铺：左上角 / 右上角 / 右下角 */
+    { x0: 264, y0: 76,  x1: 348, y1: 224 },
+    { x0: 552, y0: 76,  x1: 636, y1: 224 },
+    { x0: 552, y0: 372, x1: 636, y1: 520 }
+  ];
+  var DESK4 = { x0: 264, y0: 228, x1: 308, y1: 368 };   /* 靠左墙的并排四座长桌 */
+  var DESK2 = { x0: 592, y0: 240, x1: 636, y1: 344 };   /* 另一边靠右墙的两个座位 */
+  var CABINET = { x0: 264, y0: 372, x1: 308, y1: 512 }; /* 贴左墙的六人柜 */
+  var FURN = BUNK.concat([DESK4, DESK2, CABINET]);      /* 以上都挡人 */
+  var CHECK_AFTER = 11;            /* 在宿舍里待超过这么久，才可能把宿管引过来 */
+  var CHECK_CD = 22;              /* 两次查寝之间的冷却 */
+  var CHECK_SCAN = 3.2;           /* 手电扫视时长 */
+
+  /* ============================================================
+     1. 画布与自适应
+     ============================================================ */
+  var cv = document.getElementById('cv');
+  var ctx = cv.getContext('2d');
+  var st = document.getElementById('stage');
+  var UNIT = 1;
+
+  function resize() {
+    var s = Math.min((window.innerWidth - 24) / W, (window.innerHeight - 24) / H);
+    s = Math.max(0.4, s);
+    var dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(W * s * dpr);
+    cv.height = Math.round(H * s * dpr);
+    cv.style.width = Math.round(W * s) + 'px';
+    cv.style.height = Math.round(H * s) + 'px';
+    st.style.width = cv.style.width;
+    st.style.height = cv.style.height;
+    UNIT = s * dpr;
+  }
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
+  resize();
+
+  /* ============================================================
+     2. DOM 外壳
+     ============================================================ */
+  var elBanner = document.getElementById('banner');
+  var elIntro = document.getElementById('intro');
+  var elOver = document.getElementById('over');
+  var elWin = document.getElementById('win');
+  var elOverStats = document.getElementById('overStats');
+  var elWinStats = document.getElementById('winStats');
+  var elHpBar = document.getElementById('hpBar');
+  var elStBar = document.getElementById('stBar');
+  var elKeyNum = document.getElementById('keyNum');
+  var elFloor = document.getElementById('floorChip');
+
+  /* ============================================================
+     3. 坐标换算
+     ============================================================ */
+  function gx(v) { return (v - GX0) * G; }          /* 网格 X → 世界像素 X */
+  function gy(v) { return (GYTOP - v) * G; }        /* 网格 Y → 世界像素 Y（翻转） */
+  function pxRect(g) { return { x0: gx(g[0]), y0: gy(g[3]), x1: gx(g[2]), y1: gy(g[1]) }; }
+
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function dist2(ax, ay, bx, by) { var dx = ax - bx, dy = ay - by; return dx * dx + dy * dy; }
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+  /* ============================================================
+     4. 地图数据（网格坐标；设计文档坐标经过微调以消除重叠）
+        · 顶部横向走廊 (13,65)-(93,75)
+        · 右侧纵向走廊 (86,-14)-(93,65)
+        · 底部大面积空白区域 (50,10)-(86,30)
+        楼梯 / 电梯都做成走廊里的地面区域，不再从走廊里挖凹口，
+        这样走廊两侧的宿舍可以排得整整齐齐、大小一致。
+     ============================================================ */
+  var AREA_G = [
+    { g: [13, 65, 93, 75], kind: 'corridor',
+      open: [{ s: 'B', a: 86, b: 93 }] },
+    { g: [86, -14, 93, 65], kind: 'corridor',
+      open: [{ s: 'T', a: 86, b: 93 }, { s: 'L', a: 10, b: 30 }] },
+    { g: [50, 10, 86, 30], kind: 'open',
+      open: [{ s: 'R', a: 10, b: 30 }] }
+  ];
+
+  /* 所有宿舍统一大小（网格单位），保证在外面看每间都一样大 */
+  var ROOM_S = 3.4;
+
+  /* 每一排宿舍：沿哪条轴排、排布跨度、贴走廊的那条边（门就开在这条边上） */
+  var ROWS = [
+    /* 顶部横向走廊上方一排：门朝下 */
+    { nums: ['1055', '1052', '1051', '1050', '1049', '1047', '1045', '1043', '1041', '1039',
+             '1029', '1027', '1025', '1023', '1022', '1021', '1020', '1019'],
+      axis: 'x', span: [13.5, 91.5], edge: 'B', at: 75 },
+    /* 顶部横向走廊下方一排：门朝上 */
+    { nums: ['1048', '1046', '1044', '1042', '1040', '1038', '1037', '1036',
+             '1035', '1034', '1033', '1032', '1030', '1028', '1026', '1024'],
+      axis: 'x', span: [24, 86], edge: 'T', at: 65 },
+    /* 右侧纵向走廊右边缘一排：门朝左（从下往上 1001 → 1018） */
+    { nums: ['1001', '1002', '1003', '1004', '1005', '1006', '1007', '1008B', '1009',
+             '1010B', '1011', '1012B', '1013', '1014B', '1015', '1016', '1017', '1018'],
+      axis: 'y', span: [-12, 64], edge: 'L', at: 93 },
+    /* 右侧纵向走廊左侧一排：门朝右（从下往上 1008 → 1014） */
+    { nums: ['1008', '1010', '1012', '1014'],
+      axis: 'y', span: [32, 54], edge: 'R', at: 86 },
+    /* 左侧突出两间：门朝右（从下往上 1053 → 1054） */
+    { nums: ['1053', '1054'],
+      axis: 'y', span: [65.2, 72.8], edge: 'R', at: 13 }
+  ];
+
+  /* 由每一排生成宿舍网格矩形：[房号, x0, y0, x1, y1] */
+  var ROOM_G = (function () {
+    var out = [];
+    for (var i = 0; i < ROWS.length; i++) {
+      var row = ROWS[i], n = row.nums.length;
+      var pitch = (row.span[1] - row.span[0]) / n;
+      for (var k = 0; k < n; k++) {
+        var c = row.span[0] + pitch * (k + 0.5);
+        var a0 = c - ROOM_S / 2, a1 = c + ROOM_S / 2;
+        var x0, y0, x1, y1;
+        if (row.axis === 'x') {
+          x0 = a0; x1 = a1;
+          if (row.edge === 'B') { y0 = row.at; y1 = row.at + ROOM_S; }
+          else { y0 = row.at - ROOM_S; y1 = row.at; }
+        } else {
+          y0 = a0; y1 = a1;
+          if (row.edge === 'L') { x0 = row.at; x1 = row.at + ROOM_S; }
+          else { x0 = row.at - ROOM_S; x1 = row.at; }
+        }
+        out.push([row.nums[k], x0, y0, x1, y1]);
+      }
+    }
+    return out;
+  })();
+
+  /* 设施（设计文档第三部分；都放在走廊地面上，不占宿舍的位置） */
+  var FAC_G = [
+    { t: 'stairs', g: [14, 66, 19, 73] },   /* 楼梯 1（顶部走廊西端） */
+    { t: 'stairs', g: [66, 66, 71, 73] },   /* 楼梯 2（顶部走廊东段） */
+    { t: 'stairs', g: [86, 24, 89, 30] },   /* 楼梯 3（右侧走廊） */
+    { t: 'elev',   g: [76, 66, 80, 73] },   /* 电梯 1（顶部走廊东端） */
+    { t: 'elev',   g: [86, 4, 89, 10] },    /* 电梯 2（右侧走廊） */
+    { t: 'exit',   g: [20, 68, 22, 72] },   /* 安全出口（装饰） */
+    { t: 'exit',   g: [89, 68, 91, 72] },
+    { t: 'exit',   g: [78, 14, 80, 18] }
+  ];
+
+  /* ============================================================
+     5. 数据展开到世界像素
+     ============================================================ */
+  var areas = [], rooms = [], facs = [], worldRect = { x0: 0, y0: 0, x1: W, y1: H };
+
+  (function buildMap() {
+    var i, a, o, r, xs = [], ys = [];
+
+    for (i = 0; i < AREA_G.length; i++) {
+      a = AREA_G[i];
+      r = pxRect(a.g);
+      var opens = [];
+      for (var k = 0; k < (a.open || []).length; k++) {
+        o = a.open[k];
+        if (o.s === 'T' || o.s === 'B') { opens.push({ s: o.s, p0: gx(o.a), p1: gx(o.b) }); }
+        else { opens.push({ s: o.s, p0: gy(o.b), p1: gy(o.a) }); }
+      }
+      areas.push({ p: r, kind: a.kind, opens: opens });
+      xs.push(r.x0, r.x1); ys.push(r.y0, r.y1);
+    }
+
+    for (i = 0; i < ROOM_G.length; i++) {
+      r = pxRect(ROOM_G[i].slice(1));
+      rooms.push({
+        n: ROOM_G[i][0], r: r,
+        cx: (r.x0 + r.x1) / 2, cy: (r.y0 + r.y1) / 2,
+        door: null, item: null, taken: false
+      });
+      xs.push(r.x0, r.x1); ys.push(r.y0, r.y1);
+    }
+
+    for (i = 0; i < FAC_G.length; i++) {
+      r = pxRect(FAC_G[i].g);
+      facs.push({ t: FAC_G[i].t, p: r, cx: (r.x0 + r.x1) / 2, cy: (r.y0 + r.y1) / 2 });
+    }
+
+    for (i = 0; i < xs.length; i++) {
+      worldRect.x0 = Math.min(worldRect.x0, xs[i]);
+      worldRect.x1 = Math.max(worldRect.x1, xs[i]);
+    }
+    for (i = 0; i < ys.length; i++) {
+      worldRect.y0 = Math.min(worldRect.y0, ys[i]);
+      worldRect.y1 = Math.max(worldRect.y1, ys[i]);
+    }
+  })();
+
+  /* 走廊 / 空地都是可行走区域（宿舍内部走独立场景，走廊这边只认墙体） */
+  function walkable(x, y) {
+    for (var i = 0; i < areas.length; i++) {
+      var r = areas[i].p;
+      if (x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1) { return true; }
+    }
+    return false;
+  }
+
+  /* 圆形实体是否能站在这里：中心 + 8 个采样点都在可行走区域内 */
+  function circleOk(x, y, rad) {
+    if (!walkable(x, y)) { return false; }
+    for (var i = 0; i < 8; i++) {
+      var a = i * Math.PI / 4;
+      if (!walkable(x + Math.cos(a) * rad, y + Math.sin(a) * rad)) { return false; }
+    }
+    return true;
+  }
+
+  /* 视线检查：两点之间不能穿墙 */
+  function losClear(x0, y0, x1, y1) {
+    var dx = x1 - x0, dy = y1 - y0;
+    var d = Math.sqrt(dx * dx + dy * dy);
+    if (d < 1) { return true; }
+    var steps = Math.min(40, Math.ceil(d / 12));
+    for (var i = 1; i < steps; i++) {
+      var t = i / steps;
+      if (!walkable(x0 + dx * t, y0 + dy * t)) { return false; }
+    }
+    return true;
+  }
+
+  /* 给每间宿舍自动找门：取「外侧 12px 落在可行走区域」最长的那条边 */
+  (function buildDoors() {
+    var SIDES = ['B', 'T', 'L', 'R'];
+    for (var i = 0; i < rooms.length; i++) {
+      var r = rooms[i].r, best = null;
+      for (var s = 0; s < 4; s++) {
+        var sd = SIDES[s];
+        var horiz = (sd === 'T' || sd === 'B');
+        var e0 = horiz ? r.x0 : r.y0;
+        var e1 = horiz ? r.x1 : r.y1;
+        var runStart = null, bestRun = null;
+        for (var t = e0; t <= e1; t += 4) {
+          var ox, oy;
+          if (sd === 'T') { ox = t; oy = r.y0 - 12; }
+          else if (sd === 'B') { ox = t; oy = r.y1 + 12; }
+          else if (sd === 'L') { ox = r.x0 - 12; oy = t; }
+          else { ox = r.x1 + 12; oy = t; }
+          if (walkable(ox, oy)) {
+            if (runStart === null) { runStart = t; }
+          } else if (runStart !== null) {
+            if (!bestRun || (t - runStart) > bestRun.len) { bestRun = { a: runStart, b: t, len: t - runStart }; }
+            runStart = null;
+          }
+        }
+        if (runStart !== null && (!bestRun || (e1 - runStart) > bestRun.len)) {
+          bestRun = { a: runStart, b: e1, len: e1 - runStart };
+        }
+        if (bestRun && bestRun.len >= 8 && (!best || bestRun.len > best.len)) {
+          var mid = (bestRun.a + bestRun.b) / 2;
+          best = {
+            len: bestRun.len, side: sd,
+            x: horiz ? mid : (sd === 'L' ? r.x0 : r.x1),
+            y: horiz ? (sd === 'T' ? r.y0 : r.y1) : mid
+          };
+        }
+      }
+      rooms[i].door = best;
+    }
+  })();
+
+  /* ============================================================
+     6. 运行时状态
+     ============================================================ */
+  var state = 'intro';           /* intro | playing | over | win */
+  var scene = 'corridor';        /* corridor | room | lobby */
+  var last = 0, playTime = 0, bannerT = 0;
+  var shake = 0, flash = 0, flashCol = '255,60,60';
+  var camX = 0, camY = 0;
+  var camL = 0, camT = 0, camR = W, camB = H;
+
+  var player = {
+    x: 0, y: 0, r: 9, vx: 0, vy: 0,
+    hp: 100, hpMax: 100, st: 100, stMax: 100,
+    keys: 0, speedMul: 1, defMul: 1, noiseMul: 1, shield: 0,
+    inv: 0, stun: 0, fx: 0, fy: 1, stepAcc: 0, noRunT: 0, tired: false
+  };
+
+  var traps = [], sups = [], parts = [];
+  var roomSc = null, lobbySc = null;
+  var curTarget = null, holdT = 0, holdId = '', fEdge = false;
+  var heartAcc = 0;
+  var blockFn = null;            /* 场景内的额外碰撞（宿舍里的床） */
+
+  /* ============================================================
+     7. 音效（WebAudio 合成，零外部资源；失败就静音）
+     ============================================================ */
+  var AC = null;
+  function audioInit() {
+    if (AC) { return; }
+    try {
+      var C = window.AudioContext || window.webkitAudioContext;
+      if (C) { AC = new C(); }
+    } catch (e) { AC = null; }
+  }
+  function tone(freq, dur, vol, type, to) {
+    if (!AC) { return; }
+    try {
+      if (AC.state === 'suspended') { AC.resume(); }
+      var o = AC.createOscillator(), g = AC.createGain();
+      o.type = type || 'sine';
+      o.frequency.setValueAtTime(freq, AC.currentTime);
+      if (to) { o.frequency.linearRampToValueAtTime(to, AC.currentTime + dur); }
+      g.gain.setValueAtTime(vol, AC.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0008, AC.currentTime + dur);
+      o.connect(g); g.connect(AC.destination);
+      o.start(); o.stop(AC.currentTime + dur + 0.03);
+    } catch (e) {}
+  }
+  function sfxPick() { tone(880, 0.08, 0.12, 'triangle', 1320); tone(1320, 0.1, 0.08, 'triangle'); }
+  function sfxHurt() { tone(180, 0.22, 0.22, 'sawtooth', 60); }
+  function sfxScream() { tone(320, 0.5, 0.16, 'square', 90); }
+  function sfxDeny() { tone(200, 0.12, 0.12, 'square', 140); }
+
+  /* ============================================================
+     8. 通用小工具
+     ============================================================ */
+  function banner(text, ms) {
+    elBanner.textContent = text;
+    elBanner.classList.add('show');
+    bannerT = (ms || 1200) / 1000;
+  }
+  function fmtTime(t) {
+    t = Math.max(0, t);
+    var m = Math.floor(t / 60), s = Math.floor(t % 60);
+    return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+  }
+  function updateHUD() {
+    elHpBar.style.width = Math.max(0, Math.min(100, player.hp / player.hpMax * 100)) + '%';
+    elStBar.style.width = Math.max(0, Math.min(100, player.st / player.stMax * 100)) + '%';
+    elKeyNum.textContent = String(player.keys);
+  }
+  function burst(x, y, n, col) {
+    if (parts.length > 220) { return; }
+    for (var i = 0; i < n; i++) {
+      var a = Math.random() * Math.PI * 2, sp = rnd(40, 180);
+      parts.push({ x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rnd(0.25, 0.6), t: 0, c: col });
+    }
+  }
+
+  /* ============================================================
+     9. 出怪 / 摆道具
+     ============================================================ */
+  function assignItems() {
+    var order = rooms.slice();
+    var i;
+    for (i = order.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = order[i]; order[i] = order[j]; order[j] = tmp;
+    }
+    for (i = 0; i < order.length; i++) {
+      order[i].taken = false;
+      if (i < MAX_KEY) {
+        order[i].item = 'key';
+      } else {
+        var r = Math.random();
+        if (r < 0.14) { order[i].item = 'laptop'; }
+        else if (r < 0.30) { order[i].item = 'basin'; }
+        else if (r < 0.46) { order[i].item = 'sock'; }
+        else { order[i].item = 'none'; }
+      }
+    }
+  }
+
+  function spawnTraps() {
+    var guard = 0;
+    while (traps.length < 14 && guard++ < 800) {
+      var a = areas[Math.floor(Math.random() * areas.length)];
+      var r = a.p;
+      var x = rnd(r.x0 + 14, r.x1 - 14), y = rnd(r.y0 + 14, r.y1 - 14);
+      if (!circleOk(x, y, 10)) { continue; }
+      if (dist2(x, y, player.x, player.y) < 160 * 160) { continue; }
+      traps.push({ x: x, y: y, dead: false });
+    }
+  }
+
+  function makeSup(points, label) {
+    return {
+      x: points[0].x, y: points[0].y, r: 11, ang: 0,
+      mode: 'patrol', wp: points, wi: 1, tgt: null,
+      see: 0, lost: 0, stun: 0, sweep: 0, searchT: 0,
+      face: 0, scan: 0, label: label
+    };
+  }
+
+  function spawnSups() {
+    /* 一层一个宿管：沿着 顶部走廊 → 右侧走廊 → 底部空地 来回巡 */
+    sups.push(makeSup([
+      { x: gx(20), y: gy(70) },
+      { x: gx(88), y: gy(70) },
+      { x: gx(88), y: gy(20) },
+      { x: gx(56), y: gy(20) },
+      { x: gx(88), y: gy(20) },
+      { x: gx(88), y: gy(70) }
+    ], '巡楼'));
+  }
+
+  /* 找到离某点最近、且在范围内的宿管 */
+  function nearestSupTo(x, y, maxD) {
+    var best = null, bd = maxD * maxD;
+    for (var i = 0; i < sups.length; i++) {
+      var d = dist2(sups[i].x, sups[i].y, x, y);
+      if (d < bd) { bd = d; best = sups[i]; }
+    }
+    return best;
+  }
+
+  /* 查寝结束 / 玩家离开房间时，把正在查寝的宿管放回巡逻 */
+  function releaseCheck() {
+    for (var i = 0; i < sups.length; i++) {
+      var s = sups[i];
+      if (s.mode === 'check') { s.mode = 'patrol'; s.tgt = null; s.scan = 0; }
+    }
+  }
+
+  /* ============================================================
+     10. 重置 / 开始 / 结束
+     ============================================================ */
+  function reset() {
+    playTime = 0; shake = 0; flash = 0; bannerT = 0;
+    holdT = 0; holdId = ''; curTarget = null; heartAcc = 0;
+    player.hp = player.hpMax; player.st = player.stMax; player.keys = 0;
+    player.speedMul = 1; player.defMul = 1; player.noiseMul = 1; player.shield = 0;
+    player.inv = 0; player.stun = 0; player.fx = 0; player.fy = 1; player.stepAcc = 0;
+    player.noRunT = 0; player.tired = false;
+    player.x = gx(20); player.y = gy(70);
+    player.inv = 2;                 /* 开局 2 秒无敌，避免一睁眼就被逮 */
+    camX = player.x; camY = player.y;
+    scene = 'corridor'; roomSc = null; lobbySc = null;
+    blockFn = null;
+    elFloor.textContent = '10F';
+    parts.length = 0; traps.length = 0; sups.length = 0;
+
+    assignItems();
+    spawnTraps();
+    spawnSups();
+
+    /* 开局就在 1010 宿舍里：先站到 1010 门口，再切进房间场景 */
+    var home = null;
+    for (var i = 0; i < rooms.length; i++) {
+      if (rooms[i].n === '1010' && rooms[i].door) { home = rooms[i]; break; }
+    }
+    if (home) {
+      player.x = home.door.x;
+      player.y = home.door.y;
+      camX = player.x; camY = player.y;
+      enterRoom(home);
+    }
+    updateHUD();
+  }
+
+  function start() {
+    audioInit();
+    reset();
+    state = 'playing';
+    elIntro.classList.add('hidden');
+    elOver.classList.add('hidden');
+    elOver.classList.remove('blood');
+    elWin.classList.add('hidden');
+    elBanner.classList.remove('show');
+    banner('熄灯了，别被逮住', 1600);
+  }
+
+  function die() {
+    state = 'over';
+    holdT = 0; holdId = '';
+    var where = scene === 'room' ? '宿舍里' : (scene === 'lobby' ? '一楼门禁前' : '走廊上');
+    elOver.classList.add('blood');
+    elOverStats.textContent = '在' + where + '被逮住 · 钥匙 ' + player.keys + ' 把 · 用时 ' + fmtTime(playTime);
+    elOver.classList.remove('hidden');
+    flash = 1; flashCol = '255,40,40';
+    sfxHurt();
+  }
+
+  function win() {
+    state = 'win';
+    holdT = 0; holdId = '';
+    elWinStats.textContent = '用时 ' + fmtTime(playTime) + ' · 剩余体力 ' + Math.round(player.st) + ' · 钥匙 ' + player.keys + ' 把';
+    elWin.classList.remove('hidden');
+    tone(660, 0.16, 0.16, 'triangle', 990);
+  }
+
+  /* ============================================================
+     11. 输入
+     ============================================================ */
+  var keys = Object.create(null);
+
+  window.addEventListener('keydown', function (e) {
+    var k = (e.key || '').toLowerCase();
+    if (!e.repeat && k === 'f') { fEdge = true; }
+    keys[k] = true;
+    if (k === 'w' || k === 'a' || k === 's' || k === 'd' || k === ' ' ||
+        k === 'arrowup' || k === 'arrowdown' || k === 'arrowleft' || k === 'arrowright') {
+      e.preventDefault();
+    }
+    if (k === 'enter' && state === 'intro') { start(); }
+  });
+  window.addEventListener('keyup', function (e) {
+    keys[(e.key || '').toLowerCase()] = false;
+  });
+  window.addEventListener('blur', function () {
+    keys = Object.create(null);
+    holdT = 0; holdId = '';
+  });
+  document.addEventListener('visibilitychange', function () { last = 0; });
+  window.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+  /* 触屏设备：本作需要键盘，只显示拦截面板，不启动主循环 */
+  function isTouchOnlyDevice() {
+    try {
+      var tp = navigator.maxTouchPoints || 0;
+      var ua = navigator.userAgent || '';
+      var mobileUA = /Android|iPhone|iPad|iPod|Mobile|Tablet|Silk|Kindle/i.test(ua);
+      if (window.matchMedia) {
+        if (window.matchMedia('(pointer: coarse)').matches &&
+            window.matchMedia('(hover: none)').matches) { return true; }
+        if (mobileUA) { return true; }
+      }
+      return mobileUA || (tp > 0 && window.matchMedia && !window.matchMedia('(any-pointer: fine)').matches);
+    } catch (e) { return false; }
+  }
+
+  /* ============================================================
+     12. 伤害 / 噪音
+     ============================================================ */
+  function hitPlayer(dmg) {
+    if (player.inv > 0) { return; }
+    if (player.shield > 0) {
+      player.shield--;
+      player.inv = 1.1;
+      shake = 8; flash = 0.5; flashCol = '120,220,255';
+      banner('笔记本电脑挡住了这一下', 1200);
+      tone(520, 0.14, 0.16, 'square', 260);
+      return;
+    }
+    player.hp -= dmg * player.defMul;
+    player.inv = 1.2;
+    shake = 13; flash = 0.75; flashCol = '255,60,60';
+    burst(player.x, player.y, 14, '#ff5d5d');
+    sfxHurt();
+    if (player.hp <= 0) { player.hp = 0; die(); }
+  }
+
+  function noise(x, y, radius) {
+    for (var i = 0; i < sups.length; i++) {
+      var s = sups[i];
+      if (s.stun > 0) { continue; }
+      if (dist2(s.x, s.y, x, y) <= radius * radius) {
+        s.tgt = { x: x, y: y };
+        if (s.mode === 'patrol') { s.mode = 'search'; s.searchT = 0; }
+        s.lost = 0;
+      }
+    }
+  }
+
+  /* ============================================================
+     13. 玩家移动（走廊 / 房间 / 一楼共用）
+     ============================================================ */
+  function movePlayer(dt, left, top, right, bottom, noRegen) {
+    if (player.stun > 0) {
+      player.stun -= dt;
+      return;
+    }
+    var dx = 0, dy = 0;
+    if (keys['a'] || keys['arrowleft']) { dx -= 1; }
+    if (keys['d'] || keys['arrowright']) { dx += 1; }
+    if (keys['w'] || keys['arrowup']) { dy -= 1; }
+    if (keys['s'] || keys['arrowdown']) { dy += 1; }
+
+    var len = Math.sqrt(dx * dx + dy * dy);
+    if (len > 0) {
+      dx /= len; dy /= len;
+      player.fx = dx; player.fy = dy;
+    }
+
+    var wantRun = !!(keys['shift'] && len > 0 && player.st > 1 && player.noRunT <= 0);
+    var base = wantRun ? 250 : 150;
+
+    /* 体力耗尽就疲劳减速，回到 25 点体力才恢复 */
+    if (player.st <= 0) { player.tired = true; }
+    else if (player.tired && player.st >= 25) { player.tired = false; }
+
+    var mul = player.speedMul;
+    if (player.tired) { mul *= 0.5; }
+
+    var sp = base * mul;
+
+    if (wantRun) {
+      player.st -= 26 * dt;
+      if (player.st <= 0) { player.st = 0; player.noRunT = 1.6; player.tired = true; }
+    } else {
+      /* 楼梯通道里不回体力（下楼每一步都在扣），其它地方走路慢慢回 */
+      if (!noRegen) { player.st = Math.min(player.stMax, player.st + 11 * dt); }
+      if (player.noRunT > 0) { player.noRunT -= dt; }
+    }
+
+    if (len > 0) {
+      var nx = player.x + dx * sp * dt;
+      var ny = player.y + dy * sp * dt;
+      if (left !== undefined) {
+        nx = clamp(nx, left + player.r, right - player.r);
+        ny = clamp(ny, top + player.r, bottom - player.r);
+        if (blockFn) {
+          if (blockFn(nx, player.y, player.r)) { nx = player.x; }
+          if (blockFn(player.x, ny, player.r)) { ny = player.y; }
+        }
+      } else {
+        if (!circleOk(nx, player.y, player.r)) { nx = player.x; }
+        if (!circleOk(player.x, ny, player.r)) { ny = player.y; }
+      }
+      player.x = nx; player.y = ny;
+
+      /* 脚步声：走路 / 奔跑半径不同，脸盆让脚步声翻倍 */
+      player.stepAcc += sp * dt;
+      var stepGap = wantRun ? 34 : 26;
+      if (player.stepAcc > stepGap) {
+        player.stepAcc = 0;
+        var rad = (wantRun ? 230 : 95) * player.noiseMul;
+        noise(player.x, player.y, rad);
+        if (wantRun) { burst(player.x, player.y + 6, 2, 'rgba(160,190,230,.5)'); }
+      }
+    } else {
+      player.stepAcc = 0;
+    }
+  }
+
+  /* ============================================================
+     14. 走廊交互目标
+     ============================================================ */
+  function findTarget() {
+    var best = null, bd = 48 * 48, i, d;
+
+    /* 房门优先：站在宿舍门口按 F 一定是进宿舍，不会被旁边的楼梯 / 电梯抢走 */
+    for (i = 0; i < rooms.length; i++) {
+      var rm = rooms[i];
+      if (!rm.door) { continue; }
+      d = dist2(player.x, player.y, rm.door.x, rm.door.y);
+      if (d < bd) {
+        bd = d;
+        best = { type: 'room', room: rm, x: rm.door.x, y: rm.door.y, label: 'F 进入 ' + rm.n };
+      }
+    }
+    if (best && bd <= 44 * 44) { return best; }
+
+    for (i = 0; i < facs.length; i++) {
+      var f = facs[i];
+      if (f.t !== 'stairs' && f.t !== 'elev' && f.t !== 'exit') { continue; }
+      var pad = (f.t === 'exit') ? 16 : 10;
+      if (player.x > f.p.x0 - pad && player.x < f.p.x1 + pad &&
+          player.y > f.p.y0 - pad && player.y < f.p.y1 + pad) {
+        d = dist2(player.x, player.y, f.cx, f.cy);
+        if (d < bd) {
+          bd = d;
+          var label = 'F 走楼梯下楼';
+          if (f.t === 'elev') { label = 'F 长按 3 秒 · 电梯'; }
+          if (f.t === 'exit') { label = 'F 安全出口'; }
+          best = { type: f.t, x: f.cx, y: f.cy, id: 'fac' + i, label: label };
+        }
+      }
+    }
+    return best;
+  }
+
+  /* ============================================================
+     15. 场景切换：宿舍 / 一楼
+     ============================================================ */
+  function enterRoom(rm) {
+    scene = 'room';
+    roomSc = {
+      room: rm, box: ROOM_BOX,
+      taken: !!rm.taken, dwell: 0,          /* 道具是否已被拿走，跟着房间本身走 */
+      checking: false, arrived: false, scanT: 0, checkCd: 3,
+      backX: player.x, backY: player.y, door: { x: ROOM_DOOR.x, y: ROOM_DOOR.y }
+    };
+    blockFn = roomBlocked;
+    player.x = ROOM_DOOR.x; player.y = ROOM_DOOR.y - 34;
+    player.stun = 0;
+    holdT = 0; holdId = ''; curTarget = null;
+    banner(rm.n + ' 室', 1000);
+  }
+
+  /* 宿舍里的家具碰撞（上下铺 / 桌子 / 柜子） */
+  function roomBlocked(x, y, r) {
+    for (var i = 0; i < FURN.length; i++) {
+      var b = FURN[i];
+      if (x > b.x0 - r && x < b.x1 + r && y > b.y0 - r && y < b.y1 + r) { return true; }
+    }
+    return false;
+  }
+
+  /* 门外的走廊落点：沿门的朝向把玩家推出墙外，避免卡在墙里 */
+  function doorOutside(rm) {
+    var d = rm && rm.door;
+    if (!d) { return null; }
+    var k = 20, ox = 0, oy = 0;
+    if (d.side === 'T') { oy = -k; }
+    else if (d.side === 'B') { oy = k; }
+    else if (d.side === 'L') { ox = -k; }
+    else { ox = k; }
+    return { x: d.x + ox, y: d.y + oy };
+  }
+
+  /* 从门口退回走廊 */
+  function leaveRoom() {
+    if (!roomSc) { return; }
+    var p = doorOutside(roomSc.room);
+    if (p) { player.x = p.x; player.y = p.y; }
+    else { player.x = roomSc.backX; player.y = roomSc.backY; }
+    scene = 'corridor';
+    roomSc = null;
+    blockFn = null;
+    releaseCheck();
+    player.inv = Math.max(player.inv, 0.6);
+  }
+
+  function enterLobby(viaStairs) {
+    scene = 'lobby';
+    blockFn = null;
+    releaseCheck();
+    lobbySc = {
+      box: { x0: 230, y0: 120, x1: 670, y1: 470 },
+      gate: { x0: 410, y0: 120, x1: 490, y1: 120 },
+      viaStairs: !!viaStairs, stepAcc: 0
+    };
+    player.x = 450; player.y = 440;
+    player.stun = 0;
+    player.inv = Math.max(player.inv, 0.8);
+    holdT = 0; holdId = '';
+    elFloor.textContent = '1F';
+    banner(viaStairs ? '摸黑下楼，视野很小' : '电梯直达一楼', 1500);
+  }
+
+  function useStairs() {
+    /* 楼梯：不读条，但之后视野只有 100px，每走一步扣体力 */
+    tone(300, 0.2, 0.1, 'sine', 180);
+    enterLobby(true);
+  }
+
+  function useElev() {
+    if (player.keys < NEED_ELEV) {
+      holdT = 0; holdId = '';
+      banner('电梯要收一把钥匙：需要 4 把', 1600);
+      sfxDeny();
+      return false;
+    }
+    player.keys--;
+    updateHUD();
+    tone(420, 0.35, 0.14, 'square', 700);
+    enterLobby(false);
+    return true;
+  }
+
+  /* ============================================================
+     16. 宿管 AI
+     ============================================================ */
+  function supSees(s) {
+    if (scene === 'room') { return false; }      /* 玩家在屋里，宿管看不见 */
+    var d = Math.sqrt(dist2(s.x, s.y, player.x, player.y));
+    if (d > 250 || d < 1) { return false; }
+    var ang = Math.atan2(player.y - s.y, player.x - s.x);
+    var diff = Math.abs(((ang - s.ang + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+    if (diff > 0.58) { return false; }          /* 手电筒扇形 ±33° */
+    return losClear(s.x, s.y, player.x, player.y);
+  }
+
+  function stepToward(e, tx, ty, sp, dt) {
+    var dx = tx - e.x, dy = ty - e.y;
+    var d = Math.sqrt(dx * dx + dy * dy);
+    if (d < 2) { return true; }
+    var base = Math.atan2(dy, dx);
+    var tries = [0, 0.45, -0.45, 0.95, -0.95, 1.5, -1.5];
+    for (var i = 0; i < tries.length; i++) {
+      var a = base + tries[i];
+      var nx = e.x + Math.cos(a) * sp * dt;
+      var ny = e.y + Math.sin(a) * sp * dt;
+      if (circleOk(nx, ny, e.r)) {
+        e.x = nx; e.y = ny; e.ang = a;
+        return false;
+      }
+    }
+    e.ang = base;
+    return false;
+  }
+
+  function updateSup(s, dt) {
+    if (s.stun > 0) { s.stun -= dt; return; }
+
+    /* 玩家躲进宿舍：正在追的宿管跟丢，回到巡逻 */
+    if (scene === 'room' && s.mode !== 'check') {
+      s.mode = 'patrol'; s.tgt = null; s.see = 0; s.lost = 0;
+    }
+
+    /* 查寝：走到宿舍门口站定，把手电对着门内扫 */
+    if (s.mode === 'check' && s.tgt) {
+      var at = stepToward(s, s.tgt.x, s.tgt.y, 128, dt);
+      if (at) {
+        s.scan += dt;
+        s.ang = s.face + Math.sin(s.scan * 2.0) * 0.8;
+      } else {
+        s.ang = Math.atan2(s.tgt.y - s.y, s.tgt.x - s.x);
+      }
+      return;
+    }
+
+    if (supSees(s)) {
+      s.see += dt; s.lost = 0;
+      s.tgt = { x: player.x, y: player.y };
+      s.mode = 'chase';
+    } else if (s.see > 0) {
+      s.lost += dt;
+      if (s.lost > 2.2) { s.see = 0; s.mode = s.tgt ? 'search' : 'patrol'; s.searchT = 0; }
+    }
+
+    var sp = 0;
+    if (s.mode === 'chase' && s.tgt) {
+      sp = 162;
+      stepToward(s, s.tgt.x, s.tgt.y, sp, dt);
+      if (dist2(s.x, s.y, player.x, player.y) < 26 * 26) {
+        hitPlayer(34);
+        s.stun = 0.9;
+        var ax = s.x - player.x, ay = s.y - player.y;
+        var al = Math.sqrt(ax * ax + ay * ay) || 1;
+        player.x = clamp(player.x - ax / al * 26, worldRect.x0 + 20, worldRect.x1 - 20);
+        player.y = clamp(player.y - ay / al * 26, worldRect.y0 + 20, worldRect.y1 - 20);
+      }
+      return;
+    }
+
+    if (s.mode === 'search' && s.tgt) {
+      var arrived = stepToward(s, s.tgt.x, s.tgt.y, 118, dt);
+      if (arrived) {
+        s.searchT += dt;
+        s.ang += dt * 2.6;                   /* 原地扫视 */
+        if (s.searchT > 2.4) { s.mode = 'patrol'; s.tgt = null; s.searchT = 0; }
+      }
+      return;
+    }
+
+    /* 巡逻：在固定路线之间走 */
+    if (!s.wp || s.wp.length < 2) { return; }
+    var target = s.wp[s.wi];
+    if (stepToward(s, target.x, target.y, 82, dt)) {
+      s.wi = (s.wi + 1) % s.wp.length;
+    }
+  }
+
+  /* ============================================================
+     17. 更新：走廊
+     ============================================================ */
+  function updateParts(dt) {
+    for (var i = parts.length - 1; i >= 0; i--) {
+      var p = parts[i];
+      p.t += dt;
+      if (p.t >= p.life) { parts.splice(i, 1); continue; }
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      p.vx *= 0.92; p.vy *= 0.92;
+    }
+  }
+
+  function followCam(dt) {
+    var k = Math.min(1, dt * 9);
+    camX += (player.x - camX) * k;
+    camY += (player.y - camY) * k;
+    var halfW = W / 2, halfH = H / 2;
+    var wx0 = worldRect.x0, wx1 = worldRect.x1, wy0 = worldRect.y0, wy1 = worldRect.y1;
+    camX = (wx1 - wx0 <= W) ? (wx0 + wx1) / 2 : clamp(camX, wx0 + halfW, wx1 - halfW);
+    camY = (wy1 - wy0 <= H) ? (wy0 + wy1) / 2 : clamp(camY, wy0 + halfH, wy1 - halfH);
+  }
+
+  function updateCorridor(dt) {
+    movePlayer(dt);
+    updateParts(dt);
+
+    /* 臭袜子：踩上去眩晕 2 秒并发出惨叫 */
+    if (player.stun <= 0) {
+      for (var i = 0; i < traps.length; i++) {
+        var tr = traps[i];
+        if (tr.dead) { continue; }
+        if (dist2(player.x, player.y, tr.x, tr.y) < (player.r + 8) * (player.r + 8)) {
+          tr.dead = true;
+          player.stun = 2;
+          player.st = Math.max(0, player.st - 6);
+          shake = 10; flash = 0.45; flashCol = '255,209,102';
+          banner('踩到臭袜子，惨叫引来了宿管', 1500);
+          sfxScream();
+          noise(player.x, player.y, 620);
+          burst(tr.x, tr.y, 10, '#8a7a4a');
+          break;
+        }
+      }
+    }
+
+    /* 交互 */
+    curTarget = findTarget();
+    if (curTarget && fEdge) {
+      if (curTarget.type === 'room') { fEdge = false; enterRoom(curTarget.room); return; }
+      if (curTarget.type === 'stairs') { fEdge = false; useStairs(); return; }
+      if (curTarget.type === 'exit') {
+        fEdge = false;
+        banner('安全出口被链锁锁死了', 1400);
+        sfxDeny();
+      }
+    }
+
+    /* 电梯长按读条：读条期间全图噪音，宿管全部扑过来 */
+    if (curTarget && curTarget.type === 'elev') {
+      if (keys['f']) {
+        if (holdId !== curTarget.id) { holdId = curTarget.id; holdT = 0; }
+        holdT += dt;
+        noise(player.x, player.y, 99999);
+        if (holdT >= HOLD_ELEV) { holdT = 0; holdId = ''; useElev(); return; }
+      } else { holdT = 0; holdId = ''; }
+    } else {
+      holdT = 0; holdId = '';
+    }
+
+    for (i = 0; i < sups.length; i++) { updateSup(sups[i], dt); }
+
+    followCam(dt);
+    fEdge = false;
+  }
+
+  /* ============================================================
+     18. 更新：宿舍内部（独立状态机）
+     ============================================================ */
+  function updateRoom(dt) {
+    var box = roomSc.box;
+    movePlayer(dt, box.x0, box.y0, box.x1, box.y1);
+    updateParts(dt);
+
+    roomSc.dwell += dt;
+    if (roomSc.checkCd > 0) { roomSc.checkCd -= dt; }
+
+    /* 玩家在屋里时，宿管照样在走廊巡逻，但看不见你 */
+    for (var i = 0; i < sups.length; i++) { updateSup(sups[i], dt); }
+
+    /* 待太久，把走廊里最近的宿管引到门口来查寝；附近没宿管就什么也不会发生 */
+    if (!roomSc.checking && roomSc.checkCd <= 0 && roomSc.dwell > CHECK_AFTER) {
+      var out = doorOutside(roomSc.room);
+      var s = nearestSupTo(out.x, out.y, 1100);
+      if (s) {
+        s.mode = 'check';
+        s.tgt = { x: out.x, y: out.y };
+        s.scan = 0;
+        s.face = Math.atan2(roomSc.room.door.y - out.y, roomSc.room.door.x - out.x);
+        roomSc.checking = true;
+        roomSc.arrived = false;
+        roomSc.scanT = 0;
+        banner('走廊里传来脚步声，有人往这间宿舍来了', 1700);
+        tone(150, 0.4, 0.13, 'sine', 92);
+      } else {
+        roomSc.dwell = 0;
+      }
+    }
+
+    /* 宿管到门口才开始扫视；被光扫到只掉血，不会被赶出房间 */
+    if (roomSc.checking) {
+      var cs = null;
+      for (i = 0; i < sups.length; i++) {
+        if (sups[i].mode === 'check') { cs = sups[i]; break; }
+      }
+      if (!cs) {
+        roomSc.checking = false;
+        roomSc.checkCd = CHECK_CD;
+        roomSc.dwell = 0;
+      } else {
+        var out2 = doorOutside(roomSc.room);
+        if (!roomSc.arrived && dist2(cs.x, cs.y, out2.x, out2.y) < 36 * 36) {
+          roomSc.arrived = true;
+          roomSc.scanT = 0;
+          roomSc.scanHit = false;
+          banner('宿管推开门，用手电扫视这间宿舍', 1500);
+          tone(300, 0.18, 0.12, 'square', 170);
+        }
+        if (roomSc.arrived) {
+          roomSc.scanT += dt;
+          /* 一次查寝最多被扫到一次；站到光柱扫不到的角落就安全 */
+          if (!roomSc.scanHit && player.inv <= 0 && inBeam(player.x, player.y, beamAngle(roomSc.scanT))) {
+            roomSc.scanHit = true;
+            banner('被手电扫到了', 1200);
+            hitPlayer(22);
+            if (state !== 'playing') { return; }
+          }
+          if (roomSc.scanT > CHECK_SCAN) {
+            roomSc.checking = false;
+            roomSc.arrived = false;
+            roomSc.checkCd = CHECK_CD;
+            roomSc.dwell = 0;
+            releaseCheck();
+            banner('脚步走远了', 1200);
+          }
+        }
+      }
+    }
+
+    /* 房间里踩到臭袜子：直接触发，不用按 F */
+    var it = roomSc.room.item;
+    if (it === 'sock' && !roomSc.taken && player.stun <= 0 &&
+        dist2(player.x, player.y, ROOM_ITEM.x, ROOM_ITEM.y) < (player.r + 9) * (player.r + 9)) {
+      roomSc.taken = true;
+      roomSc.room.taken = true;
+      player.stun = 2;
+      shake = 9; flash = 0.4; flashCol = '255,209,102';
+      banner('踩到臭袜子，惨叫引来了宿管', 1600);
+      sfxScream();
+      noise(player.x, player.y, 700);
+      burst(ROOM_ITEM.x, ROOM_ITEM.y, 10, '#8a7a4a');
+    }
+
+    /* 房间里的道具（臭袜子是地雷，不能拾取） */
+    var nearItem = it && it !== 'none' && it !== 'sock' && !roomSc.taken &&
+      dist2(player.x, player.y, ROOM_ITEM.x, ROOM_ITEM.y) < 52 * 52;
+    var nearDoor = dist2(player.x, player.y, ROOM_DOOR.x, ROOM_DOOR.y) < 46 * 46;
+
+    curTarget = null;
+    if (nearItem) {
+      curTarget = { type: 'item', label: 'F 拾取' + itemName(it) };
+    } else if (nearDoor) {
+      curTarget = { type: 'leave', label: 'F 返回走廊' };
+    }
+
+    if (fEdge && curTarget) {
+      fEdge = false;
+      if (curTarget.type === 'leave') { leaveRoom(); return; }
+      if (curTarget.type === 'item') { takeItem(it); }
+    }
+
+    fEdge = false;
+  }
+
+  function itemName(t) {
+    if (t === 'key') { return '钥匙'; }
+    if (t === 'laptop') { return '笔记本电脑'; }
+    if (t === 'basin') { return '脸盆'; }
+    if (t === 'sock') { return '臭袜子'; }
+    return '道具';
+  }
+
+  function takeItem(t) {
+    var rm = roomSc.room;
+    roomSc.taken = true;
+    rm.taken = true;
+    sfxPick();
+    burst(ROOM_ITEM.x, ROOM_ITEM.y, 12, '#ffd166');
+
+    if (t === 'key') {
+      player.keys++;
+      banner('拿到钥匙 · ' + player.keys + '/3', 1200);
+    } else if (t === 'laptop') {
+      player.speedMul *= 0.6;
+      player.shield++;
+      banner('笔记本：移速 -40%，可挡一次攻击', 1800);
+    } else if (t === 'basin') {
+      player.defMul = 0.5;
+      player.noiseMul *= 2;
+      banner('脸盆：伤害减半，脚步声翻倍', 1800);
+    }
+    updateHUD();
+  }
+
+  /* ============================================================
+     19. 更新：一楼（门禁）
+     ============================================================ */
+  function updateLobby(dt) {
+    var box = lobbySc.box;
+    var beforeX = player.x, beforeY = player.y;
+    movePlayer(dt, box.x0, box.y0, box.x1, box.y1, lobbySc.viaStairs);
+    updateParts(dt);
+
+    /* 走楼梯下来：极暗 + 每走一步扣 1 点体力 */
+    if (lobbySc.viaStairs) {
+      var moved = Math.sqrt(dist2(player.x, player.y, beforeX, beforeY));
+      lobbySc.stepAcc += moved;
+      while (lobbySc.stepAcc > 14) {
+        lobbySc.stepAcc -= 14;
+        player.st = Math.max(0, player.st - 1);
+      }
+    }
+
+    var nearGate = dist2(player.x, player.y, 450, box.y0 + 10) < 52 * 52;
+    curTarget = nearGate ? { type: 'gate', label: 'F 长按 5 秒开门禁' } : null;
+
+    if (nearGate && keys['f']) {
+      if (player.keys < NEED_KEY) {
+        if (!lobbySc.denied) {
+          lobbySc.denied = true;
+          banner('门禁需要 3 把钥匙', 1400);
+          sfxDeny();
+        }
+        holdT = 0; holdId = '';
+      } else {
+        lobbySc.denied = false;
+        holdId = 'gate';
+        holdT += dt;
+        if (holdT >= HOLD_GATE) { holdT = 0; holdId = ''; win(); return; }
+      }
+    } else {
+      lobbySc.denied = false;
+      holdT = 0; holdId = '';
+    }
+
+    fEdge = false;
+  }
+
+  /* ============================================================
+     20. 心跳音效（宿管越近越快）
+     ============================================================ */
+  function updateHeart(dt) {
+    var d = 9999;
+    for (var i = 0; i < sups.length; i++) {
+      var dd = Math.sqrt(dist2(sups[i].x, sups[i].y, player.x, player.y));
+      if (dd < d) { d = dd; }
+    }
+    if (scene !== 'corridor') { d = 9999; }
+
+    var bps;                                   /* 每秒心跳次数 */
+    if (d < 200) { bps = 2.0; }
+    else if (d < 380) { bps = 1.45; }
+    else if (d < 700) { bps = 0.95; }
+    else { bps = 0.6; }
+    for (var k = 0; k < sups.length; k++) {
+      if (sups[k].mode === 'chase') { bps = 2.4; break; }
+    }
+
+    heartAcc -= dt;
+    if (heartAcc <= 0) {
+      heartAcc = 1 / bps;
+      tone(56, 0.16, 0.28, 'sine', 38);
+    }
+  }
+
+  /* ============================================================
+     21. 主更新入口
+     ============================================================ */
+  function update(dt) {
+    playTime += dt;
+    if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) { elBanner.classList.remove('show'); } }
+    if (shake > 0) { shake *= Math.pow(0.02, dt); if (shake < 0.3) { shake = 0; } }
+    if (flash > 0) { flash -= dt * 1.8; if (flash < 0) { flash = 0; } }
+    if (player.inv > 0) { player.inv -= dt; }
+
+    if (scene === 'corridor') { updateCorridor(dt); }
+    else if (scene === 'room' && roomSc) { updateRoom(dt); }
+    else if (scene === 'lobby' && lobbySc) { updateLobby(dt); }
+
+    updateHeart(dt);
+    updateHUD();
+  }
+
+  /* ============================================================
+     22. 绘制工具
+     ============================================================ */
+  function fog(px, py, radius) {
+    var g = ctx.createRadialGradient(px, py, radius * 0.52, px, py, radius);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(0.62, 'rgba(0,0,0,.28)');
+    g.addColorStop(1, 'rgba(2,4,9,1)');
+    ctx.beginPath();
+    ctx.arc(px, py, radius, 0, Math.PI * 2);
+    ctx.fillStyle = g;
+    ctx.fill();
+
+    /* 圆之外的区域：纯黑 */
+    ctx.beginPath();
+    ctx.rect(0, 0, W, H);
+    ctx.arc(px, py, radius, 0, Math.PI * 2);
+    ctx.fillStyle = '#02040a';
+    ctx.fill('evenodd');
+  }
+
+  function screenFX() {
+    if (flash > 0.01) {
+      ctx.fillStyle = 'rgba(' + flashCol + ',' + (flash * 0.5).toFixed(3) + ')';
+      ctx.fillRect(0, 0, W, H);
+    }
+    /* 受伤 / 心跳边缘压暗 */
+    var vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.95);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(80,0,10,.28)');
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  function wallSegs(side, r, opens) {
+    var e0, e1, segs = [], i;
+    if (side === 'T' || side === 'B') { e0 = r.x0; e1 = r.x1; }
+    else { e0 = r.y0; e1 = r.y1; }
+    var list = [];
+    for (i = 0; i < opens.length; i++) { if (opens[i].s === side) { list.push(opens[i]); } }
+    list.sort(function (p, q) { return p.p0 - q.p0; });
+    var cur = e0;
+    for (i = 0; i < list.length; i++) {
+      var o = list[i];
+      if (o.p0 > cur) { segs.push([cur, Math.min(o.p0, e1)]); }
+      cur = Math.max(cur, o.p1);
+    }
+    if (cur < e1) { segs.push([cur, e1]); }
+    return segs;
+  }
+
+  function drawRoomBlock(rm) {
+    var r = rm.r;
+    ctx.fillStyle = '#070c15';
+    ctx.fillRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+    ctx.strokeStyle = 'rgba(58,76,105,.55)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(r.x0 + 1, r.y0 + 1, r.x1 - r.x0 - 2, r.y1 - r.y0 - 2);
+
+    ctx.fillStyle = 'rgba(120,150,190,.62)';
+    ctx.font = '700 10px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(rm.n, rm.cx, rm.cy);
+  }
+
+  function drawArea(a) {
+    var r = a.p;
+    var col = '#101725';
+    if (a.kind === 'stairs') { col = '#151d2b'; }
+    if (a.kind === 'elev') { col = '#1a2231'; }
+    if (a.kind === 'open') { col = '#0d141f'; }
+
+    ctx.fillStyle = col;
+    ctx.fillRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+
+    /* 地砖 */
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(90,130,180,.07)';
+    ctx.lineWidth = 1;
+    var x, y;
+    for (x = Math.ceil(Math.max(r.x0, camL) / 32) * 32; x < Math.min(r.x1, camR); x += 32) {
+      ctx.beginPath(); ctx.moveTo(x, r.y0); ctx.lineTo(x, r.y1); ctx.stroke();
+    }
+    for (y = Math.ceil(Math.max(r.y0, camT) / 32) * 32; y < Math.min(r.y1, camB); y += 32) {
+      ctx.beginPath(); ctx.moveTo(r.x0, y); ctx.lineTo(r.x1, y); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawWalls(a) {
+    var r = a.p, sides = ['T', 'B', 'L', 'R'], i, j, segs;
+    for (i = 0; i < 4; i++) {
+      segs = wallSegs(sides[i], r, a.opens);
+      for (j = 0; j < segs.length; j++) {
+        var s0 = segs[j][0], s1 = segs[j][1];
+        if (s1 - s0 < 2) { continue; }
+        ctx.lineWidth = 7;
+        ctx.strokeStyle = '#1b2536';
+        ctx.beginPath();
+        if (sides[i] === 'T') { ctx.moveTo(s0, r.y0); ctx.lineTo(s1, r.y0); }
+        else if (sides[i] === 'B') { ctx.moveTo(s0, r.y1); ctx.lineTo(s1, r.y1); }
+        else if (sides[i] === 'L') { ctx.moveTo(r.x0, s0); ctx.lineTo(r.x0, s1); }
+        else { ctx.moveTo(r.x1, s0); ctx.lineTo(r.x1, s1); }
+        ctx.stroke();
+
+        ctx.lineWidth = 1.6;
+        ctx.strokeStyle = 'rgba(79,156,249,.16)';
+        ctx.stroke();
+      }
+    }
+  }
+
+  function drawDoor(rm) {
+    if (!rm.door) { return; }
+    var d = rm.door;
+    var open = rm.item === 'key' && !rm.taken;
+
+    if (open) {
+      var g = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, 46);
+      g.addColorStop(0, 'rgba(255,209,102,.42)');
+      g.addColorStop(1, 'rgba(255,209,102,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, 46, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.strokeStyle = open ? '#ffd166' : 'rgba(120,150,190,.75)';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    if (d.side === 'T' || d.side === 'B') {
+      ctx.moveTo(d.x - 10, d.y); ctx.lineTo(d.x + 10, d.y);
+    } else {
+      ctx.moveTo(d.x, d.y - 10); ctx.lineTo(d.x, d.y + 10);
+    }
+    ctx.stroke();
+  }
+
+  function drawFac(f) {
+    var r = f.p, cx = f.cx, cy = f.cy;
+
+    if (f.t === 'stairs') {
+      ctx.fillStyle = '#182234';
+      ctx.fillRect(r.x0 + 4, r.y0 + 4, r.x1 - r.x0 - 8, r.y1 - r.y0 - 8);
+      ctx.strokeStyle = 'rgba(160,190,230,.5)';
+      ctx.lineWidth = 1.5;
+      for (var i = 0; i < 6; i++) {
+        var yy = r.y0 + 8 + i * ((r.y1 - r.y0 - 16) / 6);
+        ctx.beginPath();
+        ctx.moveTo(r.x0 + 8, yy);
+        ctx.lineTo(r.x1 - 8, yy);
+        ctx.stroke();
+      }
+      label(cx, cy, '楼梯');
+    } else if (f.t === 'elev') {
+      ctx.fillStyle = '#202a3c';
+      ctx.fillRect(r.x0 + 3, r.y0 + 3, r.x1 - r.x0 - 6, r.y1 - r.y0 - 6);
+      ctx.strokeStyle = 'rgba(255,209,102,.6)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, r.y0 + 6); ctx.lineTo(cx, r.y1 - 6);
+      ctx.stroke();
+      label(cx, cy, '电梯');
+    } else if (f.t === 'exit') {
+      ctx.fillStyle = 'rgba(32,120,80,.9)';
+      ctx.fillRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+      ctx.fillStyle = '#d8ffe9';
+      ctx.font = '700 9px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('出口', cx, cy);
+    }
+  }
+
+  function label(x, y, text) {
+    ctx.fillStyle = 'rgba(190,215,245,.8)';
+    ctx.font = '700 10px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x, y + 18);
+  }
+
+  function drawPlayer() {
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2);
+    ctx.fillStyle = player.inv > 0 && Math.floor(player.inv * 12) % 2 === 0 ? '#ffb3b3' : '#cfe6ff';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#4f9cf9';
+    ctx.stroke();
+
+    /* 朝向 */
+    ctx.beginPath();
+    ctx.moveTo(player.x, player.y);
+    ctx.lineTo(player.x + player.fx * (player.r + 7), player.y + player.fy * (player.r + 7));
+    ctx.strokeStyle = 'rgba(159,224,255,.9)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    if (player.stun > 0) {
+      ctx.fillStyle = '#ffd166';
+      ctx.font = '700 11px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('眩晕', player.x, player.y - 18);
+    }
+    if (player.shield > 0) {
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, player.r + 6, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(120,220,255,.7)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  }
+
+  function drawSup(s) {
+    /* 手电筒 */
+    var RANGE = 250, HALF = 0.58;
+    var g = ctx.createRadialGradient(s.x, s.y, 8, s.x, s.y, RANGE);
+    g.addColorStop(0, 'rgba(255,238,170,.26)');
+    g.addColorStop(0.7, 'rgba(255,232,150,.10)');
+    g.addColorStop(1, 'rgba(255,232,150,0)');
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y);
+    ctx.arc(s.x, s.y, RANGE, s.ang - HALF, s.ang + HALF);
+    ctx.closePath();
+    ctx.fillStyle = g;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fillStyle = s.mode === 'chase' ? '#ff5d5d' : '#c9534b';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255,180,170,.9)';
+    ctx.stroke();
+
+    if (s.mode === 'chase') {
+      ctx.fillStyle = '#ff5d5d';
+      ctx.font = '700 14px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('!', s.x, s.y - 20);
+    }
+  }
+
+  function drawParts() {
+    for (var i = 0; i < parts.length; i++) {
+      var p = parts[i];
+      ctx.globalAlpha = Math.max(0, 1 - p.t / p.life);
+      ctx.fillStyle = p.c;
+      ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* ============================================================
+     23. 绘制：走廊
+     ============================================================ */
+  function drawCorridor() {
+    var i, r;
+
+    var shx = 0, shy = 0;
+    if (shake > 0.3) {
+      shx = (Math.random() - 0.5) * shake;
+      shy = (Math.random() - 0.5) * shake;
+    }
+    camL = camX - W / 2 + shx;
+    camT = camY - H / 2 + shy;
+    camR = camL + W;
+    camB = camT + H;
+
+    ctx.setTransform(UNIT, 0, 0, UNIT, 0, 0);
+    ctx.fillStyle = '#02040a';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.save();
+    ctx.translate(-camL, -camT);
+
+    /* 宿舍方块 */
+    for (i = 0; i < rooms.length; i++) {
+      r = rooms[i].r;
+      if (r.x1 < camL - 60 || r.x0 > camR + 60 || r.y1 < camT - 60 || r.y0 > camB + 60) { continue; }
+      drawRoomBlock(rooms[i]);
+    }
+
+    /* 走廊地面 */
+    for (i = 0; i < areas.length; i++) {
+      r = areas[i].p;
+      if (r.x1 < camL - 60 || r.x0 > camR + 60 || r.y1 < camT - 60 || r.y0 > camB + 60) { continue; }
+      drawArea(areas[i]);
+    }
+
+    /* 墙体 */
+    for (i = 0; i < areas.length; i++) {
+      r = areas[i].p;
+      if (r.x1 < camL - 60 || r.x0 > camR + 60 || r.y1 < camT - 60 || r.y0 > camB + 60) { continue; }
+      drawWalls(areas[i]);
+    }
+
+    /* 房门 */
+    for (i = 0; i < rooms.length; i++) {
+      r = rooms[i].r;
+      if (r.x1 < camL - 60 || r.x0 > camR + 60 || r.y1 < camT - 60 || r.y0 > camB + 60) { continue; }
+      drawDoor(rooms[i]);
+    }
+
+    /* 设施 */
+    for (i = 0; i < facs.length; i++) {
+      r = facs[i].p;
+      if (r.x1 < camL - 60 || r.x0 > camR + 60 || r.y1 < camT - 60 || r.y0 > camB + 60) { continue; }
+      drawFac(facs[i]);
+    }
+
+    /* 地上的臭袜子 */
+    for (i = 0; i < traps.length; i++) {
+      if (traps[i].dead) { continue; }
+      ctx.beginPath();
+      ctx.arc(traps[i].x, traps[i].y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#3a3226';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(140,120,80,.5)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    drawParts();
+    for (i = 0; i < sups.length; i++) { drawSup(sups[i]); }
+    drawPlayer();
+
+    ctx.restore();
+
+    /* 迷雾 */
+    var psx = player.x - camL, psy = player.y - camT;
+    fog(psx, psy, FOG_R);
+    screenFX();
+    drawPrompt(psx, psy);
+  }
+
+  function drawPrompt(psx, psy) {
+    if (state !== 'playing' || !curTarget) { return; }
+    ctx.font = '700 13px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    var w = ctx.measureText(curTarget.label).width + 20;
+    ctx.fillStyle = 'rgba(8,14,24,.82)';
+    ctx.fillRect(psx - w / 2, psy - 52, w, 22);
+    ctx.fillStyle = '#ffd166';
+    ctx.fillText(curTarget.label, psx, psy - 41);
+
+    if (holdT > 0 && holdId) {
+      var need = (curTarget.type === 'gate') ? HOLD_GATE : HOLD_ELEV;
+      var p = clamp(holdT / need, 0, 1);
+      ctx.fillStyle = 'rgba(255,255,255,.2)';
+      ctx.fillRect(psx - 40, psy - 26, 80, 6);
+      ctx.fillStyle = '#ffd166';
+      ctx.fillRect(psx - 40, psy - 26, 80 * p, 6);
+    }
+  }
+
+  /* ============================================================
+     24. 绘制：宿舍内部
+     ============================================================ */
+  function drawRoom() {
+    var box = roomSc.box;
+    ctx.setTransform(UNIT, 0, 0, UNIT, 0, 0);
+    ctx.fillStyle = '#02040a';
+    ctx.fillRect(0, 0, W, H);
+
+    /* 房间地面（长方形六人寝） */
+    ctx.fillStyle = '#0a1019';
+    ctx.fillRect(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(90,130,180,.08)';
+    ctx.lineWidth = 1;
+    for (var x = box.x0; x < box.x1; x += 32) {
+      ctx.beginPath(); ctx.moveTo(x, box.y0); ctx.lineTo(x, box.y1); ctx.stroke();
+    }
+    for (var y = box.y0; y < box.y1; y += 32) {
+      ctx.beginPath(); ctx.moveTo(box.x0, y); ctx.lineTo(box.x1, y); ctx.stroke();
+    }
+    ctx.restore();
+
+    /* 墙 */
+    ctx.lineWidth = 8;
+    ctx.strokeStyle = '#1b2536';
+    ctx.strokeRect(box.x0 + 4, box.y0 + 4, box.x1 - box.x0 - 8, box.y1 - box.y0 - 8);
+    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = 'rgba(79,156,249,.18)';
+    ctx.strokeRect(box.x0 + 4, box.y0 + 4, box.x1 - box.x0 - 8, box.y1 - box.y0 - 8);
+
+    /* 家具：三张上下铺、并排四座长桌 + 另一边两座、门口六人柜 */
+    drawBunks();
+    drawDesks();
+    drawCabinet();
+
+    /* 门口 */
+    ctx.strokeStyle = 'rgba(255,209,102,.8)';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(ROOM_DOOR.x - 40, box.y1); ctx.lineTo(ROOM_DOOR.x + 40, box.y1);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,209,102,.55)';
+    ctx.font = '700 11px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('门', ROOM_DOOR.x, box.y1 - 16);
+
+    /* 房间号 */
+    ctx.fillStyle = 'rgba(120,150,190,.55)';
+    ctx.font = '700 15px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(roomSc.room.n, (box.x0 + box.x1) / 2, box.y0 + 26);
+
+    /* 道具（臭袜子踩到就没了） */
+    var it = roomSc.room.item;
+    if (it && it !== 'none' && !roomSc.taken) {
+      drawItemIcon(it, ROOM_ITEM.x, ROOM_ITEM.y);
+    }
+
+    /* 宿管的手电扫视（只有真在查寝时才会有） */
+    if (roomSc.arrived) { drawBeam(); }
+
+    drawParts();
+    drawPlayer();
+
+    fog(player.x, player.y, FOG_ROOM);
+    screenFX();
+    drawPrompt(player.x, player.y);
+
+    if (roomSc.checking && !roomSc.arrived) {
+      ctx.fillStyle = 'rgba(255,209,102,.75)';
+      ctx.font = '700 13px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('门外有脚步声', W / 2, H - 26);
+    }
+  }
+
+  /* 三张竖放的上铺：床架 + 床垫 + 枕头 + 被子 + 靠房间内侧的梯子 */
+  function drawBunks() {
+    for (var i = 0; i < BUNK.length; i++) {
+      var b = BUNK[i];
+      var w = b.x1 - b.x0, h = b.y1 - b.y0;
+
+      /* 床架 */
+      ctx.fillStyle = '#16202e';
+      ctx.fillRect(b.x0, b.y0, w, h);
+      ctx.strokeStyle = 'rgba(120,150,190,.45)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(b.x0 + 1, b.y0 + 1, w - 2, h - 2);
+
+      /* 上铺床垫 */
+      ctx.fillStyle = 'rgba(79,156,249,.18)';
+      ctx.fillRect(b.x0 + 6, b.y0 + 6, w - 12, h - 12);
+
+      /* 枕头（靠床头一端） */
+      ctx.fillStyle = 'rgba(196,220,248,.55)';
+      ctx.fillRect(b.x0 + 10, b.y0 + 12, w - 20, 22);
+
+      /* 被子 */
+      ctx.fillStyle = 'rgba(79,156,249,.32)';
+      ctx.fillRect(b.x0 + 10, b.y0 + 42, w - 20, h - 54);
+
+      /* 梯子：放在朝房间中央的一侧 */
+      var ladX = (b.x0 > 450) ? b.x0 + 3 : b.x1 - 3;
+      ctx.strokeStyle = 'rgba(160,190,230,.5)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(ladX, b.y0 + 14);
+      ctx.lineTo(ladX, b.y1 - 14);
+      ctx.stroke();
+      for (var r = 0; r < 5; r++) {
+        var ly = b.y0 + 18 + r * ((h - 36) / 5);
+        ctx.beginPath();
+        ctx.moveTo(ladX - 5, ly);
+        ctx.lineTo(ladX + 5, ly);
+        ctx.stroke();
+      }
+    }
+  }
+
+  /* 桌子：靠左墙的并排四座长桌 + 另一边靠右墙的两座 */
+  function drawDesks() {
+    drawDesk(DESK4, 4, 'R');
+    drawDesk(DESK2, 2, 'L');
+  }
+
+  function drawDesk(d, count, seatSide) {
+    var w = d.x1 - d.x0, h = d.y1 - d.y0;
+
+    /* 桌面 */
+    ctx.fillStyle = '#1c2736';
+    ctx.fillRect(d.x0, d.y0, w, h);
+    ctx.strokeStyle = 'rgba(150,180,220,.45)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(d.x0 + 1, d.y0 + 1, w - 2, h - 2);
+    /* 桌面高光 */
+    ctx.fillStyle = 'rgba(255,209,102,.10)';
+    ctx.fillRect(d.x0 + 5, d.y0 + 5, w - 10, 5);
+
+    /* 座位 */
+    var horiz = w >= h;
+    for (var i = 0; i < count; i++) {
+      var cx, cy;
+      if (horiz) {
+        cx = d.x0 + w * (i + 0.5) / count;
+        cy = (seatSide === 'B') ? d.y1 + 15 : d.y0 - 15;
+      } else {
+        cy = d.y0 + h * (i + 0.5) / count;
+        cx = (seatSide === 'R') ? d.x1 + 15 : d.x0 - 15;
+      }
+      ctx.beginPath();
+      ctx.arc(cx, cy, 8, 0, Math.PI * 2);
+      ctx.fillStyle = '#26344a';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(160,190,230,.45)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  }
+
+  /* 贴左墙的六人柜：2 列 × 3 行 = 6 格 */
+  function drawCabinet() {
+    var c = CABINET;
+    var w = c.x1 - c.x0, h = c.y1 - c.y0;
+
+    ctx.fillStyle = '#1a2434';
+    ctx.fillRect(c.x0, c.y0, w, h);
+    ctx.strokeStyle = 'rgba(150,180,220,.5)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(c.x0 + 1, c.y0 + 1, w - 2, h - 2);
+
+    ctx.strokeStyle = 'rgba(150,180,220,.35)';
+    ctx.lineWidth = 1;
+    var cw = w / 2, ch = h / 3, i;
+    for (i = 1; i < 2; i++) {
+      ctx.beginPath();
+      ctx.moveTo(c.x0 + i * cw, c.y0 + 3);
+      ctx.lineTo(c.x0 + i * cw, c.y1 - 3);
+      ctx.stroke();
+    }
+    for (i = 1; i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(c.x0 + 3, c.y0 + i * ch);
+      ctx.lineTo(c.x1 - 3, c.y0 + i * ch);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = 'rgba(190,215,245,.5)';
+    ctx.font = '700 9px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('柜子', (c.x0 + c.x1) / 2, c.y0 - 9);
+  }
+
+  /* 手电扫视的角度（以门为圆心，向上扫 ±46°） */
+  function beamAngle(t) {
+    return -Math.PI / 2 + Math.sin(t * 2.0) * 0.8;
+  }
+
+  /* 玩家是否站在光柱里 */
+  function inBeam(px, py, ang) {
+    var dx = px - ROOM_DOOR.x, dy = py - ROOM_DOOR.y;
+    var d = Math.sqrt(dx * dx + dy * dy);
+    if (d > 340 || d < 1) { return false; }
+    var a = Math.atan2(dy, dx);
+    var diff = Math.abs(((a - ang + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+    return diff < 0.42;
+  }
+
+  function drawBeam() {
+    var ang = beamAngle(roomSc.scanT);
+    var g = ctx.createRadialGradient(ROOM_DOOR.x, ROOM_DOOR.y, 10,
+                                     ROOM_DOOR.x, ROOM_DOOR.y, 340);
+    g.addColorStop(0, 'rgba(255,238,170,.30)');
+    g.addColorStop(0.75, 'rgba(255,232,150,.13)');
+    g.addColorStop(1, 'rgba(255,232,150,0)');
+    ctx.beginPath();
+    ctx.moveTo(ROOM_DOOR.x, ROOM_DOOR.y);
+    ctx.arc(ROOM_DOOR.x, ROOM_DOOR.y, 340, ang - 0.42, ang + 0.42);
+    ctx.closePath();
+    ctx.fillStyle = g;
+    ctx.fill();
+  }
+
+  function drawItemIcon(t, x, y) {
+    if (t === 'key') {
+      var g = ctx.createRadialGradient(x, y, 0, x, y, 40);
+      g.addColorStop(0, 'rgba(255,209,102,.5)');
+      g.addColorStop(1, 'rgba(255,209,102,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, y, 40, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#ffd166';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(x - 10, y, 8, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x - 2, y); ctx.lineTo(x + 16, y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x + 10, y); ctx.lineTo(x + 10, y + 7); ctx.stroke();
+    } else if (t === 'laptop') {
+      ctx.fillStyle = '#3d4a60';
+      ctx.fillRect(x - 18, y - 12, 36, 22);
+      ctx.fillStyle = '#9fe0ff';
+      ctx.fillRect(x - 14, y - 8, 28, 14);
+      ctx.fillStyle = '#2a3344';
+      ctx.fillRect(x - 20, y + 10, 40, 4);
+    } else if (t === 'basin') {
+      ctx.beginPath();
+      ctx.arc(x, y, 16, 0, Math.PI * 2);
+      ctx.fillStyle = '#5a6f8f';
+      ctx.fill();
+      ctx.strokeStyle = '#cfe0f7';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(x, y, 7, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(207,224,247,.5)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    } else if (t === 'sock') {
+      ctx.fillStyle = '#3a3226';
+      ctx.beginPath();
+      ctx.ellipse(x, y, 12, 8, 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(140,120,80,.6)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  }
+
+  /* ============================================================
+     25. 绘制：一楼门禁
+     ============================================================ */
+  function drawLobby() {
+    var box = lobbySc.box;
+    ctx.setTransform(UNIT, 0, 0, UNIT, 0, 0);
+    ctx.fillStyle = '#02040a';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = '#0b1220';
+    ctx.fillRect(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(90,130,180,.08)';
+    ctx.lineWidth = 1;
+    for (var x = box.x0; x < box.x1; x += 32) {
+      ctx.beginPath(); ctx.moveTo(x, box.y0); ctx.lineTo(x, box.y1); ctx.stroke();
+    }
+    for (var y = box.y0; y < box.y1; y += 32) {
+      ctx.beginPath(); ctx.moveTo(box.x0, y); ctx.lineTo(box.x1, y); ctx.stroke();
+    }
+    ctx.restore();
+
+    ctx.lineWidth = 8;
+    ctx.strokeStyle = '#1b2536';
+    ctx.strokeRect(box.x0 + 4, box.y0 + 4, box.x1 - box.x0 - 8, box.y1 - box.y0 - 8);
+
+    /* 门禁 */
+    ctx.fillStyle = 'rgba(32,120,80,.85)';
+    ctx.fillRect(box.x0 + 4, box.y0 + 4, 170, 10);
+    ctx.fillRect(box.x0 + 276, box.y0 + 4, 170, 10);
+    ctx.strokeStyle = '#ffd166';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(410, box.y0); ctx.lineTo(490, box.y0);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,209,102,.75)';
+    ctx.font = '700 12px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('门禁 · 长按 F', 450, box.y0 + 30);
+
+    drawParts();
+    drawPlayer();
+
+    fog(player.x, player.y, lobbySc.viaStairs ? FOG_STAIR : FOG_ROOM);
+    screenFX();
+    drawPrompt(player.x, player.y);
+  }
+
+  /* ============================================================
+     26. 主循环
+     ============================================================ */
+  function draw() {
+    if (scene === 'room' && roomSc) { drawRoom(); return; }
+    if (scene === 'lobby' && lobbySc) { drawLobby(); return; }
+    drawCorridor();
+  }
+
+  function tick(ts) {
+    var now = ts / 1000;
+    if (!last) { last = now; }
+    var dt = Math.min(0.05, Math.max(0, now - last));
+    last = now;
+    if (state === 'playing') { update(dt); }
+    draw();
+  }
+  function loop(ts) { tick(ts); requestAnimationFrame(loop); }
+
+  /* ============================================================
+     27. 启动
+     ============================================================ */
+  document.getElementById('startBtn').addEventListener('click', start);
+  document.getElementById('retryBtn').addEventListener('click', start);
+  document.getElementById('winBtn').addEventListener('click', start);
+
+  reset();                                  /* 先准备好世界，开场画面背后就是真实地图 */
+
+  if (isTouchOnlyDevice()) {
+    document.getElementById('mobile').classList.remove('hidden');
+    /* 不启动主循环：这台设备只能看拦截面板 */
+  } else {
+    requestAnimationFrame(loop);
+  }
+})();
+</script>
+</body>
+</html>
