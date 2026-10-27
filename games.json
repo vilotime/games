@@ -3,14 +3,22 @@
   "site": {"name":"叶初小游戏","dir":"proF/","homepage":"proF/主页.html","repo":"https://github.com/vilotime/vilotime.github.io","pagesUrl":"https://vilotime.github.io/"},
   "categories": [
     {
+      "key": "casual",
+      "icon": "🧩",
+      "name": "休闲",
+      "games": [
+        {"file":"proF/叶初的鱼塘.html","name":"叶初的鱼塘","icon":"🐟","desc":"夜闯老宅 · 抢钥匙逃出鱼塘","pcOnly":true,"c1":"#2b8a7a","c2":"#124a44"},
+        {"file":"proF/俄罗斯方块.html","name":"方块风暴","icon":"🧩","desc":"消行冲分 · 幽灵落点","pcOnly":false,"c1":"#c04bd8","c2":"#6d2280"},
+        {"file":"proF/叶初打飞机.html","name":"星海突击","icon":"✈️","desc":"竖版弹幕 · 闪避走位","pcOnly":false,"c1":"#4f6bd8","c2":"#24307a"}
+      ]
+    },
+    {
       "key": "football",
       "icon": "⚽",
       "name": "足球",
       "games": [
         {"file":"proF/11人足球.html","name":"绿茵足球","icon":"🏟️","desc":"11 v 11 全场 · 手机可观战","pcOnly":false,"c1":"#2f9e6a","c2":"#14663f"},
-        {"file":"proF/玩家对战足球.html","name":"桌上足球 · 对战","icon":"⚔️","desc":"同机双人 · 键盘对决","pcOnly":true,"c1":"#3d7ff0","c2":"#2347a8"},
-        {"file":"proF/双人足球.html","name":"桌上足球 · 人机","icon":"🤖","desc":"单挑 AI · 卡线抢射","pcOnly":false,"c1":"#14a3b8","c2":"#0d6b7d"},
-        {"file":"proF/人机对战足球.html","name":"桌上足球 · 观战","icon":"👀","desc":"AI 对 AI · 自动对攻","pcOnly":false,"c1":"#8b5cf6","c2":"#5b2fb0"},
+        {"file":"proF/桌上足球.html","name":"桌上足球","icon":"⚔️","desc":"同机对战 / 单挑 AI / 观战 · 开局选模式","pcOnly":false,"c1":"#3d7ff0","c2":"#2347a8"},
         {"file":"proF/任意球练习.html","name":"点球大师","icon":"🥅","desc":"选角度 · 预判扑救点位","pcOnly":false,"c1":"#f0913f","c2":"#b35b12"}
       ]
     },
@@ -19,19 +27,8 @@
       "icon": "🎯",
       "name": "射击",
       "games": [
-        {"file":"proF/CS平面版.html","name":"CS 平面战场","icon":"🎯","desc":"俯视 1v1 · 20 血对决","pcOnly":true,"c1":"#4a6fa5","c2":"#22344f"},
-        {"file":"proF/CS秘密行动.html","name":"CS 秘密行动","icon":"🔫","desc":"一波波清剿 · 战术走位","pcOnly":true,"c1":"#6b7a3a","c2":"#3a4520"},
-        {"file":"proF/叶初打飞机.html","name":"星海突击","icon":"✈️","desc":"竖版弹幕 · 闪避走位","pcOnly":false,"c1":"#4f6bd8","c2":"#24307a"},
-        {"file":"proF/CS观战.html","name":"CS 观战","icon":"👀","desc":"AI 对 AI · 手机也能看","pcOnly":false,"c1":"#6d8bb8","c2":"#32445e"}
-      ]
-    },
-    {
-      "key": "casual",
-      "icon": "🧩",
-      "name": "休闲",
-      "games": [
-        {"file":"proF/俄罗斯方块.html","name":"方块风暴","icon":"🧩","desc":"消行冲分 · 幽灵落点","pcOnly":false,"c1":"#c04bd8","c2":"#6d2280"},
-        {"file":"proF/叶初的鱼塘.html","name":"叶初的鱼塘","icon":"🐟","desc":"夜闯老宅 · 抢钥匙逃出鱼塘","pcOnly":true,"c1":"#2b8a7a","c2":"#124a44"}
+        {"file":"proF/CS战场.html","name":"CS 战场","icon":"🎯","desc":"平面对枪 / 观战 · 开局选模式","pcOnly":false,"c1":"#4a6fa5","c2":"#22344f"},
+        {"file":"proF/CS秘密行动.html","name":"CS 秘密行动","icon":"🔫","desc":"一波波清剿 · 战术走位","pcOnly":true,"c1":"#6b7a3a","c2":"#3a4520"}
       ]
     }
   ]

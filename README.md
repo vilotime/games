@@ -16,15 +16,22 @@
 ├─ games.json           ★ 游戏清单（唯一数据源，加游戏只改这里）
 ├─ games.js             清单渲染器：读 json → 主页卡片 + 侧栏入口 + 数量
 ├─ tools/
-│  └─ export-games.js   校验 json + 同步静态兜底 HTML（可选命令）
+│  ├─ export-games.js   校验 json + 同步静态兜底 HTML（也负责改各处数量）
+│  ├─ dev.js            本地预览服务器（走 http，json 实时生效 + 监听自动同步）
+│  ├─ sync.ps1          一键同步：node tools/export-games.js 的 Powershell 包装
+│  └─ sync.cmd          双击运行上面那个 ps1（自带执行策略放行）
 ├─ ui/                  ★ 游戏 UI 库（可整包复制给别的项目，见 ui/README.md）
 ├─ proF/                各游戏页面 + 主页卡片页
 │  ├─ 主页.html         iframe 里显示的游戏墙
-│  └─ *.html            11 个游戏，每个一个文件
+│  └─ *.html            8 款游戏 / 入口页，每个一个文件
 ├─ pack/                ★ 对外制作包：压成 zip 发给合作者（见 AI辅助编程说明.md）
+├─ assets/              站点图标与分享图（只被 index.html 的 <head> 引用）
+│  ├─ favicon.png       浏览器标签页图标 64×64
+│  ├─ apple-touch-icon.png  iOS 主屏幕图标 180×180
+│  ├─ share-square.png  分享卡片缩略图 500×500（og:image，微信会裁成正方形）
+│  └─ cover.png         横版分享缩略图 1200×630（twitter:image）
 ├─ AI辅助编程说明.md     邀请别人用 AI 做游戏的流程、两种提示词写法、收包验收
 ├─ README.md            本文件
-├─ favicon.png / apple-touch-icon.png / cover.png
 ```
 
 ## 加一款游戏
@@ -87,24 +94,79 @@ YCGames.load('./games.json').then(function (ds) {
 });
 ```
 
-## 静态兜底 + 校验
+## `games.json` 的同步策略
 
-`proF/主页.html` 的 `<div id="gamesRoot">` 与 `index.html` 的 `<nav id="nav">` 里各有一段被
-`games:start/end`、`nav:start/end` 包住的标记区域，是 `games.json` 的静态副本（无 JS / 无网络时用）。
-下面的命令会用同一套 `games.js` 生成器重写它，并校验 json（id 重复、文件缺失、颜色格式、
-拼错字段名、`file` 用反斜杠等）：
+**`games.json` 是唯一数据源**，主页卡片、侧栏入口、分类数量、游戏总数全部由它派生，HTML 里不再手动维护。
+但页面有**两套渲染路径**，改完 json 之后"能不能立刻看到"取决于你用的是哪一套：
+
+| 路径 | 什么时候生效 | 数据来自 |
+|---|---|---|
+| **运行时渲染** | 用 `http(s)` 打开时（线上、或本地 `tools/dev.js`） | `fetch('games.json')` → `games.js` 现场生成卡片 / 侧栏 / 数量 |
+| **静态兜底** | 无 JS、断网，或**双击 `file://` 打开**（`fetch` 被 CORS 拦） | HTML 里由脚本预先写好的副本 |
+
+### 会被同步的 4 个位置
+
+| 位置 | 由谁维护 |
+|---|---|
+| `proF/主页.html` 的 `<!-- games:start -->` … `<!-- games:end -->`（全部卡片） | `tools/export-games.js` 整段重写 |
+| `index.html` 的 `<!-- nav:start -->` … `<!-- nav:end -->`（侧栏入口） | 同上 |
+| `proF/主页.html` 顶部「共 `data-game-total` 款」 | 同上，单独重写数字 |
+| `index.html` 侧栏「`data-game-count` 款」 | 同上，单独重写数字 |
+
+分类数量 `<span class="num" data-game-cat="football">` 在卡片区块内部，跟着一起重写。
+
+### 三种场景该怎么做
+
+| 你怎么用 | 改了 `games.json` 之后 |
+|---|---|
+| **线上（GitHub Pages）** | 提交推送 → 等部署 → `Ctrl + F5`。**不用跑任何脚本**，页面自己 fetch 新 json |
+| **本地 http 预览** | 跑 `node tools/dev.js`，浏览器开 `http://127.0.0.1:8080/index.html`；保存 json 会自动同步兜底，`Ctrl + R` 就能看到 |
+| **本地双击 `index.html`** | `fetch` 被 CORS 拦，页面走静态兜底 —— **必须双击 `tools\sync.cmd` 同步一次**，否则看到的还是旧内容 |
+
+> 双击打开时如果忘了同步，控制台会打印
+> `[games.json] 读取失败，页面正在使用 HTML 静态兜底：…`，看到这句就是"该跑同步了"。
+
+### 命令
 
 ```bash
-node tools/export-games.js           # 校验 + 同步静态兜底
-node tools/export-games.js --check   # 只校验，不写文件
+node tools/export-games.js           # 校验 json + 重写静态兜底和数量
+node tools/export-games.js --check   # 只检查，不写文件（CI / 提交前用）
+node tools/dev.js                    # 本地 http 预览（启动前自动同步 + 监听 json 自动同步）
+powershell -File tools/sync.ps1      # 上面第一条的 PowerShell 包装，跑完停住看结果
 ```
 
-**自动填数量**的三种属性（静态兜底里已写好）：
+`tools/export-games.js` 除了同步，还会校验 json：`id` 重复、`file` 指向的文件不存在、
+颜色不是 hex、`pcOnly` 类型不对、字段名拼错、`file` 用了反斜杠等，有问题会逐条打印。
+
+### Windows 一键：双击 `tools\sync.cmd`
+
+不想开终端的话，直接进 `tools` 文件夹**双击 `sync.cmd`**：
+
+1. 它会自动找到仓库根目录（按脚本自身位置算，从哪双击都行）；
+2. 先打印 json 现状（几款游戏、每个分类几款）；
+3. 跑同步，打印 `[完成] 用时 xx ms`；
+4. **停在窗口里等你按回车**，所以能看清结果，不会一闪而过。
+
+为什么给的是 `.cmd` 而不是让你双击 `.ps1`：
+
+- `.ps1` 双击默认会被**记事本打开**，或者被执行策略拦下来报"无法加载文件"；
+- `sync.cmd` 里用 `-ExecutionPolicy Bypass` 临时放行，并且优先用 PowerShell 7（`pwsh.exe`）、没有就退回系统自带的 5.1，两种机器都能跑。
+
+想在双击的基础上加参数，就开一个 PowerShell 窗口手动跑：
+
+```powershell
+.\tools\sync.ps1              # 同步（跑完停住）
+.\tools\sync.ps1 -Check       # 只检查
+.\tools\sync.ps1 -Serve       # 同步完顺手起本地预览
+.\tools\sync.ps1 -NoPause     # 跑完不停留（给脚本调用）
+```
+
+**自动填数量**用的三种属性（静态兜底里已经写好，运行时由 `applyCounts()` 更新）：
 
 ```html
-<span data-game-total>11</span>               <!-- 只写数字 -->
-<span class="brand-sub" data-game-count>11 款</span>
-<span class="num" data-game-cat="football">5 款</span>   <!-- 按分类 key -->
+<b data-game-total>8</b>                          <!-- 只写数字 -->
+<span class="brand-sub" data-game-count>8 款</span>
+<span class="num" data-game-cat="football">3 款</span>   <!-- 按分类 key -->
 ```
 
 ## 游戏页面约定
@@ -118,5 +180,13 @@ node tools/export-games.js --check   # 只校验，不写文件
 
 ## 本地调试
 
-直接双击 `index.html` 即可（`file://` 下 json 读不到时会走静态兜底，页面不会空）。
-线上改动记得强刷 `Ctrl + F5`。
+**推荐用 http 打开**（和线上行为一致，改 json 立刻生效）：
+
+```bash
+node tools/dev.js        # 自动打开 http://127.0.0.1:8080/index.html，并监听 games.json
+```
+
+双击 `index.html` 也能开（`file://`），但此时 json 读不到、页面走静态兜底 —— 改了 `games.json`
+要先**双击 `tools\sync.cmd`**（或跑 `node tools/export-games.js`）才会看到变化；`sync.cmd` 跑完会停在窗口里，方便看结果。
+
+线上改动记得强刷 `Ctrl + F5`；`games.json` 的请求本身带了 `cache: 'no-cache'`，但 HTML 会被浏览器缓存。

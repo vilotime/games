@@ -119,12 +119,20 @@
   /* 拉取并展开 games.json */
   function load(url) {
     if (typeof fetch !== 'function') { return Promise.reject(new Error('fetch unsupported')); }
-    return fetch(url || './games.json', { cache: 'no-cache' })
+    var u = url || './games.json';
+    return fetch(u, { cache: 'no-cache' })
       .then(function (r) {
         if (!r.ok) { throw new Error('HTTP ' + r.status); }
         return r.json();
       })
-      .then(parse);
+      .then(parse)
+      .catch(function (err) {
+        /* 读不到 json 时页面会退回 HTML 里的静态兜底（改 json 不会立刻生效）——把原因打进控制台，免得以为没生效 */
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn('[games.json] 读取失败，页面正在使用 HTML 静态兜底：' + u + '（' + (err && err.message ? err.message : err) + '）');
+        }
+        throw err;
+      });
   }
 
   /* ---------------- 标记生成（浏览器 + 构建脚本共用） ---------------- */

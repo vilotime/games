@@ -129,20 +129,47 @@ const rNav = replaceRegion('index.html', 'nav:start', 'nav:end', navBody);
 if (!rHome.ok) { fail('proF/主页.html：' + rHome.why); }
 if (!rNav.ok) { fail('index.html：' + rNav.why); }
 
+/* ---------------- 同步标记区间外的静态数字 ----------------
+ * 卡片和侧栏入口都在标记区间里（上面已整段替换），但：
+ *   · proF/主页.html 顶部的「共 <b data-game-total>N</b> 款」
+ *   · index.html 侧栏的「<span data-game-count>N 款</span>」
+ * 都在区间之外，不单独改的话，断网 / 禁用 JS / file:// 直开时会显示旧数字。 */
+function syncNumbers(file, rules) {
+  const abs = path.join(root, file);
+  if (!fs.existsSync(abs)) { return { ok: false, why: '文件不存在' }; }
+  let src = fs.readFileSync(abs, 'utf8');
+  const before = src;
+  rules.forEach(r => { src = src.replace(r.re, r.rep); });
+  if (src === before) { return { ok: true, changed: false }; }
+  if (!CHECK_ONLY) { fs.writeFileSync(abs, src, 'utf8'); }
+  return { ok: true, changed: true };
+}
+
+const rNumHome = syncNumbers('proF/主页.html', [
+  { re: /(<b[^>]*data-game-total[^>]*>)\d+(<\/b>)/, rep: `$1${ds.total}$2` }
+]);
+const rNumIndex = syncNumbers('index.html', [
+  { re: /(<span[^>]*data-game-count[^>]*>)\d+(\s*款)/, rep: `$1${ds.total}$2` }
+]);
+if (!rNumHome.ok) { fail('proF/主页.html：' + rNumHome.why); }
+if (!rNumIndex.ok) { fail('index.html：' + rNumIndex.why); }
+
 /* ---------------- 输出 ---------------- */
 console.log('games.json：' + ds.total + ' 款游戏，' + ds.categories.length + ' 个分类');
 ds.categories.forEach(c => console.log('  · ' + c.name + '（' + c.key + '）：' + c.count + ' 款'));
 
 const touched = [];
-if (rHome.changed) { touched.push('proF/主页.html'); }
-if (rNav.changed) { touched.push('index.html'); }
+if (rHome.changed) { touched.push('proF/主页.html（卡片）'); }
+if (rNav.changed) { touched.push('index.html（侧栏入口）'); }
+if (rNumHome.changed) { touched.push('proF/主页.html（顶部总数）'); }
+if (rNumIndex.changed) { touched.push('index.html（侧栏总数）'); }
 if (CHECK_ONLY) {
-  if (touched.length) { console.log('\n需要同步的静态兜底：' + touched.join('、') + '（去掉 --check 可写入）'); }
-  else { console.log('\n✓ 静态兜底已与 games.json 一致'); }
+  if (touched.length) { console.log('\n需要同步：' + touched.join('、') + '（去掉 --check 可写入）'); }
+  else { console.log('\n✓ 静态兜底与数量已和 games.json 一致'); }
 } else if (touched.length) {
-  console.log('\n已同步静态兜底：' + touched.join('、'));
+  console.log('\n已同步：' + touched.join('、'));
 } else {
-  console.log('\n✓ 静态兜底已与 games.json 一致，无需改动');
+  console.log('\n✓ 静态兜底与数量已和 games.json 一致，无需改动');
 }
 
 if (warnings.length) {

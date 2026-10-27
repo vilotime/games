@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>CS 战场</title>
+<link rel="stylesheet" href="../ui/yc-ui.css">
+<style>
+  /* 入口页：铺满视口，选完模式把内页塞进 iframe */
+  #wrap { padding: 0; }
+  #stage { position: fixed; inset: 0; overflow: hidden; }
+
+  #gameFrame {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    border: 0; background: #070b12; display: none;
+  }
+  #gameFrame.on { display: block; }
+
+  .pick { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 14px; }
+  .mode-card {
+    flex: 1 1 160px; min-width: 150px; text-align: left; cursor: pointer;
+    padding: 12px 14px; border-radius: 12px;
+    background: rgba(20, 32, 50, .72); border: 1px solid rgba(120, 180, 255, .22);
+    color: #e9f1fb; font-family: inherit; transition: border-color .18s ease, transform .12s ease;
+  }
+  .mode-card:hover { border-color: #4f9cf9; }
+  .mode-card:active { transform: scale(.98); }
+  .mode-card b { display: block; font-size: 15px; margin-bottom: 4px; }
+  .mode-card span { font-size: 12px; color: #a7bbd8; line-height: 1.6; }
+  /* 手机 / 平板：没有键盘，对枪那张卡直接置灰（和绿茵足球一致） */
+  .mode-card.off {
+    opacity: .42; cursor: not-allowed;
+    border-color: rgba(120, 180, 255, .12);
+  }
+  .mode-card.off b { color: #93a3b8; }
+  .mode-card.off span { color: #7e8ca0; }
+  .mode-card.off:hover { border-color: rgba(120, 180, 255, .12); transform: none; }
+  .pick-note { margin: 12px 0 0; font-size: 12px; color: #ffb3b3; }
+  .pick-note:empty { display: none; }
+
+  /* 换模式：浮在游戏画面左上角，随时退回选择页 */
+  #backToPicker {
+    position: absolute; left: 12px; top: 12px; z-index: 30; display: none;
+    padding: 7px 13px; font-family: inherit; font-size: 12px; letter-spacing: .5px;
+    color: #cfe0f7; background: rgba(8, 14, 24, .74);
+    border: 1px solid rgba(120, 180, 255, .22); border-radius: 999px;
+    cursor: pointer; backdrop-filter: blur(4px);
+  }
+  #backToPicker.on { display: block; }
+  #backToPicker:hover { border-color: #4f9cf9; color: #fff; }
+
+  @media (max-width: 760px), (max-height: 620px) {
+    .panel h1 { font-size: 20px; }
+    .pick { gap: 7px; margin-top: 9px; }
+    .mode-card { flex: 1 1 0; min-width: 0; padding: 8px 10px; border-radius: 9px; }
+    .mode-card b { font-size: 13px; margin-bottom: 2px; }
+    .mode-card span { font-size: 10.5px; line-height: 1.4; }
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage">
+    <iframe id="gameFrame" title="游戏画面"></iframe>
+
+    <div class="overlay" id="picker">
+      <div class="panel">
+        <h1>CS 战场</h1>
+        <p>同一个平面战场，两种视角：亲自下去对枪，或者坐下来看两个 AI 互殴。</p>
+        <div class="pick">
+          <button class="mode-card" type="button" data-src="CS平面版.html" data-pc="1">
+            <b>🎯 平面战场</b>
+            <span>俯视 1v1，20 血决胜。<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 走位、鼠标瞄准射击。</span>
+          </button>
+          <button class="mode-card" type="button" data-src="CS观战.html">
+            <b>👀 观战模式</b>
+            <span>两个 AI 自动对攻，你只负责看。手机也能看。</span>
+          </button>
+        </div>
+        <p class="pick-note" id="pickNote"></p>
+      </div>
+    </div>
+
+    <button id="backToPicker" type="button">← 换模式</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var frame = document.getElementById('gameFrame');
+  var picker = document.getElementById('picker');
+  var back = document.getElementById('backToPicker');
+
+  function openMode(src) {
+    if (!src) { return; }
+    picker.classList.add('hidden');
+    back.classList.add('on');
+    frame.classList.add('on');
+    frame.src = src;
+    /* 内页加载完把焦点交给它，键盘不用再点一下 */
+    frame.onload = function () {
+      try { frame.contentWindow.focus(); } catch (e) {}
+    };
+  }
+
+  function backToPicker() {
+    frame.classList.remove('on');
+    frame.src = 'about:blank';
+    back.classList.remove('on');
+    picker.classList.remove('hidden');
+  }
+
+  /* 手机 / 平板（没有键盘）：对枪那张卡置灰、只留观战 —— 和绿茵足球同一套处理 */
+  function isTouchOnlyDevice() {
+    try {
+      var ua = navigator.userAgent || '';
+      if (/Android|iPhone|iPad|iPod|Mobile|Tablet|Silk|Kindle/i.test(ua)) { return true; }
+      if (window.matchMedia) {
+        return window.matchMedia('(pointer: coarse)').matches &&
+               window.matchMedia('(hover: none)').matches;
+      }
+      return false;
+    } catch (e) { return false; }
+  }
+
+  var touchOnly = isTouchOnlyDevice();
+  var note = document.getElementById('pickNote');
+
+  var cards = document.querySelectorAll('.mode-card[data-src]');
+  for (var i = 0; i < cards.length; i++) {
+    (function (el) {
+      if (touchOnly && el.getAttribute('data-pc') === '1') {
+        el.classList.add('off');
+        el.setAttribute('aria-disabled', 'true');
+        var sp = el.querySelector('span');
+        if (sp) { sp.textContent = '需要键盘：当前设备请直接用「观战模式」'; }
+      }
+      el.addEventListener('click', function () {
+        if (el.classList.contains('off')) {
+          if (note) { note.textContent = '当前设备没有键盘，只能观战'; }
+          return;
+        }
+        openMode(el.getAttribute('data-src'));
+      });
+    })(cards[i]);
+  }
+  if (touchOnly && note) { note.textContent = '当前设备没有键盘，只能观战'; }
+
+  back.addEventListener('click', backToPicker);
+})();
+</script>
+</body>
+</html>

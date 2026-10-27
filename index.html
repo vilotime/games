@@ -6,20 +6,24 @@
     <title>叶初小游戏</title>
     <meta name="description" content="叶初小游戏 —— 绿茵足球、桌上足球、点球大师、CS 平面战场、星海突击、方块风暴、叶初的鱼塘、CS 观战等小游戏合集">
     <meta name="theme-color" content="#2b3a4b">
-    <link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
-    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="64x64" href="assets/favicon.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="叶初小游戏">
     <meta property="og:title" content="叶初小游戏">
     <meta property="og:description" content="绿茵足球、桌上足球、点球大师、CS 平面战场、星海突击、方块风暴、叶初的鱼塘、CS 观战等小游戏合集">
     <meta property="og:url" content="https://vilotime.github.io/">
-    <meta property="og:image" content="https://vilotime.github.io/cover.png">
-    <meta property="og:image:width" content="1200">
-    <meta property="og:image:height" content="630">
+    <!-- 微信 / QQ 分享卡片取 og:image 或 itemprop=image，且会裁成正方形：
+         所以这里给一张 1:1 的正方形图（文字留足 18% 边距），避免宽图被裁掉两头 -->
+    <meta property="og:image" content="https://vilotime.github.io/assets/share-square.png">
+    <meta property="og:image:width" content="500">
+    <meta property="og:image:height" content="500">
+    <meta itemprop="image" content="https://vilotime.github.io/assets/share-square.png">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="叶初小游戏">
     <meta name="twitter:description" content="绿茵足球、桌上足球、点球大师、CS 平面战场、星海突击、方块风暴、叶初的鱼塘、CS 观战等小游戏合集">
-    <meta name="twitter:image" content="https://vilotime.github.io/cover.png">
+    <!-- Twitter 的 summary_large_image 是横卡，用宽图更合适 -->
+    <meta name="twitter:image" content="https://vilotime.github.io/assets/cover.png">
     <script>
         /* 提前决定主题，避免首屏闪白/闪黑 */
         (function () {
@@ -491,7 +495,7 @@
         <div class="brand">
             <span class="brand-dot" aria-hidden="true"></span>
             <span class="brand-name">叶初小游戏</span>
-            <span class="brand-sub" data-game-count>11 款</span>
+            <span class="brand-sub" data-game-count>8 款</span>
         </div>
 
         <button type="button" class="theme-toggle" id="themeToggle" title="切换主题">
@@ -505,41 +509,32 @@
             </a>
 
 <!-- nav:start 以下入口由 games.json 生成；加游戏只改 games.json -->
+            <div class="nav-group">🧩 休闲</div>
+            <a href="proF/叶初的鱼塘.html" target="gameFrame" data-icon="🐟" data-name="叶初的鱼塘">
+              <span class="ic" aria-hidden="true">🐟</span><span class="nm">叶初的鱼塘</span><span class="tag">电脑</span>
+            </a>
+            <a href="proF/俄罗斯方块.html" target="gameFrame" data-icon="🧩" data-name="方块风暴">
+              <span class="ic" aria-hidden="true">🧩</span><span class="nm">方块风暴</span>
+            </a>
+            <a href="proF/叶初打飞机.html" target="gameFrame" data-icon="✈️" data-name="星海突击">
+              <span class="ic" aria-hidden="true">✈️</span><span class="nm">星海突击</span>
+            </a>
             <div class="nav-group">⚽ 足球</div>
             <a href="proF/11人足球.html" target="gameFrame" data-icon="🏟️" data-name="绿茵足球">
               <span class="ic" aria-hidden="true">🏟️</span><span class="nm">绿茵足球</span>
             </a>
-            <a href="proF/玩家对战足球.html" target="gameFrame" data-icon="⚔️" data-name="桌上足球 · 对战">
-              <span class="ic" aria-hidden="true">⚔️</span><span class="nm">桌上足球 · 对战</span><span class="tag">电脑</span>
-            </a>
-            <a href="proF/双人足球.html" target="gameFrame" data-icon="🤖" data-name="桌上足球 · 人机">
-              <span class="ic" aria-hidden="true">🤖</span><span class="nm">桌上足球 · 人机</span>
-            </a>
-            <a href="proF/人机对战足球.html" target="gameFrame" data-icon="👀" data-name="桌上足球 · 观战">
-              <span class="ic" aria-hidden="true">👀</span><span class="nm">桌上足球 · 观战</span>
+            <a href="proF/桌上足球.html" target="gameFrame" data-icon="⚔️" data-name="桌上足球">
+              <span class="ic" aria-hidden="true">⚔️</span><span class="nm">桌上足球</span>
             </a>
             <a href="proF/任意球练习.html" target="gameFrame" data-icon="🥅" data-name="点球大师">
               <span class="ic" aria-hidden="true">🥅</span><span class="nm">点球大师</span>
             </a>
             <div class="nav-group">🎯 射击</div>
-            <a href="proF/CS平面版.html" target="gameFrame" data-icon="🎯" data-name="CS 平面战场">
-              <span class="ic" aria-hidden="true">🎯</span><span class="nm">CS 平面战场</span><span class="tag">电脑</span>
+            <a href="proF/CS战场.html" target="gameFrame" data-icon="🎯" data-name="CS 战场">
+              <span class="ic" aria-hidden="true">🎯</span><span class="nm">CS 战场</span>
             </a>
             <a href="proF/CS秘密行动.html" target="gameFrame" data-icon="🔫" data-name="CS 秘密行动">
               <span class="ic" aria-hidden="true">🔫</span><span class="nm">CS 秘密行动</span><span class="tag">电脑</span>
-            </a>
-            <a href="proF/叶初打飞机.html" target="gameFrame" data-icon="✈️" data-name="星海突击">
-              <span class="ic" aria-hidden="true">✈️</span><span class="nm">星海突击</span>
-            </a>
-            <a href="proF/CS观战.html" target="gameFrame" data-icon="👀" data-name="CS 观战">
-              <span class="ic" aria-hidden="true">👀</span><span class="nm">CS 观战</span>
-            </a>
-            <div class="nav-group">🧩 休闲</div>
-            <a href="proF/俄罗斯方块.html" target="gameFrame" data-icon="🧩" data-name="方块风暴">
-              <span class="ic" aria-hidden="true">🧩</span><span class="nm">方块风暴</span>
-            </a>
-            <a href="proF/叶初的鱼塘.html" target="gameFrame" data-icon="🐟" data-name="叶初的鱼塘">
-              <span class="ic" aria-hidden="true">🐟</span><span class="nm">叶初的鱼塘</span><span class="tag">电脑</span>
             </a>
 <!-- nav:end -->
         </nav>
