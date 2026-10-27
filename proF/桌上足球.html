@@ -35,8 +35,6 @@
   .mode-card.off b { color: #93a3b8; }
   .mode-card.off span { color: #7e8ca0; }
   .mode-card.off:hover { border-color: rgba(120, 180, 255, .12); transform: none; }
-  .pick-note { margin: 12px 0 0; font-size: 12px; color: #ffb3b3; }
-  .pick-note:empty { display: none; }
 
   #backToPicker {
     position: absolute; left: 12px; top: 12px; z-index: 30; display: none;
@@ -80,7 +78,6 @@
             <span>AI 对 AI 自动对攻，你只负责看。手机也能看。</span>
           </button>
         </div>
-        <p class="pick-note" id="pickNote"></p>
       </div>
     </div>
 
@@ -129,7 +126,6 @@
   }
 
   var touchOnly = isTouchOnlyDevice();
-  var note = document.getElementById('pickNote');
 
   var cards = document.querySelectorAll('.mode-card[data-src]');
   for (var i = 0; i < cards.length; i++) {
@@ -141,15 +137,11 @@
         if (sp) { sp.textContent = '需要键盘：当前设备请改用「单挑 AI」或「观战」'; }
       }
       el.addEventListener('click', function () {
-        if (el.classList.contains('off')) {
-          if (note) { note.textContent = '当前设备没有键盘，只能玩「单挑 AI」或「观战」'; }
-          return;
-        }
+        if (el.classList.contains('off')) { return; }
         openMode(el.getAttribute('data-src'));
       });
     })(cards[i]);
   }
-  if (touchOnly && note) { note.textContent = '当前设备没有键盘，只能玩「单挑 AI」或「观战」'; }
 
   back.addEventListener('click', backToPicker);
 })();
