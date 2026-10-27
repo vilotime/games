@@ -440,6 +440,7 @@ var HOUSE_LIMIT = 15.0;            /* 秒 */
 var HOUSE_DMG_GAP = 2.0;           /* 超时后每隔多久掉 1 点血 */
 var houseStayT = 0, houseDmgT = 0; /* 本次进屋已待时长 / 下次掉血倒计时 */
 var houseHits = [], houseHitT = 2.5;  /* 屋内看到的“墙被砸中”纯视觉特效 */
+var portalChargePct = 0;           /* 在传送门被抓那次，死时充能到了百分之几 */
 var endKeys = null;             /* 阵亡瞬间手上的钥匙数：结算界面要如实显示 */
 var exAutoT = 30;               /* 距离下一次自动 +1 还有多少秒 */
 var hbT = 0;                    /* 下一次心跳的间隔 */
@@ -662,6 +663,7 @@ function newGame(diffKey) {
   if (diffKey && DIFFS[diffKey]) { diff = DIFFS[diffKey]; }
   time = 0; ex = 0; berserk = false; rageGlow = 0; fade = 0; redFlash = 0;
   exAutoT = diff.auto; botExCool = 0; endKeys = null;
+  portalChargePct = 0;
   document.getElementById('over').classList.remove('blood');
   shells = []; fx = []; pops = [];
   houseStayT = 0; houseDmgT = 0; houseHits = []; houseHitT = 2.5;
@@ -1185,19 +1187,24 @@ function killPlayer(p, reason) {
   p.flash = 0.5;
   burst(p.x, p.y, 'rgba(255,90,90,.95)', 24, 150, p.scene);
   var carried = p.keys;                        /* 结算要显示死的时候手上还剩几把 */
+  var chanProg = p.channel ? Math.min(1, Math.max(0, 1 - p.channel.t / p.channel.max)) : 0;
   p.channel = null;
   p.keys = 0;                                  /* 自己的钥匙带不走 */
   if (p.isMe) {
     endKeys = carried;
     var byShell = (reason === '炮弹');
-    var doorCrash = (reason === '叶初' || byShell) && p.doorFlashT > 0;   /* 刚推开门就出事 */
-    if (doorCrash) {
+    /* 集齐三把钥匙、人已经守在传送门边（正在充能或刚停下），被叶初贴脸 —— 走专属结算 */
+    var atPortal = dist(p.x, p.y, PORTAL.x, PORTAL.y) <= PORTAL_R + 46;
+    var portalGrab = (reason === '叶初') && carried >= KEY_N && atPortal;
+    var doorCrash = !portalGrab && (reason === '叶初' || byShell) && p.doorFlashT > 0;   /* 刚推开门就出事 */
+    if (portalGrab || doorCrash) {
       redFlash = 1.7;
       fade = 0;                                  /* 立刻亮出血红，别被开门黑场压住 */
       sfxDoorDeath();
-      document.getElementById('over').classList.add('blood');
+      document.getElementById('over').classList.add('blood');   /* 和开门撞鬼同一套血红结算 */
     }
-    endGame(false, doorCrash ? (byShell ? 'doorShell' : 'door') : 'reason:' + reason);
+    if (portalGrab) { portalChargePct = Math.round(chanProg * 100); }
+    endGame(false, portalGrab ? 'portal' : (doorCrash ? (byShell ? 'doorShell' : 'door') : 'reason:' + reason));
   }
   else { banner(p.name + ' 被' + reason + '带走了', 1000); }
 }
@@ -1930,6 +1937,12 @@ function endGame(win, reason) {
   if (win) {
     title.textContent = '你逃出去了！';
     sub.textContent = '叶初的鱼塘再也关不住你了。';
+  } else if (reason === 'portal') {
+    /* 专属结算：三把钥匙全在身上，倒在传送门边 */
+    title.textContent = '传送门就在眼前';
+    sub.textContent = portalChargePct > 0
+      ? '三把钥匙都攥在你手里，充能已经走到 ' + portalChargePct + '% —— 叶初的手从背后覆上了你的肩。'
+      : '三把钥匙都攥在你手里，距离那道门只差一次长按 —— 叶初的手从背后覆上了你的肩。';
   } else if (reason === 'door') {
     title.textContent = '门后是叶初';
     sub.textContent = '你刚推开门，就迎面撞进了叶初的怀里...';
@@ -1944,7 +1957,7 @@ function endGame(win, reason) {
     sub.textContent = '暴走之后那门大炮会一直追着你。';
   } else if (reason === 'reason:屋内') {
     title.textContent = '屋里也躲不住了';
-    sub.textContent = '暴走之后，单次躲进屋子超过 30 秒就会被炮弹砸中。';
+    sub.textContent = '暴走之后，单次躲进屋子超过 15 秒就会被炮弹砸中。';
   } else if (reason === 'bot') {
     title.textContent = '被人机抢先逃走了';
     sub.textContent = '抢钥匙要快，别在屋子里磨蹭。';
@@ -1957,7 +1970,9 @@ function endGame(win, reason) {
   var shownKeys = (endKeys === null) ? me.keys : endKeys;
   stats.textContent = '钥匙 ' + shownKeys + '/' + KEY_N + '　·　用时 ' + elTimeTxt.textContent +
     '　·　中弹 ' + me.hits + '/3　·　场上还剩 ' + left + ' 个人机';
-  if (reason !== 'door' && reason !== 'doorShell') { document.getElementById('over').classList.remove('blood'); }
+  if (reason !== 'portal' && reason !== 'door' && reason !== 'doorShell') {
+    document.getElementById('over').classList.remove('blood');
+  }
   document.getElementById('over').classList.remove('hidden');
   elBanner.classList.remove('show');
   elHint.textContent = '';
