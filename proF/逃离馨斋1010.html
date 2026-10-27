@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -50,7 +50,7 @@
       <div class="panel">
         <h1>逃离馨斋1010</h1>
         <p>你在 1010 宿舍醒来，楼里断电了。</p>
-        <p>集齐 3 把钥匙，从电梯或楼梯下楼。</p>
+        <p>楼梯每下一层花 1 把钥匙，电梯直达一楼门禁。</p>
         <button class="btn" id="startBtn" type="button">开始游戏</button>
       </div>
     </div>
@@ -284,12 +284,14 @@
     for (i = 0; i < ROOM_G.length; i++) {
       r = pxRect(ROOM_G[i].slice(1));
       rooms.push({
-        n: ROOM_G[i][0], r: r,
+        n: ROOM_G[i][0], idx: parseInt(ROOM_G[i][0], 10) - 1000, r: r,
         cx: (r.x0 + r.x1) / 2, cy: (r.y0 + r.y1) / 2,
         door: null, item: null, taken: false
       });
       xs.push(r.x0, r.x1); ys.push(r.y0, r.y1);
     }
+
+    /* 门牌号跟着楼层走：10 层 → 10xx，9 层 → 09xx，1 层 → 01xx（见 roomLabel） */
 
 
 
@@ -386,8 +388,19 @@
      ============================================================ */
   var state = 'intro';           /* intro | playing | over | win */
   var scene = 'corridor';        /* corridor | room | lobby */
+  var floor = 10;                /* 当前楼层：10 → 1，楼梯一层一层往下 */
+  var MAX_FLOOR = 10;
+  var floorItems = {};           /* 每一层各自的道具 / 已取走状态 */
   var last = 0, playTime = 0, bannerT = 0;
+
+  /* 门牌号：楼层 2 位 + 房号后 2 位（10F → 10xx，9F → 09xx，1F → 01xx） */
+  function roomLabel(rm) {
+    var f = floor < 10 ? '0' + floor : String(floor);
+    var i = rm.idx < 10 ? '0' + rm.idx : String(rm.idx);
+    return f + i;
+  }
   var shake = 0, flash = 0, flashCol = '255,60,60';
+  var fade = 0;                  /* 下楼闪黑：1=全黑，逐渐淡出 */
   var camX = 0, camY = 0;
   var camL = 0, camT = 0, camR = W, camB = H;
 
@@ -463,24 +476,42 @@
   /* ============================================================
      9. 出怪 / 摆道具
      ============================================================ */
-  function assignItems() {
-    var order = rooms.slice();
-    var i;
-    for (i = order.length - 1; i > 0; i--) {
+  /* 每一层单独刷一套道具（钥匙上限 10 把），楼层之间互不影响 */
+  function rollItems() {
+    var i, idx = [], out = [];
+    for (i = 0; i < rooms.length; i++) { idx.push(i); out.push({ item: 'none', taken: false }); }
+    for (i = idx.length - 1; i > 0; i--) {
       var j = Math.floor(Math.random() * (i + 1));
-      var tmp = order[i]; order[i] = order[j]; order[j] = tmp;
+      var t = idx[i]; idx[i] = idx[j]; idx[j] = t;
     }
-    for (i = 0; i < order.length; i++) {
-      order[i].taken = false;
-      if (i < MAX_KEY) {
-        order[i].item = 'key';
-      } else {
+    for (i = 0; i < idx.length; i++) {
+      var k = idx[i];
+      if (i < MAX_KEY) { out[k].item = 'key'; }
+      else {
         var r = Math.random();
-        if (r < 0.14) { order[i].item = 'laptop'; }
-        else if (r < 0.30) { order[i].item = 'basin'; }
-        else if (r < 0.46) { order[i].item = 'sock'; }
-        else { order[i].item = 'none'; }
+        if (r < 0.14) { out[k].item = 'laptop'; }
+        else if (r < 0.30) { out[k].item = 'basin'; }
+        else if (r < 0.46) { out[k].item = 'sock'; }
       }
+    }
+    return out;
+  }
+
+  /* 把某一层的道具装到当前房间上 */
+  function loadFloorItems(f) {
+    if (!floorItems[f]) { floorItems[f] = rollItems(); }
+    var data = floorItems[f];
+    for (var i = 0; i < rooms.length; i++) {
+      rooms[i].item = data[i].item;
+      rooms[i].taken = data[i].taken;
+    }
+  }
+
+  /* 离开本层前，把道具状态存回楼层数据 */
+  function saveFloorItems(f) {
+    var data = floorItems[f] || (floorItems[f] = []);
+    for (var i = 0; i < rooms.length; i++) {
+      data[i] = { item: rooms[i].item, taken: rooms[i].taken };
     }
   }
 
@@ -507,14 +538,22 @@
 
   function spawnSups() {
     /* 一层一个宿管：沿着 顶部走廊 → 右侧走廊 → 底部空地 来回巡 */
-    sups.push(makeSup([
+    var route = [
       { x: gx(20), y: gy(70) },
       { x: gx(90), y: gy(70) },
       { x: gx(90), y: gy(24) },
       { x: gx(60), y: gy(10) },
       { x: gx(90), y: gy(24) },
       { x: gx(90), y: gy(70) }
-    ], '巡楼'));
+    ];
+    /* 从离玩家最远的那段开始巡，避免刚下楼就撞脸（尤其是楼梯口就在巡逻线上） */
+    var best = 0, bd = -1;
+    for (var i = 0; i < route.length; i++) {
+      var d = dist2(route[i].x, route[i].y, player.x, player.y);
+      if (d > bd) { bd = d; best = i; }
+    }
+    var wp = route.slice(best).concat(route.slice(0, best));
+    sups.push(makeSup(wp, '巡楼'));
   }
 
   /* 找到离某点最近、且在范围内的宿管 */
@@ -550,17 +589,19 @@
     camX = player.x; camY = player.y;
     scene = 'corridor'; roomSc = null; lobbySc = null;
     blockFn = null;
-    elFloor.textContent = '10F';
+    floor = MAX_FLOOR;
+    floorItems = {};
+    elFloor.textContent = floor + 'F';
     parts.length = 0; traps.length = 0; sups.length = 0;
 
-    assignItems();
+    loadFloorItems(floor);
     spawnTraps();
     spawnSups();
 
     /* 开局就在 1010 宿舍里：先站到 1010 门口，再切进房间场景 */
     var home = null;
     for (var i = 0; i < rooms.length; i++) {
-      if (rooms[i].n === '1010' && rooms[i].door) { home = rooms[i]; break; }
+      if (rooms[i].idx === 10 && rooms[i].door) { home = rooms[i]; break; }
     }
     if (home) {
       player.x = home.door.x;
@@ -759,7 +800,7 @@
       d = dist2(player.x, player.y, rm.door.x, rm.door.y);
       if (d < bd) {
         bd = d;
-        best = { type: 'room', room: rm, x: rm.door.x, y: rm.door.y, label: 'F 进入 ' + rm.n };
+        best = { type: 'room', room: rm, x: rm.door.x, y: rm.door.y, label: 'F 进入 ' + roomLabel(rm) };
       }
     }
     if (best && bd <= 44 * 44) { return best; }
@@ -799,7 +840,7 @@
     player.x = ROOM_DOOR.x; player.y = ROOM_DOOR.y - 34;
     player.stun = 0;
     holdT = 0; holdId = ''; curTarget = null;
-    banner(rm.n + ' 室', 1000);
+    banner(roomLabel(rm) + ' 室', 1000);
   }
 
   /* 宿舍里的家具碰撞（上下铺 / 桌子 / 柜子） */
@@ -838,31 +879,78 @@
 
   function enterLobby(viaStairs) {
     scene = 'lobby';
-    blockFn = null;
+    blockFn = lobbyBlocked;
     releaseCheck();
     lobbySc = {
       box: { x0: 230, y0: 120, x1: 670, y1: 470 },
       gate: { x0: 410, y0: 120, x1: 490, y1: 120 },
       viaStairs: !!viaStairs, stepAcc: 0,
-      back: null                       /* 楼梯口：走楼梯下来才有，可以原路回十楼 */
+      back: null,                      /* 楼梯口：走楼梯下来才有，可以原路回一楼走廊 */
+      guard: { x: 285, y: 205, r: 11, ang: 0, mode: 'home', t: 0, wait: 6 + Math.random() * 5, stun: 0 }
     };
     player.x = 450; player.y = 440;
     player.stun = 0;
     player.inv = Math.max(player.inv, 0.8);
     holdT = 0; holdId = '';
     elFloor.textContent = '1F';
-    banner(viaStairs ? '摸黑下楼，左下角有楼梯口' : '电梯直达一楼', 1600);
+    banner(viaStairs ? '摸黑下楼，左下角有楼梯口' : '电梯直达一楼 · 值班室里有宿管', 1700);
+  }
+
+  /* 一楼门禁场景里的障碍：左侧值班室（宿管房间）的墙 */
+  var LOBBY_GUARDROOM = { x0: 240, y0: 150, x1: 340, y1: 270 };
+  function lobbyBlocked(x, y, r) {
+    var g = LOBBY_GUARDROOM;
+    return x > g.x0 - r && x < g.x1 + r && y > g.y0 - r && y < g.y1 + r;
   }
 
   function useStairs() {
-    /* 楼梯：不读条，但之后视野只有 100px，每走一步扣体力；回来时回到楼梯口 */
-    tone(300, 0.2, 0.1, 'sine', 180);
-    var bx = player.x, by = player.y;
-    enterLobby(true);
-    lobbySc.back = { x: bx, y: by };
+    /* 楼梯：一层一层往下，每下一层花一把钥匙，走楼梯还要消耗体力 */
+    if (floor <= 1) {
+      /* 已经在一楼：楼梯口直接通门禁大厅 */
+      tone(300, 0.2, 0.1, 'sine', 180);
+      var bx = player.x, by = player.y;
+      enterLobby(true);
+      lobbySc.back = { x: bx, y: by };
+      return;
+    }
+    if (player.keys < 1) {
+      banner('下一层要一把钥匙', 1500);
+      sfxDeny();
+      return;
+    }
+    player.keys--;
+    updateHUD();
+    descend();
   }
 
-  /* 从一楼的楼梯口原路返回十楼（钥匙不够时不会被困死在一楼） */
+  /* 下一层：房间号换前缀、道具换一套、楼梯消耗体力，落到新的一层楼梯口 */
+  function descend() {
+    saveFloorItems(floor);
+    floor--;
+    loadFloorItems(floor);
+    traps.length = 0;
+    sups.length = 0;
+    spawnTraps();
+    spawnSups();
+
+    scene = 'corridor';
+    roomSc = null; lobbySc = null; blockFn = null;
+    releaseCheck();
+    holdT = 0; holdId = ''; curTarget = null;
+
+    elFloor.textContent = floor + 'F';
+    /* 楼梯消耗体力，到新的一层后再慢慢恢复 */
+    player.st = Math.max(0, player.st - 30);
+    player.tired = player.st <= 0;
+    player.inv = Math.max(player.inv, 2.5);
+    camX = player.x; camY = player.y;
+    fade = 1;                       /* 下楼的闪黑特效 */
+
+    tone(300, 0.22, 0.1, 'sine', 180);
+    banner(floor === 1 ? '到一楼了 · 从楼梯口出去就是门禁' : floor + ' 层 · 楼梯口', 1700);
+  }
+
+  /* 从一楼大厅的楼梯口回一楼走廊 */
   function goBackUp() {
     if (!lobbySc || !lobbySc.back) { return; }
     player.x = lobbySc.back.x;
@@ -871,10 +959,10 @@
     lobbySc = null;
     blockFn = null;
     holdT = 0; holdId = ''; curTarget = null;
-    elFloor.textContent = '10F';
+    elFloor.textContent = floor + 'F';
     player.inv = Math.max(player.inv, 1.2);
     tone(320, 0.18, 0.1, 'sine', 220);
-    banner('回到十楼', 1200);
+    banner(floor + ' 层 · 楼梯口', 1200);
   }
 
   function useElev() {
@@ -1247,18 +1335,21 @@
     var nearBack = !!(lobbySc.back &&
       dist2(player.x, player.y, LOBBY_BACK.x, LOBBY_BACK.y) < 46 * 46);
 
-    if (nearBack) { curTarget = { type: 'back', label: 'F 从楼梯回十楼' }; }
+    if (nearBack) { curTarget = { type: 'back', label: 'F 从楼梯回走廊' }; }
     else if (nearGate) { curTarget = { type: 'gate', label: 'F 长按 5 秒开门禁' }; }
     else { curTarget = null; }
 
-    /* 楼梯口：原路返回楼上 */
+    /* 楼梯口：原路返回一楼走廊 */
     if (nearBack && fEdge) { fEdge = false; goBackUp(); return; }
+
+    /* 门禁旁的值班室：宿管随机出来抓人 */
+    updateLobbyGuard(dt, box);
 
     if (nearGate && keys['f']) {
       if (player.keys < NEED_KEY) {
         if (!lobbySc.denied) {
           lobbySc.denied = true;
-          banner('门禁需要 3 把钥匙，可以从楼梯口先上楼', 1700);
+          banner('门禁需要 3 把钥匙', 1600);
           sfxDeny();
         }
         holdT = 0; holdId = '';
@@ -1274,6 +1365,72 @@
     }
 
     fEdge = false;
+  }
+
+  /* 一楼门禁场景里，把玩家往某个方向推开一点（不推进值班室墙里） */
+  function knockInLobby(sx, sy, box) {
+    var ax = sx - player.x, ay = sy - player.y;
+    var al = Math.sqrt(ax * ax + ay * ay) || 1;
+    var ux = -ax / al, uy = -ay / al;
+    var steps = [30, 21, 12];
+    for (var i = 0; i < steps.length; i++) {
+      var nx = clamp(player.x + ux * steps[i], box.x0 + player.r, box.x1 - player.r);
+      var ny = clamp(player.y + uy * steps[i], box.y0 + player.r, box.y1 - player.r);
+      if (!lobbyBlocked(nx, ny, player.r)) { player.x = nx; player.y = ny; return; }
+    }
+  }
+
+  /* 值班室宿管：待一会儿 → 随机出来追人 → 回房间 */
+  function updateLobbyGuard(dt, box) {
+    var g = lobbySc.guard;
+    if (!g) { return; }
+    var home = { x: (LOBBY_GUARDROOM.x0 + LOBBY_GUARDROOM.x1) / 2,
+                 y: (LOBBY_GUARDROOM.y0 + LOBBY_GUARDROOM.y1) / 2 };
+
+    if (g.stun > 0) { g.stun -= dt; return; }
+
+    if (g.mode === 'home') {
+      g.x = home.x; g.y = home.y;
+      g.wait -= dt;
+      if (g.wait <= 0) {
+        g.mode = 'out'; g.t = 0;
+        banner('值班室的宿管出来了', 1400);
+        tone(180, 0.26, 0.16, 'sawtooth', 90);
+      }
+      return;
+    }
+
+    if (g.mode === 'out') {
+      g.t += dt;
+      var dx = player.x - g.x, dy = player.y - g.y;
+      var d = Math.sqrt(dx * dx + dy * dy) || 1;
+      var spd = 118;
+      g.x += dx / d * spd * dt;
+      g.y += dy / d * spd * dt;
+      g.ang = Math.atan2(dy, dx);
+      g.x = clamp(g.x, box.x0 + 12, box.x1 - 12);
+      g.y = clamp(g.y, box.y0 + 12, box.y1 - 12);
+      if (dist2(g.x, g.y, player.x, player.y) < 26 * 26) {
+        hitPlayer(34);
+        g.stun = 0.85;
+        knockInLobby(g.x, g.y, box);
+        return;
+      }
+      if (g.t > 6) { g.mode = 'back'; }
+      return;
+    }
+
+    /* back：回值班室 */
+    var bx = home.x - g.x, by = home.y - g.y;
+    var bd = Math.sqrt(bx * bx + by * by);
+    if (bd < 12) {
+      g.mode = 'home';
+      g.wait = 8 + Math.random() * 6;     /* 回屋后留出一段安静时间，够玩家按完门禁 */
+      return;
+    }
+    g.x += bx / bd * 100 * dt;
+    g.y += by / bd * 100 * dt;
+    g.ang = Math.atan2(by, bx);
   }
 
   /* ============================================================
@@ -1311,6 +1468,7 @@
     if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) { elBanner.classList.remove('show'); } }
     if (shake > 0) { shake *= Math.pow(0.02, dt); if (shake < 0.3) { shake = 0; } }
     if (flash > 0) { flash -= dt * 1.8; if (flash < 0) { flash = 0; } }
+    if (fade > 0) { fade -= dt * 2.4; if (fade < 0) { fade = 0; } }
     if (player.inv > 0) { player.inv -= dt; }
 
     if (scene === 'corridor') { updateCorridor(dt); }
@@ -1343,6 +1501,10 @@
   }
 
   function screenFX() {
+    if (fade > 0.01) {
+      ctx.fillStyle = 'rgba(0,0,0,' + Math.min(1, fade).toFixed(3) + ')';
+      ctx.fillRect(0, 0, W, H);
+    }
     if (flash > 0.01) {
       ctx.fillStyle = 'rgba(' + flashCol + ',' + (flash * 0.5).toFixed(3) + ')';
       ctx.fillRect(0, 0, W, H);
@@ -1384,7 +1546,7 @@
     ctx.font = '700 10px "PingFang SC","Microsoft YaHei",sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(rm.n, rm.cx, rm.cy);
+    ctx.fillText(roomLabel(rm), rm.cx, rm.cy);
   }
 
   function drawArea(a) {
@@ -1847,7 +2009,7 @@
     ctx.fillStyle = 'rgba(120,150,190,.55)';
     ctx.font = '700 15px "PingFang SC","Microsoft YaHei",sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(roomSc.room.n, (box.x0 + box.x1) / 2, box.y0 + 26);
+    ctx.fillText(roomLabel(roomSc.room), (box.x0 + box.x1) / 2, box.y0 + 26);
 
     /* 道具（臭袜子踩到就没了） */
     var it = roomSc.room.item;
@@ -2109,7 +2271,7 @@
     ctx.textBaseline = 'middle';
     ctx.fillText('门禁 · 长按 F', 450, box.y0 + 30);
 
-    /* 楼梯口（走楼梯下来才有）：原路回十楼 */
+    /* 楼梯口（走楼梯下来才有）：原路回走廊 */
     if (lobbySc.back) {
       var bk = LOBBY_BACK;
       ctx.fillStyle = '#182234';
@@ -2128,15 +2290,75 @@
       ctx.font = '700 11px "PingFang SC","Microsoft YaHei",sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('楼梯口 · F 回十楼', bk.x, box.y1 - 42);
+      ctx.fillText('楼梯口 · F 回走廊', bk.x, box.y1 - 42);
     }
+
+    drawGuardRoom();
 
     drawParts();
     drawPlayer();
+    if (lobbySc.guard) { drawLobbyGuard(lobbySc.guard); }
 
     fog(player.x, player.y, lobbySc.viaStairs ? FOG_STAIR : FOG_ROOM);
     screenFX();
     drawPrompt(player.x, player.y);
+  }
+
+  /* 一楼门禁旁的值班室：宿管待在里面，随机出来 */
+  function drawGuardRoom() {
+    var g = LOBBY_GUARDROOM;
+    var w = g.x1 - g.x0, h = g.y1 - g.y0;
+
+    ctx.fillStyle = '#0a0f18';
+    ctx.fillRect(g.x0, g.y0, w, h);
+    ctx.strokeStyle = 'rgba(150,180,220,.55)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(g.x0 + 1, g.y0 + 1, w - 2, h - 2);
+
+    /* 朝大厅那侧的门（右侧墙中间，宿管从这里进出） */
+    ctx.strokeStyle = 'rgba(6,10,18,1)';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(g.x1, (g.y0 + g.y1) / 2 - 18);
+    ctx.lineTo(g.x1, (g.y0 + g.y1) / 2 + 18);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(190,215,245,.8)';
+    ctx.font = '700 11px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('值班室', (g.x0 + g.x1) / 2, g.y0 + 16);
+  }
+
+  function drawLobbyGuard(g) {
+    /* 手电筒扇形 */
+    var RANGE = 190, HALF = 0.55;
+    var grad = ctx.createRadialGradient(g.x, g.y, 8, g.x, g.y, RANGE);
+    grad.addColorStop(0, 'rgba(255,238,170,.26)');
+    grad.addColorStop(0.7, 'rgba(255,232,150,.10)');
+    grad.addColorStop(1, 'rgba(255,232,150,0)');
+    ctx.beginPath();
+    ctx.moveTo(g.x, g.y);
+    ctx.arc(g.x, g.y, RANGE, g.ang - HALF, g.ang + HALF);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2);
+    ctx.fillStyle = g.mode === 'out' ? '#ff5d5d' : '#c9534b';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255,180,170,.9)';
+    ctx.stroke();
+
+    if (g.mode === 'out') {
+      ctx.fillStyle = '#ff5d5d';
+      ctx.font = '700 14px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('!', g.x, g.y - 20);
+    }
   }
 
   /* ============================================================
@@ -2177,6 +2399,9 @@
 </script>
 </body>
 </html>
+
+
+
 
 
 
