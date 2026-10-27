@@ -409,7 +409,7 @@ if (isTouchOnlyDevice()) {
   <div class="panel">
     <h1>这个游戏只能在电脑上玩</h1>
     <p>「显示名」需要键盘 / 鼠标，手机 / 平板上没法正常操作。</p>
-    <p>请用电脑打开本页面。</p>
+    <p>请用电脑打开本页面，或回主页挑个手机能玩的游戏</p>
     <button class="btn" id="mobileBack" type="button">返回主页</button>
   </div>
 </div>

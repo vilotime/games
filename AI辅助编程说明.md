@@ -8,7 +8,7 @@
 
 ## 0. 你会拿到什么、要交回什么
 
-**拿到**：一个压缩包 [下载链接（请下载最新版本）](https://gitee.com/vilotime/pack/releases#release-v1.1) ，里面是
+**拿到**：一个压缩包 [下载链接（请下载最新版本）](https://gitee.com/vilotime/pack/releases#) ，里面是
 
 ```
 AGENTS.md          给 AI 看的开发规范（DSH 打开文件夹会自动读）
