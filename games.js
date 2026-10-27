@@ -120,6 +120,16 @@
   function load(url) {
     if (typeof fetch !== 'function') { return Promise.reject(new Error('fetch unsupported')); }
     var u = url || './games.json';
+
+    /* file:// 下浏览器一律拒绝读本地 json（origin 为 null），与其刷一串 CORS 红字，
+       不如直接走 HTML 静态兜底；想看实时 json 起 tools/dev.js 走 http 即可。 */
+    if (typeof location !== 'undefined' && location.protocol === 'file:') {
+      if (typeof console !== 'undefined' && console.info) {
+        console.info('[games.json] 本地 file:// 打不开 json，页面使用 HTML 静态兜底（要看实时 json 请先跑 node tools/dev.js）');
+      }
+      return Promise.reject(new Error('file:// 下不读取 json'));
+    }
+
     return fetch(u, { cache: 'no-cache' })
       .then(function (r) {
         if (!r.ok) { throw new Error('HTTP ' + r.status); }

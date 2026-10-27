@@ -113,10 +113,11 @@ YCGames.load('./games.json').then(function (ds) {
 |---|---|
 | **线上（GitHub Pages）** | 提交推送 → 等部署 → `Ctrl + F5`。**不用跑任何脚本**，页面自己 fetch 新 json |
 | **本地 http 预览** | 跑 `node tools/dev.js`，浏览器开 `http://127.0.0.1:8080/index.html`；保存 json 会自动同步兜底，`Ctrl + R` 就能看到 |
-| **本地双击 `index.html`** | `fetch` 被 CORS 拦，页面走静态兜底 —— **必须双击 `tools\sync.cmd` 同步一次**，否则看到的还是旧内容 |
+| **本地双击 `index.html`** | `file://` 下浏览器不允许读本地 json，页面**一律走静态兜底**（不会再刷 CORS 报错）—— 改了 json **必须双击 `tools\sync.cmd` 同步一次**，否则看到的还是旧内容 |
 
-> 双击打开时如果忘了同步，控制台会打印
-> `[games.json] 读取失败，页面正在使用 HTML 静态兜底：…`，看到这句就是"该跑同步了"。
+> 双击打开时控制台会有一句蓝色提示
+> `[games.json] 本地 file:// 打不开 json，页面使用 HTML 静态兜底（要看实时 json 请先跑 node tools/dev.js）`
+> —— 不是报错，是在提醒你"想改完立刻生效就用 http 预览"。
 
 ### 命令
 

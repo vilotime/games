@@ -679,6 +679,9 @@
     /* ---------- 预取：悬停 / 聚焦时立刻拉，空闲时把剩下的全拉进缓存 ---------- */
     var prefetched = {};
     function prefetch(href) {
+        /* file:// 不支持 prefetch（每项都会刷一条 net::ERR_UNKNOWN_URL_SCHEME），
+           本地双击预览本来也不需要预取 —— 只在 http(s) 下启用 */
+        if (location.protocol !== 'http:' && location.protocol !== 'https:') { return; }
         if (!href || prefetched[href]) { return; }
         prefetched[href] = 1;
         try {
