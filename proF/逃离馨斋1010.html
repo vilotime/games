@@ -74,8 +74,8 @@
     <div class="overlay hidden" id="mobile">
       <div class="panel">
         <h1>这个游戏只能在电脑上玩</h1>
-        <p>「逃离馨斋1010」需要键盘操作，手机 / 平板上没法正常玩。</p>
-        <p>请用电脑打开本页面。</p>
+        <p>「逃离馨斋1010」需要键盘 / 鼠标，手机 / 平板上没法正常操作。</p>
+        <p>请用电脑打开本页面，或回主页挑个手机能玩的游戏</p>
         <button class="btn" id="mobileBack" type="button">返回主页</button>
       </div>
     </div>
@@ -2180,11 +2180,6 @@
       ctx.stroke();
     }
 
-    ctx.fillStyle = 'rgba(190,215,245,.5)';
-    ctx.font = '700 9px "PingFang SC","Microsoft YaHei",sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('柜子', (c.x0 + c.x1) / 2, c.y0 - 9);
   }
 
   /* 手电扫视的角度（以门为圆心，向上扫 ±36°） */
@@ -2429,6 +2424,7 @@
   reset();                                  /* 先准备好世界，开场画面背后就是真实地图 */
 
   if (isTouchOnlyDevice()) {
+    elIntro.classList.add('hidden');          /* 手机端只留拦截面板 */
     document.getElementById('mobile').classList.remove('hidden');
     /* 不启动主循环：这台设备只能看拦截面板 */
   } else {
@@ -2438,6 +2434,8 @@
 </script>
 </body>
 </html>
+
+
 
 
 
