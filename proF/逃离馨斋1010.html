@@ -76,6 +76,7 @@
         <h1>这个游戏只能在电脑上玩</h1>
         <p>「逃离馨斋1010」需要键盘操作，手机 / 平板上没法正常玩。</p>
         <p>请用电脑打开本页面。</p>
+        <button class="btn" id="mobileBack" type="button">返回主页</button>
       </div>
     </div>
   </div>
@@ -179,7 +180,16 @@
      ============================================================ */
   var AREA_G = [
     { g: [13, 65, 93, 75], kind: 'corridor',
-      open: [{ s: 'B', a: 86, b: 93 }] },
+      open: [{ s: 'B', a: 86, b: 93 }, { s: 'B', a: 13, b: 20.6667 },
+             { s: 'T', a: 13, b: 20.6667 }, { s: 'T', a: 74.3333, b: 82 }] },
+    /* 顶部走廊西南角的电梯间：同样两部电梯，不占走廊中间 */
+    { g: [13, 55, 20.6667, 65], kind: 'elev',
+      open: [{ s: 'T', a: 13, b: 20.6667 }] },
+    /* 顶部走廊北侧的另外两处安全出口（楼梯门），和电梯间同样大小 */
+    { g: [13, 75, 20.6667, 85], kind: 'stairs',
+      open: [{ s: 'B', a: 13, b: 20.6667 }] },
+    { g: [74.3333, 75, 82, 85], kind: 'stairs',
+      open: [{ s: 'B', a: 74.3333, b: 82 }] },
     { g: [86, 19, 93, 65], kind: 'corridor',
       open: [{ s: 'T', a: 86, b: 93 }, { s: 'B', a: 86, b: 93 },
              { s: 'L', a: 19, b: 42 }] },
@@ -203,12 +213,12 @@
      右侧走廊：北段也是左右成对（1018|1017 … 1008|1007，1010 正对 1009），
      南段 1007–1001 单排全在东侧（走廊左侧就是一面空墙）。 */
   var ROWS = [
-    { nums: ['1054', '1052', '1050', '1048', '1046', '1044', '1042', '1040', '1038',
-             '1036', '1034', '1032', '1030', '1028', '1026', '1024', '1022', '1020'],
-      axis: 'x', span: [13, 82], edge: 'B', at: 75 },
-    { nums: ['1053', '1051', '1049', '1047', '1045', '1043', '1041', '1039', '1037',
-             '1035', '1033', '1031', '1029', '1027', '1025', '1023', '1021', '1019'],
-      axis: 'x', span: [13, 82], edge: 'T', at: 65 },
+    { nums: ['1050', '1048', '1046', '1044', '1042', '1040', '1038', '1036',
+             '1034', '1032', '1030', '1028', '1026', '1024'],
+      axis: 'x', span: [20.6667, 74.3333], edge: 'B', at: 75 },
+    { nums: ['1051', '1049', '1047', '1045', '1043', '1041', '1039', '1037',
+             '1035', '1033', '1031', '1029', '1027', '1025', '1023', '1021'],
+      axis: 'x', span: [20.6667, 82], edge: 'T', at: 65 },
     /* 右侧走廊西侧：只有北段 6 间（双数），从南往北 1008 → 1018 */
     { nums: ['1008', '1010', '1012', '1014', '1016', '1018'],
       axis: 'y', span: [42, 65], edge: 'R', at: 86 },
@@ -247,20 +257,19 @@
 
   /* 设施（都放在走廊地面上，不占宿舍的位置） */
   var FAC_G = [
-    { t: 'stairs', g: [14, 66, 19, 73] },       /* 楼梯 1（顶部走廊西端） */
-    { t: 'stairs', g: [66, 66, 71, 73] },       /* 楼梯 2（顶部走廊东段） */
-    { t: 'stairs', g: [82.4, 39.2, 85.6, 41.8], custom: 1 }, /* 楼梯门 = 安全出口（电梯间上面） */
-    { t: 'elev',   g: [76, 66, 80, 73] },       /* 电梯 1（顶部走廊东端） */
+    { t: 'stairs', g: [13.4, 75.6, 20.2667, 84.4], custom: 1 }, /* 安全出口 A（顶部走廊西北） */
+    { t: 'stairs', g: [74.7333, 75.6, 81.6, 84.4], custom: 1 }, /* 安全出口 B（顶部走廊东北） */
+    { t: 'stairs', g: [82.4, 39.2, 85.6, 41.8], custom: 1 }, /* 安全出口 C（电梯间上面） */
+    { t: 'elev',   g: [13.4, 55.6, 20.2667, 64.4], custom: 1 }, /* 电梯间 A（顶部走廊西南角，两部电梯） */
     { t: 'elev',   g: [78.6, 30, 85.4, 38.4], custom: 1 }, /* 电梯间（里面两部电梯） */
-    { t: 'exit',   g: [20, 68, 22, 72] },       /* 安全出口（装饰） */
-    { t: 'exit',   g: [89, 68, 91, 72] }
+    { t: 'exit',   g: [88.6, 74.5, 91.4, 75], custom: 1 }  /* 安全出口牌：贴在走廊北墙上，不占路面 */
   ];
 
   /* ============================================================
      5. 数据展开到世界像素
      ============================================================ */
   var areas = [], rooms = [], facs = [], worldRect = { x0: 0, y0: 0, x1: W, y1: H };
-  var wcRect = null, elevRoomRect = null, stairNicheRect = null;
+  var wcRect = null, elevRects = [], stairRects = [];
 
   (function buildMap() {
     var i, a, o, r, xs = [], ys = [];
@@ -276,9 +285,9 @@
       }
       areas.push({ p: r, kind: a.kind, opens: opens });
       xs.push(r.x0, r.x1); ys.push(r.y0, r.y1);
-      if (a.kind === 'elev') { elevRoomRect = r; }
+      if (a.kind === 'elev') { elevRects.push(r); }
       if (a.kind === 'wc') { wcRect = r; }
-      if (a.kind === 'stairs') { stairNicheRect = r; }
+      if (a.kind === 'stairs') { stairRects.push(r); }
     }
 
     for (i = 0; i < ROOM_G.length; i++) {
@@ -1600,9 +1609,12 @@
     }
   }
 
-  /* 电梯间：房间里靠下摆两部电梯 */
+  /* 电梯间：每个房间里靠下摆两部电梯 */
   function drawElevRoom() {
-    var r = elevRoomRect;
+    for (var ei = 0; ei < elevRects.length; ei++) { drawOneElev(elevRects[ei]); }
+  }
+
+  function drawOneElev(r) {
     if (!r) { return; }
     var w = r.x1 - r.x0, h = r.y1 - r.y0;
 
@@ -1637,9 +1649,12 @@
     ctx.fillText('电梯间', (r.x0 + r.x1) / 2, r.y0 + 20);
   }
 
-  /* 楼梯门：电梯间上面那间，挂安全出口的牌子 */
+  /* 楼梯门（安全出口）：三处同样样式，和电梯间同等大小的凹间 */
   function drawStairNiche() {
-    var r = stairNicheRect;
+    for (var si = 0; si < stairRects.length; si++) { drawOneStair(stairRects[si]); }
+  }
+
+  function drawOneStair(r) {
     if (!r) { return; }
     var w = r.x1 - r.x0, h = r.y1 - r.y0;
 
@@ -1657,12 +1672,38 @@
 
     /* 安全出口牌 */
     ctx.fillStyle = 'rgba(32,120,80,.95)';
-    ctx.fillRect(r.x0 + 6, r.y0 + 4, w - 12, 13);
+    ctx.fillRect(r.x0 + 6, r.y0 + 5, Math.min(w - 12, 74), 15);
     ctx.fillStyle = '#d8ffe9';
-    ctx.font = '700 9px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.font = '700 10px "PingFang SC","Microsoft YaHei",sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('安全出口', (r.x0 + r.x1) / 2, r.y0 + 10.5);
+    ctx.fillText('安全出口', r.x0 + 6 + Math.min(w - 12, 74) / 2, r.y0 + 12.5);
+
+    /* 楼梯行 */
+    ctx.fillStyle = 'rgba(190,215,245,.6)';
+    ctx.font = '700 11px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('楼梯', (r.x0 + r.x1) / 2, r.y1 - 16);
+  }
+
+  /* 安全出口牌：贴在走廊北墙上的小牌子，不占走廊地面 */
+  function drawWallExit() {
+    for (var i = 0; i < facs.length; i++) {
+      var f = facs[i];
+      if (f.t !== 'exit') { continue; }
+      var r = f.p;
+      ctx.fillStyle = 'rgba(32,120,80,.95)';
+      ctx.fillRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+      ctx.strokeStyle = 'rgba(216,255,233,.5)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(r.x0 + 0.5, r.y0 + 0.5, r.x1 - r.x0 - 1, r.y1 - r.y0 - 1);
+      ctx.fillStyle = '#d8ffe9';
+      ctx.font = '700 9px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('出口', (r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2 + 1);
+    }
   }
 
   /* 1001 对面的厕所：能走进去的区域，没有出口，「厕所」两个字标在房间里 */
@@ -1752,14 +1793,6 @@
       ctx.moveTo(cx, r.y0 + 6); ctx.lineTo(cx, r.y1 - 6);
       ctx.stroke();
       label(cx, cy, '电梯');
-    } else if (f.t === 'exit') {
-      ctx.fillStyle = 'rgba(32,120,80,.9)';
-      ctx.fillRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
-      ctx.fillStyle = '#d8ffe9';
-      ctx.font = '700 9px "PingFang SC","Microsoft YaHei",sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('出口', cx, cy);
     }
   }
 
@@ -1906,6 +1939,7 @@
     drawStairNiche();
     drawElevRoom();
     drawWc();
+    drawWallExit();
 
     /* 地上的臭袜子 */
     for (i = 0; i < traps.length; i++) {
@@ -2387,6 +2421,11 @@
   document.getElementById('retryBtn').addEventListener('click', start);
   document.getElementById('winBtn').addEventListener('click', start);
 
+  /* 拦截面板的返回按钮：放进站点 proF/ 后就能跳回主页 */
+  document.getElementById('mobileBack').addEventListener('click', function () {
+    location.href = '主页.html';
+  });
+
   reset();                                  /* 先准备好世界，开场画面背后就是真实地图 */
 
   if (isTouchOnlyDevice()) {
@@ -2399,6 +2438,12 @@
 </script>
 </body>
 </html>
+
+
+
+
+
+
 
 
 
