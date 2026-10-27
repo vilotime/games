@@ -26,8 +26,9 @@
 │  └─ *.html            8 款游戏 / 入口页，每个一个文件
 ├─ pack/                ★ 对外制作包：压成 zip 发给合作者（见 AI辅助编程说明.md）
 ├─ assets/              站点图标与分享图（只被 index.html 的 <head> 引用）
-│  ├─ favicon.png       浏览器标签页图标 64×64
-│  ├─ apple-touch-icon.png  iOS 主屏幕图标 180×180
+│  ├─ favicon.png       浏览器标签页图标 64×64（叶片标识）
+│  ├─ apple-touch-icon.png  iOS 主屏幕图标 180×180（同一片叶子，留 23% 安全边距）
+│  ├─ favicon-old.png / apple-touch-icon-old.png  换图标前的旧版本，确认新版没问题就可以删
 │  ├─ share-square.png  分享卡片缩略图 500×500（og:image，微信会裁成正方形）
 │  └─ cover.png         横版分享缩略图 1200×630（twitter:image）
 ├─ AI辅助编程说明.md     邀请别人用 AI 做游戏的流程、两种提示词写法、收包验收
