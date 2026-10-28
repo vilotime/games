@@ -1,0 +1,2780 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>宿舍之夜：宿管风云</title>
+<link rel="stylesheet" href="../ui/yc-ui.css">
+<style>
+  /* 本游戏专属微调：只碰 HUD 与弹层，不改统一 UI 库 */
+  #hud > div { display: flex; align-items: center; gap: 6px; }
+  .chip .bar {
+    display: inline-block; width: 74px; height: 7px; margin-left: 6px;
+    border-radius: 4px; background: rgba(255,255,255,.15); vertical-align: middle; overflow: hidden;
+  }
+  .chip .bar i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #ff5d5d, #ffb347); }
+  #stChip .bar i { background: linear-gradient(90deg, #2f7bf6, #9fe0ff); }
+  #bpChip .bar i { background: linear-gradient(90deg, #b3243a, #ff5d5d); }
+  #battChip b { color: #7ef0c0; }
+
+  /* 失败 / 送医结算：整屏血红 */
+  #over.blood { background: rgba(96,0,10,.88); }
+  #over.blood .panel h1 { color: #ffd2d2; text-shadow: 0 0 18px rgba(255,40,40,.75); font-size: 19px; letter-spacing: .5px; }
+  #over.blood .panel p { color: #f0b9b9; }
+  #over.blood .btn { background: linear-gradient(135deg, #a11426, #e0313f); box-shadow: 0 8px 22px rgba(200,30,50,.5); }
+
+  @media (max-width: 760px), (max-height: 620px) {
+    .chip .bar { width: 42px; height: 6px; margin-left: 4px; }
+    #over.blood .panel h1 { font-size: 14px; }
+  }
+  @media (max-width: 560px) {
+    #hud .chip { font-size: 9.5px; padding: 2px 6px; }
+    .chip .bar { width: 28px; margin-left: 3px; }
+  }
+</style>
+</head>
+<body data-pc-only="1">
+<div id="wrap">
+  <div id="stage">
+    <canvas id="cv"></canvas>
+
+    <div id="hud">
+      <div>
+        <div class="chip">纪律 <b id="scoreNum">0</b>/<span id="goalNum">150</span></div>
+        <div class="chip" id="stChip">体力<span class="bar"><i id="stBar"></i></span></div>
+      </div>
+      <div>
+        <div class="chip" id="bpChip">血压<span class="bar"><i id="bpBar"></i></span></div>
+        <div class="chip" id="battChip">手电 <b id="battNum">100</b>%</div>
+        <div class="chip" id="clock">03:00</div>
+      </div>
+    </div>
+
+    <div id="banner"></div>
+    <div id="hint">WASD 走 · Shift 冲刺 · J 手电 · F 推门查寝 · K 抓人 · L 咆哮 · 按住 E 喝水</div>
+
+    <div class="overlay" id="intro">
+      <div class="panel">
+        <h1>宿舍之夜：宿管风云</h1>
+        <p>天亮前巡逻馨斋走廊，抓住违纪学生，纪律值 ≥ <span id="introGoal">150</span> 就拿全勤奖。</p>
+        <p>门口按 <kbd>F</kbd> 推门进屋查寝，走到桌边按 <kbd>K</kbd> 把人揪起来；屋里的怪东西走进去就会撞见，门口的 <kbd>F</kbd> 是出门。</p>
+        <p><kbd>WASD</kbd> 走 <kbd>Shift</kbd> 冲刺 <kbd>J</kbd> 手电 <kbd>F</kbd> 推门查寝 <kbd>K</kbd> 抓人 <kbd>L</kbd> 死亡咆哮 按住 <kbd>E</kbd> 喝枸杞水</p>
+        <button class="btn" id="startBtn" type="button">开始游戏</button>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="over">
+      <div class="panel">
+        <h1 id="overTitle">游戏结束</h1>
+        <p id="overStats"></p>
+        <button class="btn" id="retryBtn" type="button">再来一局</button>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="mobile">
+      <div class="panel">
+        <h1>这个游戏只能在电脑上玩</h1>
+        <p>「宿舍之夜：宿管风云」需要键盘，手机 / 平板上没法正常操作。</p>
+        <p>请用电脑打开本页面，或回主页挑个手机能玩的游戏</p>
+        <button class="btn" id="mobileBack" type="button">返回主页</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../ui/yc-ui.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  /* ============================================================
+     0. 基础常量
+     ============================================================ */
+  var G = 16;                      /* 一个网格单位 = 16 世界像素 */
+  var GX0 = 4, GYTOP = 85;         /* 网格 → 世界像素的翻转原点 */
+  var W = 900, H = 560;            /* 逻辑视口尺寸 */
+  var FOG_R = 210;                 /* 视野半径：开不开手电都一样，只有光锥额外照亮 */
+
+  /* 一局 3 分钟，天亮收工 */
+  var TIME_LIMIT = 180;
+  var TARGET_SCORE = 150;          /* 纪律值达标线（3 分钟要一直跑才刷得出来） */
+  var MAX_SOCKS = 3;               /* 单局踩中 3 个臭袜子直接送医 */
+
+  var SPD_WALK = 150;
+  var SPD_RUN = 250;
+  var STAM_RUN = 14;               /* 冲刺每秒体力 */
+  var STAM_REGEN = 6;              /* 平时慢慢回体力（喝枸杞水才是快的那个） */
+  var STAM_LOW = 0.4;              /* 体力归零后的龟速倍率 */
+  var STAM_DRINK = 60;             /* 一杯枸杞水回的体力 */
+  var DRINK_TIME = 1.5;
+
+  var BATT_DRAIN = 6;              /* 手电每秒耗电 */
+  var BATT_CHARGE = 3;             /* 关灯每秒回电（视野靠手电，回血要快一点） */
+  var LIGHT_RANGE = 280;           /* 光锥射程（极远） */
+  var LIGHT_HALF = 0.55;           /* 光锥半角 */
+
+  var CATCH_RANGE = 48;            /* 抓捕判定半径 */
+  var DOOR_RANGE = 44;             /* 查寝判定半径 */
+
+  var FEAR_R = 205;                /* 高跟鞋威压半径 */
+  var FEAR_R_RUN = 330;            /* 冲刺时脚步更响 */
+
+  var RAGE_CD = 10;
+  var RAGE_COST = 25;
+  var RAGE_TIME = 3;
+  var RAGE_SLOW = 0.45;
+
+  var STUN_TIME = 3;               /* 踩袜子眩晕 */
+  var SOCK_DMG = 20;
+  var SOCK_LIFE = 24;
+
+  var BP_RATE = 13;                /* 血压上涨 */
+  var BP_DECAY = 13;               /* 血压回落 */
+  var BP_GRACE = 3;                /* 发现后 3 秒还没抓到才开始涨 */
+
+  /* 学生属性表：性格参数决定行为 */
+  var TYPES = {
+    cat:    { name: '夜猫子',   pts: 10, color: '#5f86c9', speed: 95,  flee: 168, r: 11 },
+    toilet: { name: '厕所战神', pts: 20, color: '#9b8fb8', speed: 0,   flee: 0,   r: 11 },
+    epic:   { name: '电竞狂人', pts: 30, color: '#b06cf0', speed: 0,   flee: 0,   r: 11 },
+    ghost:  { name: '老六',     pts: 50, color: '#f0725d', speed: 150, flee: 236, r: 11 }
+  };
+
+  /* ============================================================
+     1. 画布与自适应
+     ============================================================ */
+  var cv = document.getElementById('cv');
+  var ctx = cv.getContext('2d');
+  var st = document.getElementById('stage');
+  var UNIT = 1;
+
+  function resize() {
+    var s = Math.min((window.innerWidth - 24) / W, (window.innerHeight - 24) / H);
+    s = Math.max(0.4, s);
+    var dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(W * s * dpr);
+    cv.height = Math.round(H * s * dpr);
+    cv.style.width = Math.round(W * s) + 'px';
+    cv.style.height = Math.round(H * s) + 'px';
+    st.style.width = cv.style.width;
+    st.style.height = cv.style.height;
+    UNIT = s * dpr;
+  }
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
+  resize();
+
+  /* ============================================================
+     2. DOM 外壳
+     ============================================================ */
+  var elBanner = document.getElementById('banner');
+  var elIntro = document.getElementById('intro');
+  var elOver = document.getElementById('over');
+  var elOverTitle = document.getElementById('overTitle');
+  var elOverStats = document.getElementById('overStats');
+  var elScoreNum = document.getElementById('scoreNum');
+  var elStBar = document.getElementById('stBar');
+  var elBpBar = document.getElementById('bpBar');
+  var elBattNum = document.getElementById('battNum');
+  var elClock = document.getElementById('clock');
+
+  /* 达标线只写在一个地方：界面上的两个数字都跟着 TARGET_SCORE 走 */
+  document.getElementById('goalNum').textContent = String(TARGET_SCORE);
+  document.getElementById('introGoal').textContent = String(TARGET_SCORE);
+
+  /* ============================================================
+     3. 坐标换算
+     ============================================================ */
+  function gx(v) { return (v - GX0) * G; }           /* 网格 X → 世界像素 X */
+  function gy(v) { return (GYTOP - v) * G; }         /* 网格 Y → 世界像素 Y（翻转） */
+  function pxRect(g) { return { x0: gx(g[0]), y0: gy(g[3]), x1: gx(g[2]), y1: gy(g[1]) }; }
+
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function dist2(ax, ay, bx, by) { var dx = ax - bx, dy = ay - by; return dx * dx + dy * dy; }
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+
+  /* ============================================================
+     4. 地图数据（网格坐标）—— 与《逃离馨斋1010》同一张图
+        · 顶部横向走廊 (16.33,65)-(123,75)
+        · 右侧纵向走廊 (116,19)-(123,65)
+        宿舍沿走廊两侧紧挨着排、不留缝，正对面的两间房号相邻；
+        楼梯 / 电梯 / 出口 / 厕所都做在走廊地面上，不占宿舍位置。
+     ============================================================ */
+  var AREA_G = [
+    /* 顶部走廊：西端 x16.33、东端拐角 x123 */
+    { g: [16.3333, 65, 123, 75], kind: 'corridor',
+      open: [{ s: 'B', a: 116, b: 123 }, { s: 'B', a: 20.1667, b: 27.8333 },
+             { s: 'B', a: 96.8333, b: 108.3333 },
+             { s: 'T', a: 65.0833, b: 71.0833 }] },
+    /* 最左侧那个安全出口 */
+    { g: [20.1667, 55, 27.8333, 65], kind: 'stairs',
+      open: [{ s: 'T', a: 20.1667, b: 27.8333 }] },
+    /* 四部电梯的电梯间：1032–1038 正对面 */
+    { g: [54.6667, 75, 81.5, 85], kind: 'elev', quad: 1, doorGlow: 1,
+      open: [{ s: 'B', a: 65.0833, b: 71.0833 }] },
+    /* 顶部走廊：1021–1023 对面的厕所 */
+    { g: [96.8333, 55, 108.3333, 65], kind: 'wc',
+      open: [{ s: 'T', a: 96.8333, b: 108.3333 }] },
+    { g: [116, 19, 123, 65], kind: 'corridor',
+      open: [{ s: 'T', a: 116, b: 123 },
+             { s: 'L', a: 19, b: 22.8333 }, { s: 'L', a: 31, b: 37 }] },
+    /* 右侧走廊的电梯间 */
+    { g: [108, 29, 116, 39], kind: 'elev', doorGlow: 1,
+      open: [{ s: 'R', a: 31, b: 37 }] },
+    /* 1001 正对面的厕所 */
+    { g: [108, 19, 116, 22.8333], kind: 'wc',
+      open: [{ s: 'R', a: 19, b: 22.8333 }] }
+  ];
+
+  /* 宿舍进深（网格单位） */
+  var ROOM_D = 3.8333;
+
+  /* 宿舍内部：统一的六人寝竖长方形模板（与《逃离馨斋1010》同一套房间） */
+  var ROOM_BOX = { x0: 250, y0: 60, x1: 650, y1: 540 };
+  var ROOM_DOOR = { x: 450, y: 540 };              /* 门在下方正中 */
+  var BUNK = [                                     /* 三张竖放的上下铺 */
+    { x0: 264, y0: 76,  x1: 348, y1: 224 },
+    { x0: 552, y0: 76,  x1: 636, y1: 224 },
+    { x0: 552, y0: 372, x1: 636, y1: 520 }
+  ];
+  var DESK4 = { x0: 264, y0: 228, x1: 308, y1: 368 };   /* 靠左墙的并排四座长桌 */
+  var DESK2 = { x0: 592, y0: 240, x1: 636, y1: 344 };   /* 靠右墙的两个座位 */
+  var CABINET = { x0: 264, y0: 372, x1: 308, y1: 512 }; /* 贴左墙的六人柜 */
+  var FURN = BUNK.concat([DESK4, DESK2, CABINET]);      /* 以上都挡人 */
+  var EPIC_SEAT = { x: 323, y: 298 };              /* 电竞狂人坐的那把椅子（四座长桌最中间） */
+
+  /* 宿舍里的隐藏剧情：每局随机刷，推门进屋就能看到真东西（不给任何屋外提示）
+     坐标都落在它该在的家具上：台灯/外卖/作业在桌上，被子里的东西在床上，
+     猫在柜子里，海报贴墙上，字条贴门上，锅和袜子堆在床底边的地上 */
+  var PLOTS = [
+    { t: '没收电煮锅', d: '床底下摸出一个还在冒热气的电煮锅。', x: 356, y: 176, kind: 'pot' },
+    { t: '夜宵泡面', d: '柜子旁边放着一箱刚泡好的泡面。', x: 330, y: 496, kind: 'boxes' },
+    { t: '一封情书', d: '枕头下压着情书，收件人不是你。', x: 306, y: 99, kind: 'letter' },
+    { t: '臭袜子堆', d: '床底攒了半个月的袜子，味道劝退。', x: 594, y: 238, kind: 'socks' },
+    { t: '外卖盒山', d: '桌上摞了七层外卖盒，扣分。', x: 286, y: 300, kind: 'takeout' },
+    { t: '查寝勿扰', d: '门上贴着「查寝勿扰，违者喊妈」。', x: 450, y: 512, kind: 'sign' },
+    { t: '被窝里的手机', d: '被子底下手机还亮着，人早跑了。', x: 594, y: 452, kind: 'phone' },
+    { t: '期末复习计划', d: '墙上贴着写了又划的复习计划。', x: 450, y: 86, kind: 'poster' },
+    { t: '被窝里的人形', d: '被子鼓鼓的，掀开是个玩偶，虚惊一场。', x: 594, y: 152, kind: 'dummy' },
+    { t: '一摞空白作业', d: '桌上压着一摞一个字没写的作业本。', x: 614, y: 292, kind: 'books' },
+    { t: '偷偷养的猫', d: '柜子里窝着一只猫，你假装没看见。', x: 286, y: 442, kind: 'cat' },
+    { t: '趴着睡着了', d: '台灯还亮着，人已经趴桌上睡熟了。', x: 286, y: 332, kind: 'sleeper' },
+    { t: '吃剩的炸鸡桶', d: '桌上摆着吃剩的炸鸡桶，油都没擦。', x: 286, y: 252, kind: 'takeout' },
+    { t: '枕头下的日记', d: '枕头下压着日记：「今天又没做题」。', x: 594, y: 100, kind: 'letter' },
+    { t: '被子里的充电宝', d: '被子里塞着三个充电宝，还在发烫。', x: 594, y: 200, kind: 'phone' },
+    { t: '禁止夜不归宿', d: '墙上那张「禁止夜不归宿」被人画了胡子。', x: 570, y: 86, kind: 'poster' },
+    { t: '柜格里的仓鼠笼', d: '柜格里养着一笼仓鼠，正刨木屑。', x: 286, y: 400, kind: 'cat' },
+    { t: '桌上的期末试卷', d: '试卷刚发下来，分数被人涂掉了。', x: 614, y: 320, kind: 'books' },
+    { t: '被子下的书包', d: '被子底下塞着书包，拉链都没拉。', x: 560, y: 430, kind: 'dummy' },
+    { t: '床底的旧课本', d: '床底塞着一箱旧课本，落满灰。', x: 356, y: 218, kind: 'books' }
+  ];
+  var PLOT_SEE = 66;               /* 走到这么近就撞见（家具上的东西要隔一段才能靠近） */
+
+  /* 实心墙体块（网格）：走廊之间留下的空档直接填成墙 */
+  var WALL_FILL_G = [
+    [108, 22.8333, 116, 29],
+    [112.1667, 39, 116, 42]
+  ];
+  var WALL_FILL_COL = '#0d1521';
+
+  /* 每一排宿舍：沿哪条轴排、跨度、贴走廊的那条边 */
+  var ROWS = [
+    { nums: ['1055'], axis: 'x', span: [16.3333, 20.1667], edge: 'B', at: 75 },
+    { nums: ['1050', '1051'], axis: 'x', span: [20.1667, 27.8333], edge: 'B', at: 75 },
+    { nums: ['1039', '1041', '1043', '1045', '1047', '1049', '1052'],
+      axis: 'x', span: [27.8333, 54.6667], edge: 'B', at: 75 },
+    { nums: ['1031', '1029', '1027', '1025'], axis: 'x', span: [81.5, 96.8333], edge: 'B', at: 75 },
+    { nums: ['1023', '1022', '1021'], axis: 'x', span: [96.8333, 108.3333], edge: 'B', at: 75 },
+    { nums: ['1019'], axis: 'x', span: [108.3333, 112.1667], edge: 'B', at: 75 },
+    { nums: ['1040', '1042', '1044', '1046', '1048', '1053', '1054'],
+      axis: 'x', span: [27.8333, 54.6667], edge: 'T', at: 65 },
+    { nums: ['1032', '1033', '1034', '1035', '1036', '1037', '1038'],
+      axis: 'x', span: [54.6667, 81.5], edge: 'T', at: 65 },
+    { nums: ['1030', '1028', '1026', '1024'], axis: 'x', span: [81.5, 96.8333], edge: 'T', at: 65 },
+    { nums: ['1020'], axis: 'x', span: [108.3333, 112.1667], edge: 'T', at: 65 },
+    { nums: ['1008', '1010', '1012', '1014', '1016', '1018'],
+      axis: 'y', span: [42, 65], edge: 'R', at: 116 },
+    { nums: ['1001', '1002', '1003', '1004', '1005', '1006', '1007',
+             '1009', '1011', '1013', '1015', '1017'],
+      axis: 'y', span: [19, 65], edge: 'L', at: 123 }
+  ];
+
+  /* 由每一排生成宿舍网格矩形：[房号, x0, y0, x1, y1] */
+  var ROOM_G = (function () {
+    var out = [];
+    for (var i = 0; i < ROWS.length; i++) {
+      var row = ROWS[i], n = row.nums.length;
+      var pitch = (row.span[1] - row.span[0]) / n;
+      var a0 = row.span[0];
+      for (var k = 0; k < n; k++) {
+        var a1 = (k === n - 1) ? row.span[1] : a0 + pitch;
+        var x0, y0, x1, y1;
+        if (row.axis === 'x') {
+          x0 = a0; x1 = a1;
+          if (row.edge === 'B') { y0 = row.at; y1 = row.at + ROOM_D; }
+          else { y0 = row.at - ROOM_D; y1 = row.at; }
+        } else {
+          y0 = a0; y1 = a1;
+          if (row.edge === 'L') { x0 = row.at; x1 = row.at + ROOM_D; }
+          else { x0 = row.at - ROOM_D; x1 = row.at; }
+        }
+        out.push([row.nums[k], x0, y0, x1, y1]);
+        a0 = a1;
+      }
+    }
+    return out;
+  })();
+
+  /* 设施（都在走廊地面上） */
+  var FAC_G = [
+    { t: 'stairs', g: [20.6, 55.6, 27.4, 64.4], custom: 1 },
+    { t: 'stairs', g: [66.6, 84, 69.6, 85], custom: 1 },
+    { t: 'stairs', g: [109, 37.3, 115, 38.6], custom: 1 },
+    { t: 'elev',   g: [55.2, 76, 59, 82.5], custom: 1 },
+    { t: 'elev',   g: [77, 76, 81, 82.5], custom: 1 },
+    { t: 'elev',   g: [108.6, 29.4, 115.4, 32], custom: 1 },
+    { t: 'exit',   g: [118.6, 74.5, 121.4, 75], custom: 1 }
+  ];
+
+  /* ============================================================
+     5. 数据展开到世界像素
+     ============================================================ */
+  var areas = [], rooms = [], facs = [], worldRect = { x0: 0, y0: 0, x1: W, y1: H };
+  var wcRects = [], elevRects = [], stairRects = [], wallFills = [];
+
+  (function buildMap() {
+    var i, a, o, r, xs = [], ys = [];
+
+    for (i = 0; i < AREA_G.length; i++) {
+      a = AREA_G[i];
+      r = pxRect(a.g);
+      var opens = [];
+      for (var k = 0; k < (a.open || []).length; k++) {
+        o = a.open[k];
+        if (o.s === 'T' || o.s === 'B') { opens.push({ s: o.s, p0: gx(o.a), p1: gx(o.b) }); }
+        else { opens.push({ s: o.s, p0: gy(o.b), p1: gy(o.a) }); }
+      }
+      areas.push({ p: r, kind: a.kind, opens: opens, doorGlow: a.doorGlow ? 1 : 0 });
+      xs.push(r.x0, r.x1); ys.push(r.y0, r.y1);
+      if (a.kind === 'elev') { r.quad = a.quad ? 1 : 0; elevRects.push(r); }
+      if (a.kind === 'wc') { wcRects.push(r); }
+      if (a.kind === 'stairs') { stairRects.push(r); }
+    }
+
+    for (i = 0; i < ROOM_G.length; i++) {
+      r = pxRect(ROOM_G[i].slice(1));
+      rooms.push({
+        n: ROOM_G[i][0], idx: parseInt(ROOM_G[i][0], 10) - 1000, r: r,
+        cx: (r.x0 + r.x1) / 2, cy: (r.y0 + r.y1) / 2,
+        door: null, epic: false, plot: -1, plotTaken: false
+      });
+      xs.push(r.x0, r.x1); ys.push(r.y0, r.y1);
+    }
+
+    for (i = 0; i < WALL_FILL_G.length; i++) { wallFills.push(pxRect(WALL_FILL_G[i])); }
+
+    for (i = 0; i < FAC_G.length; i++) {
+      r = pxRect(FAC_G[i].g);
+      facs.push({ t: FAC_G[i].t, p: r, cx: (r.x0 + r.x1) / 2, cy: (r.y0 + r.y1) / 2,
+                  custom: !!FAC_G[i].custom });
+    }
+
+    for (i = 0; i < xs.length; i++) {
+      worldRect.x0 = Math.min(worldRect.x0, xs[i]);
+      worldRect.x1 = Math.max(worldRect.x1, xs[i]);
+    }
+    for (i = 0; i < ys.length; i++) {
+      worldRect.y0 = Math.min(worldRect.y0, ys[i]);
+      worldRect.y1 = Math.max(worldRect.y1, ys[i]);
+    }
+  })();
+
+  /* 门牌号：馨斋十层，房号都是 10xx */
+  function roomLabel(rm) {
+    var i = rm.idx < 10 ? '0' + rm.idx : String(rm.idx);
+    return '10' + i;
+  }
+
+  /* ============================================================
+     6. 碰撞：走廊可行走区 + 墙体线
+     ============================================================ */
+  function walkable(x, y) {
+    for (var i = 0; i < areas.length; i++) {
+      var r = areas[i].p;
+      if (x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1) { return true; }
+    }
+    return false;
+  }
+
+  var WALL_HALF = 3.5;            /* 墙线 7px 宽 */
+  var wallBands = [];
+  (function buildWallBands() {
+    var SIDES = ['T', 'B', 'L', 'R'], i, j, s, a, r, segs, sd;
+    for (i = 0; i < areas.length; i++) {
+      a = areas[i]; r = a.p;
+      for (j = 0; j < SIDES.length; j++) {
+        sd = SIDES[j];
+        segs = wallSegs(sd, r, a.opens);
+        for (s = 0; s < segs.length; s++) {
+          if (segs[s][1] - segs[s][0] < 2) { continue; }
+          if (sd === 'T') { wallBands.push({ x0: segs[s][0], y0: r.y0, x1: segs[s][1], y1: r.y0 }); }
+          else if (sd === 'B') { wallBands.push({ x0: segs[s][0], y0: r.y1, x1: segs[s][1], y1: r.y1 }); }
+          else if (sd === 'L') { wallBands.push({ x0: r.x0, y0: segs[s][0], x1: r.x0, y1: segs[s][1] }); }
+          else { wallBands.push({ x0: r.x1, y0: segs[s][0], x1: r.x1, y1: segs[s][1] }); }
+        }
+      }
+    }
+  })();
+
+  function hitsWall(x, y, rad) {
+    var lim = rad + WALL_HALF, lim2 = lim * lim, i, b, cx, cy, dx, dy;
+    for (i = 0; i < wallBands.length; i++) {
+      b = wallBands[i];
+      cx = x < b.x0 ? b.x0 : (x > b.x1 ? b.x1 : x);
+      cy = y < b.y0 ? b.y0 : (y > b.y1 ? b.y1 : y);
+      dx = x - cx; dy = y - cy;
+      if (dx * dx + dy * dy < lim2) { return true; }
+    }
+    return false;
+  }
+
+  /* 射线打墙：手电光锥与视线都用它裁剪 */
+  function rayDist(ox, oy, dx, dy, maxT) {
+    var best = maxT, w = WALL_HALF, i, b, t1, t2, tmin, tmax, x0, x1, y0, y1;
+    for (i = 0; i < wallBands.length; i++) {
+      b = wallBands[i];
+      x0 = b.x0 - w; x1 = b.x1 + w; y0 = b.y0 - w; y1 = b.y1 + w;
+      if (dx === 0) {
+        if (ox < x0 || ox > x1) { continue; }
+        tmin = -Infinity; tmax = Infinity;
+      } else {
+        t1 = (x0 - ox) / dx; t2 = (x1 - ox) / dx;
+        tmin = Math.min(t1, t2); tmax = Math.max(t1, t2);
+      }
+      if (dy === 0) {
+        if (oy < y0 || oy > y1) { continue; }
+      } else {
+        t1 = (y0 - oy) / dy; t2 = (y1 - oy) / dy;
+        tmin = Math.max(tmin, Math.min(t1, t2));
+        tmax = Math.min(tmax, Math.max(t1, t2));
+      }
+      if (tmax < 0 || tmin > tmax) { continue; }
+      if (tmin > 0 && tmin < best) { best = tmin; }
+      else if (tmin <= 0 && tmax > 0) { best = 0; }
+    }
+    return best;
+  }
+
+  /* 圆形实体能不能站在这里：在走廊里 + 不压墙 + 中心和 8 个采样点都成立 */
+  function circleOk(x, y, rad) {
+    if (!walkable(x, y)) { return false; }
+    if (hitsWall(x, y, rad)) { return false; }
+    for (var i = 0; i < 8; i++) {
+      var a = i * Math.PI / 4;
+      if (!walkable(x + Math.cos(a) * rad, y + Math.sin(a) * rad)) { return false; }
+    }
+    return true;
+  }
+
+  /* 视线：两点之间不能隔墙 */
+  function losClear(x0, y0, x1, y1) {
+    var dx = x1 - x0, dy = y1 - y0;
+    var d = Math.sqrt(dx * dx + dy * dy);
+    if (d < 1) { return true; }
+    return rayDist(x0, y0, dx / d, dy / d, d) >= d - 6;
+  }
+
+  /* 是否在宿舍内部场景里 */
+  function inRoom() { return !!(scene === 'room' && roomSc); }
+
+  /* 宿舍里的家具碰撞（上下铺 / 桌子 / 柜子） */
+  function roomBlocked(x, y, r) {
+    for (var i = 0; i < FURN.length; i++) {
+      var b = FURN[i];
+      if (x > b.x0 - r && x < b.x1 + r && y > b.y0 - r && y < b.y1 + r) { return true; }
+    }
+    return false;
+  }
+
+  /* 给每间宿舍自动找门：取「外侧 12px 落在走廊里」最长的那条边 */
+  (function buildDoors() {
+    var SIDES = ['B', 'T', 'L', 'R'];
+    for (var i = 0; i < rooms.length; i++) {
+      var r = rooms[i].r, best = null;
+      for (var s = 0; s < 4; s++) {
+        var sd = SIDES[s];
+        var horiz = (sd === 'T' || sd === 'B');
+        var e0 = horiz ? r.x0 : r.y0;
+        var e1 = horiz ? r.x1 : r.y1;
+        var runStart = null, bestRun = null;
+        for (var t = e0; t <= e1; t += 4) {
+          var ox, oy;
+          if (sd === 'T') { ox = t; oy = r.y0 - 12; }
+          else if (sd === 'B') { ox = t; oy = r.y1 + 12; }
+          else if (sd === 'L') { ox = r.x0 - 12; oy = t; }
+          else { ox = r.x1 + 12; oy = t; }
+          if (walkable(ox, oy)) {
+            if (runStart === null) { runStart = t; }
+          } else if (runStart !== null) {
+            if (!bestRun || (t - runStart) > bestRun.len) { bestRun = { a: runStart, b: t, len: t - runStart }; }
+            runStart = null;
+          }
+        }
+        if (runStart !== null && (!bestRun || (e1 - runStart) > bestRun.len)) {
+          bestRun = { a: runStart, b: e1, len: e1 - runStart };
+        }
+        if (bestRun && bestRun.len >= 8 && (!best || bestRun.len > best.len)) {
+          var mid = (bestRun.a + bestRun.b) / 2;
+          best = {
+            len: bestRun.len, side: sd,
+            x: horiz ? mid : (sd === 'L' ? r.x0 : r.x1),
+            y: horiz ? (sd === 'T' ? r.y0 : r.y1) : mid
+          };
+        }
+      }
+      rooms[i].door = best;
+    }
+  })();
+
+  /* ============================================================
+     7. 运行时状态
+     ============================================================ */
+  var state = 'intro';             /* intro | playing | over */
+  var scene = 'corridor';          /* corridor | room */
+  var roomSc = null;               /* 进了哪间宿舍 */
+  var last = 0, tNow = 0, bannerT = 0;
+  var timeLeft = TIME_LIMIT;
+  var score = 0, socksHit = 0, caught = 0;
+
+  var shake = 0, flash = 0, flashCol = '255,60,60';
+  var camX = 0, camY = 0;
+  var camL = 0, camT = 0, camR = W, camB = H;
+
+  var player = {
+    x: 0, y: 0, r: 10, fx: 0, fy: 1,
+    st: 100, stMax: 100,        /* 体力 */
+    bp: 0,                      /* 血压 */
+    batt: 100,                  /* 手电电量 */
+    stun: 0,                    /* 踩袜子眩晕 */
+    drink: 0,                   /* 喝水进度（>0 = 正在喝） */
+    shout: 0,                   /* 破口大骂强制停顿 */
+    rageCd: 0, slowT: 0,
+    tired: false, stepAcc: 0
+  };
+  var torch = false;
+  var curTarget = null;           /* 当前站在哪扇门前 */
+
+  var students = [], socks = [], parts = [], pops = [];
+  var spawnT = { cat: 0, ghost: 0, toilet: 0 };
+  var epicRoom = -1, epicT = 0;
+  var epicHinted = false;         /* 这句黄字提示每次电竞只给一次 */
+  var plotT = 0;                  /* 隐藏剧情刷新计时 */
+  var plotUsed = [];              /* 本局已经用过的剧情（每条只出现一次） */
+  var drinkLock = false;          /* 喝完一口 / 被打断后要先松手 */
+  var popup = null;              /* 屏幕下方的剧情卡片 */
+  var battLow = false;
+
+  /* ============================================================
+     8. 通用小工具
+     ============================================================ */
+  function banner(text, ms) {
+    elBanner.textContent = text;
+    elBanner.classList.add('show');
+    bannerT = (ms || 1200) / 1000;
+  }
+  function fmtTime(t) {
+    t = Math.max(0, t);
+    var m = Math.floor(t / 60), s = Math.floor(t % 60);
+    return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+  }
+  function updateHUD() {
+    elScoreNum.textContent = String(score);
+    elStBar.style.width = clamp(player.st / player.stMax * 100, 0, 100) + '%';
+    elBpBar.style.width = clamp(player.bp, 0, 100) + '%';
+    var batt = Math.round(player.batt);
+    elBattNum.textContent = String(batt);
+    /* 电量低于 15% 才变暖橙、回到 25% 才恢复：不会在阈值上下闪来闪去 */
+    if (!battLow && batt <= 15) {
+      battLow = true;
+      elBattNum.style.color = '#ffb347';
+    } else if (battLow && batt >= 25) {
+      battLow = false;
+      elBattNum.style.color = '';
+    }
+    elClock.textContent = fmtTime(timeLeft);
+  }
+
+  function burst(x, y, n, col) {
+    if (parts.length > 260) { return; }
+    for (var i = 0; i < n; i++) {
+      var a = Math.random() * Math.PI * 2, sp = rnd(40, 190);
+      parts.push({
+        kind: 'dot', x: x, y: y,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: rnd(0.25, 0.6), max: 0.6, t: 0, c: col, r: rnd(1.5, 3)
+      });
+    }
+  }
+  function ringFx(x, y, col, r0, r1, life) {
+    if (parts.length > 260) { return; }
+    parts.push({ kind: 'ring', x: x, y: y, c: col, r0: r0, r1: r1, life: life, max: life, t: 0 });
+  }
+  function smoke(x, y) {
+    if (parts.length > 260) { return; }
+    parts.push({
+      kind: 'smoke', x: x, y: y, vx: rnd(-10, 10), vy: 0,
+      r: rnd(3, 5), life: 1.2, max: 1.2, t: 0, c: '190,205,225'
+    });
+  }
+  function popFx(x, y, text, color) {
+    if (pops.length > 24) { pops.shift(); }
+    pops.push({ x: x, y: y, text: text, color: color, life: 1.1, max: 1.1 });
+  }
+
+  function updateParts(dt) {
+    var i, p;
+    for (i = parts.length - 1; i >= 0; i--) {
+      p = parts[i];
+      p.t += dt;
+      if (p.t >= p.life) { parts.splice(i, 1); continue; }
+      if (p.kind === 'smoke') { p.x += p.vx * dt; p.y -= 16 * dt; p.r += 8 * dt; }
+      else if (p.kind === 'dot') {
+        p.x += p.vx * dt; p.y += p.vy * dt;
+        p.vx *= 0.94; p.vy *= 0.94;
+      }
+    }
+    for (i = pops.length - 1; i >= 0; i--) {
+      pops[i].life -= dt;
+      pops[i].y -= 24 * dt;
+      if (pops[i].life <= 0) { pops.splice(i, 1); }
+    }
+  }
+
+  /* ============================================================
+     9. 学生：刷新与 AI
+     ============================================================ */
+  var CORRIDORS = (function () {
+    var out = [];
+    for (var i = 0; i < areas.length; i++) {
+      if (areas[i].kind === 'corridor') { out.push(areas[i]); }
+    }
+    return out;
+  })();
+
+  function countType(t) {
+    var n = 0;
+    for (var i = 0; i < students.length; i++) {
+      if (students[i].type === t && !students[i].dead) { n++; }
+    }
+    return n;
+  }
+
+  /* 这个点离其他学生够不够远（防止扎堆）；self 是自己，不算 */
+  function spotClear(x, y, minD, self) {
+    for (var i = 0; i < students.length; i++) {
+      var s = students[i];
+      if (s.dead || s === self) { continue; }
+      if (dist2(x, y, s.x, s.y) < minD * minD) { return false; }
+    }
+    return true;
+  }
+
+  function freeSpotIn(area, rad) {
+    var r = area.p;
+    for (var k = 0; k < 30; k++) {
+      var x = rnd(r.x0 + rad + 4, r.x1 - rad - 4);
+      var y = rnd(r.y0 + rad + 4, r.y1 - rad - 4);
+      if (circleOk(x, y, rad)) { return { x: x, y: y }; }
+    }
+    return null;
+  }
+
+  function addStudent(type) {
+    var T = TYPES[type], spot = null, guard = 0, i, r, x, y;
+
+    if (type === 'toilet') {
+      /* 厕所战神：蹲在任意一个厕所角落抽烟 */
+      while (!spot && guard++ < 60) {
+        r = wcRects[Math.floor(Math.random() * wcRects.length)];
+        x = rnd(r.x0 + 22, r.x1 - 22);
+        y = rnd(r.y0 + 22, r.y1 - 22);
+        if (circleOk(x, y, T.r) && spotClear(x, y, 60)) { spot = { x: x, y: y }; }
+      }
+      if (!spot) { return; }
+    } else {
+      guard = 0;
+      while (guard++ < 90) {
+        var ar = CORRIDORS[Math.floor(Math.random() * CORRIDORS.length)];
+        var s2 = freeSpotIn(ar, T.r + 2);
+        if (!s2) { continue; }
+        if (dist2(s2.x, s2.y, player.x, player.y) < 340 * 340) { continue; }
+        if (!spotClear(s2.x, s2.y, 70)) { continue; }   /* 别刷在其他学生身上 */
+        spot = s2;
+        break;
+      }
+      if (!spot) { return; }
+    }
+
+    students.push({
+      type: type, x: spot.x, y: spot.y, r: T.r,
+      tx: spot.x, ty: spot.y, wanderT: 0, stuck: 0,
+      stunT: 0, slowT: 0, panicT: 0, lightT: 0, lit: false,
+      discoverT: 0, sockT: 2, fear: 0, smokeT: rnd(0, 0.4),
+      dead: false
+    });
+  }
+
+  /* 换一个散步目标：优先选离其他学生远一点的地方 */
+  function newWander(s) {
+    var best = null, i, ar, spot;
+    for (i = 0; i < 8; i++) {
+      ar = CORRIDORS[Math.floor(Math.random() * CORRIDORS.length)];
+      spot = freeSpotIn(ar, s.r + 2);
+      if (!spot) { continue; }
+      if (dist2(spot.x, spot.y, s.x, s.y) < 50 * 50) { continue; }
+      if (spotClear(spot.x, spot.y, 80, s)) { best = spot; break; }
+      if (!best) { best = spot; }
+    }
+    if (best) { s.tx = best.x; s.ty = best.y; }
+    s.wanderT = rnd(2.2, 4.5);
+  }
+
+  function stepStudent(s, dx, dy, spd, dt) {
+    var nx = s.x + dx * spd * dt, ny = s.y + dy * spd * dt;
+    var moved = false;
+    if (circleOk(nx, s.y, s.r)) { s.x = nx; moved = true; }
+    if (circleOk(s.x, ny, s.r)) { s.y = ny; moved = true; }
+    return moved;
+  }
+
+  function nudge(s, ux, uy, dist) {
+    if (dist <= 0) { return; }
+    if (circleOk(s.x + ux * dist, s.y, s.r)) { s.x += ux * dist; }
+    if (circleOk(s.x, s.y + uy * dist, s.r)) { s.y += uy * dist; }
+  }
+
+  /* 学生之间保持间距：谁也别贴谁，更不许重叠 */
+  var SEP_R = 28;
+  function separateStudents() {
+    var i, j, a, b, dx, dy, d, gap, ux, uy, aFixed, bFixed;
+    for (i = 0; i < students.length; i++) {
+      a = students[i];
+      if (a.dead) { continue; }
+      for (j = i + 1; j < students.length; j++) {
+        b = students[j];
+        if (b.dead) { continue; }
+        dx = b.x - a.x; dy = b.y - a.y;
+        d = Math.sqrt(dx * dx + dy * dy);
+        if (d >= SEP_R) { continue; }
+        if (d < 0.6) {                      /* 完全重叠：随便挑个方向掰开 */
+          var ang = Math.random() * Math.PI * 2;
+          ux = Math.cos(ang); uy = Math.sin(ang);
+          gap = SEP_R;
+        } else {
+          ux = dx / d; uy = dy / d;
+          gap = SEP_R - d;
+        }
+        aFixed = (a.type === 'toilet');
+        bFixed = (b.type === 'toilet');
+        if (aFixed && bFixed) { continue; }
+        if (aFixed) { nudge(b, ux, uy, gap * 0.4); }
+        else if (bFixed) { nudge(a, -ux, -uy, gap * 0.4); }
+        else { nudge(a, -ux, -uy, gap * 0.2); nudge(b, ux, uy, gap * 0.2); }
+      }
+    }
+  }
+
+  function updateStudents(dt) {
+    var fleeR = isRunning() ? FEAR_R_RUN : FEAR_R;
+    var playerSeen = !inRoom();          /* 在屋里时，走廊里的学生听不到也看不到你 */
+    for (var i = students.length - 1; i >= 0; i--) {
+      var s = students[i];
+      if (s.dead) { students.splice(i, 1); continue; }
+      var T = TYPES[s.type];
+
+      if (s.stunT > 0) { s.stunT -= dt; }
+      if (s.panicT > 0) { s.panicT -= dt; }
+      if (s.slowT > 0) { s.slowT -= dt; }
+      if (s.fear > 0) { s.fear -= dt; }
+
+      /* 厕所战神：原地抽烟冒烟 */
+      if (s.type === 'toilet') {
+        s.smokeT -= dt;
+        if (s.smokeT <= 0) { s.smokeT = 0.34; smoke(s.x + 5, s.y - 9); }
+        continue;
+      }
+
+      var feared = playerSeen &&
+        ((dist2(s.x, s.y, player.x, player.y) < fleeR * fleeR) || s.panicT > 0);
+      if (feared) { s.fear = 0.4; }
+
+      if (feared) {
+        /* 四散奔逃：背着宿管跑 */
+        var ax = s.x - player.x, ay = s.y - player.y;
+        var L = Math.sqrt(ax * ax + ay * ay);
+        if (L < 1) { ax = 1; ay = 0; L = 1; }
+        var fs = T.flee * (s.slowT > 0 ? RAGE_SLOW : 1);
+        if (s.stunT <= 0) { stepStudent(s, ax / L, ay / L, fs, dt); }
+        /* 老六逃跑时每 2 秒丢一个臭袜子 */
+        if (s.type === 'ghost') {
+          s.sockT -= dt;
+          if (s.sockT <= 0) { s.sockT = 2; dropSock(s.x, s.y); }
+        }
+      } else {
+        s.wanderT -= dt;
+        if (s.wanderT <= 0) { newWander(s); }
+        var wx = s.tx - s.x, wy = s.ty - s.y;
+        var wl = Math.sqrt(wx * wx + wy * wy);
+        if (wl < 12) { newWander(s); }
+        else if (s.stunT <= 0) {
+          var spd = T.speed * (s.slowT > 0 ? RAGE_SLOW : 1);
+          if (!stepStudent(s, wx / wl, wy / wl, spd, dt)) {
+            s.stuck += dt;
+            if (s.stuck > 0.5) { s.stuck = 0; newWander(s); }
+          } else { s.stuck = 0; }
+        }
+      }
+    }
+  }
+
+  /* 玩家是否在冲刺（脚步更响，吓得学生逃得更远） */
+  function isRunning() {
+    if (!keys['shift'] || player.st <= 0 || player.tired) { return false; }
+    return !!(keys['a'] || keys['d'] || keys['w'] || keys['s'] ||
+              keys['arrowleft'] || keys['arrowright'] || keys['arrowup'] || keys['arrowdown']);
+  }
+
+  /* ============================================================
+     10. 臭袜子
+     ============================================================ */
+  function dropSock(x, y) {
+    /* 扔偏一点：追着老六跑的时候还能左右躲，不至于一脚一个 */
+    var sx = x + rnd(-26, 26), sy = y + rnd(-26, 26);
+    if (!circleOk(sx, sy, 8)) { sx = x; sy = y; }
+    if (socks.length > 24) { socks.shift(); }
+    socks.push({ x: sx, y: sy, life: SOCK_LIFE, t: 0 });
+
+    /* 正在喝水时袜子飞过来：这一口白喝 */
+    if (player.drink > 0 && dist2(sx, sy, player.x, player.y) < 90 * 90) {
+      player.drink = 0;
+      drinkLock = true;
+      popFx(player.x, player.y - 26, '喝水被打断', '#ff5d5d');
+      banner('臭袜子飞来，水白喝了', 1200);
+    }
+  }
+
+  function updateSocks(dt) {
+    for (var i = socks.length - 1; i >= 0; i--) {
+      var k = socks[i];
+      k.life -= dt; k.t += dt;
+      if (k.life <= 0) { socks.splice(i, 1); continue; }
+      if (inRoom() || player.stun > 0 || player.drink > 0) { continue; }
+      if (dist2(k.x, k.y, player.x, player.y) < (player.r + 7) * (player.r + 7)) {
+        socks.splice(i, 1);
+        stepSock();
+      }
+    }
+  }
+
+  function stepSock() {
+    socksHit++;
+    player.st = Math.max(0, player.st - SOCK_DMG);
+    player.stun = STUN_TIME;
+    player.drink = 0;
+    drinkLock = true;
+    shake = 14; flash = 0.5; flashCol = '150,220,150';
+    burst(player.x, player.y, 18, '#8fbf6a');
+    popFx(player.x, player.y - 26, '臭袜子！', '#ffb347');
+    banner('踩到臭袜子 · 眩晕 3 秒（' + socksHit + '/' + MAX_SOCKS + '）', 1500);
+    if (socksHit >= MAX_SOCKS) { gameOver('sock'); }
+  }
+
+  /* ============================================================
+     11. 宿管（玩家）
+     ============================================================ */
+  /* 喝枸杞水：按住 E 站定 1.5 秒，松手立刻打断（不回复） */
+  function updateDrink(dt) {
+    var holding = !!keys['e'];
+    if (!holding) {
+      player.drink = 0;
+      drinkLock = false;             /* 松手即打断，想再喝要重新按住 */
+      return;
+    }
+    if (drinkLock || player.stun > 0 || player.shout > 0) { player.drink = 0; return; }
+    if (player.st >= player.stMax) { player.drink = 0; return; }
+    player.drink += dt;
+    if (player.drink >= DRINK_TIME) {
+      player.drink = 0;
+      drinkLock = true;              /* 这一口喝完，抬手再按才继续喝 */
+      player.st = Math.min(player.stMax, player.st + STAM_DRINK);
+      popFx(player.x, player.y - 26, '体力 +' + STAM_DRINK, '#7ef0c0');
+      burst(player.x, player.y, 8, '#7ef0c0');
+    }
+  }
+
+  function updatePlayer(dt) {
+    if (player.stun > 0) { player.stun -= dt; if (player.stun < 0) { player.stun = 0; } }
+    if (player.shout > 0) { player.shout -= dt; if (player.shout < 0) { player.shout = 0; } }
+    if (player.rageCd > 0) { player.rageCd -= dt; if (player.rageCd < 0) { player.rageCd = 0; } }
+    if (player.slowT > 0) { player.slowT -= dt; if (player.slowT < 0) { player.slowT = 0; } }
+
+    updateDrink(dt);
+
+    if (player.stun > 0 || player.shout > 0 || player.drink > 0) { return; }
+
+    var dx = 0, dy = 0;
+    if (keys['a'] || keys['arrowleft']) { dx -= 1; }
+    if (keys['d'] || keys['arrowright']) { dx += 1; }
+    if (keys['w'] || keys['arrowup']) { dy -= 1; }
+    if (keys['s'] || keys['arrowdown']) { dy += 1; }
+
+    var len = Math.sqrt(dx * dx + dy * dy);
+    /* 站着不动也慢慢回一点体力 */
+    if (len === 0) {
+      player.stepAcc = 0;
+      if (player.st < player.stMax) { player.st = Math.min(player.stMax, player.st + STAM_REGEN * dt); }
+      if (player.tired && player.st >= 18) { player.tired = false; }
+      return;
+    }
+    dx /= len; dy /= len;
+    player.fx = dx; player.fy = dy;
+
+    var wantRun = isRunning();
+    var sp = wantRun ? SPD_RUN : SPD_WALK;
+    if (player.st <= 0) { player.tired = true; }
+    if (player.tired && player.st >= 18) { player.tired = false; }
+    if (player.tired) { sp *= STAM_LOW; }        /* 体力归零：龟速 40% */
+
+    if (wantRun) {
+      player.st -= STAM_RUN * dt;
+      if (player.st <= 0) { player.st = 0; player.tired = true; }
+    } else if (player.st < player.stMax) {
+      /* 走路时回体力，但比一口枸杞水慢得多 */
+      player.st = Math.min(player.stMax, player.st + STAM_REGEN * dt);
+    }
+
+    var nx = player.x + dx * sp * dt;
+    var ny = player.y + dy * sp * dt;
+    if (inRoom()) {
+      /* 宿舍内部：房间框 + 上下铺 / 桌子 / 柜子挡人 */
+      var pad = player.r + 4;
+      nx = clamp(nx, ROOM_BOX.x0 + pad, ROOM_BOX.x1 - pad);
+      ny = clamp(ny, ROOM_BOX.y0 + pad, ROOM_BOX.y1 - pad);
+      if (roomBlocked(nx, player.y, player.r)) { nx = player.x; }
+      if (roomBlocked(player.x, ny, player.r)) { ny = player.y; }
+      player.x = nx; player.y = ny;
+    } else {
+      if (circleOk(nx, player.y, player.r)) { player.x = nx; }
+      if (circleOk(player.x, ny, player.r)) { player.y = ny; }
+    }
+
+    /* 高跟鞋脚步声 */
+    player.stepAcc += sp * dt;
+    if (player.stepAcc > (wantRun ? 42 : 32)) {
+      player.stepAcc = 0;
+      ringFx(player.x, player.y + 6, wantRun ? 'rgba(255,209,102,.34)' : 'rgba(160,200,240,.22)',
+             4, wantRun ? 34 : 18, 0.45);
+    }
+  }
+
+  /* 手电：耗电 + 光锥持续照射 1 秒定身 1 秒 */
+  function updateTorch(dt) {
+    if (torch) {
+      player.batt -= BATT_DRAIN * dt;
+      if (player.batt <= 0) {
+        player.batt = 0; torch = false;
+        banner('手电没电了', 1100);
+      }
+    } else if (player.batt < 100) {
+      player.batt = Math.min(100, player.batt + BATT_CHARGE * dt);
+    }
+
+    if (inRoom()) { return; }        /* 屋里没有走廊学生，照不到人 */
+
+    var face = Math.atan2(player.fy, player.fx);
+    for (var i = 0; i < students.length; i++) {
+      var s = students[i];
+      s.lit = false;
+      if (!torch || player.batt <= 0) { s.lightT = 0; continue; }
+      var dx = s.x - player.x, dy = s.y - player.y;
+      var d = Math.sqrt(dx * dx + dy * dy);
+      if (d > LIGHT_RANGE) { s.lightT = 0; continue; }
+      var diff = Math.atan2(dy, dx) - face;
+      while (diff > Math.PI) { diff -= Math.PI * 2; }
+      while (diff < -Math.PI) { diff += Math.PI * 2; }
+      if (Math.abs(diff) > LIGHT_HALF) { s.lightT = 0; continue; }
+      if (!losClear(player.x, player.y, s.x, s.y)) { s.lightT = 0; continue; }
+      s.lit = true;
+      s.lightT += dt;
+      if (s.lightT >= 1) {
+        s.lightT = 0;
+        s.stunT = Math.max(s.stunT, 1);
+        popFx(s.x, s.y - s.r - 8, '定身', '#ffd166');
+      }
+    }
+  }
+
+  /* 身边最近的可抓学生（轻按 K 用） */
+  function nearestStudent(range) {
+    var best = null, bd = range * range, i, s, d;
+    for (i = 0; i < students.length; i++) {
+      s = students[i];
+      if (s.dead) { continue; }
+      d = dist2(s.x, s.y, player.x, player.y);
+      if (d < bd) { bd = d; best = s; }
+    }
+    return best;
+  }
+
+  /* 轻按 K：抓走廊里的学生 / 抓屋里的电竞狂人 */
+  function pressK() {
+    if (player.stun > 0 || player.shout > 0 || player.drink > 0) { return; }
+    if (inRoom()) {
+      var rm = roomSc.room;
+      if (rm.epic && dist2(player.x, player.y, EPIC_SEAT.x, EPIC_SEAT.y) < CATCH_RANGE * CATCH_RANGE) {
+        catchEpic(rm);
+        return;
+      }
+      banner(rm.epic ? '走到那把椅子边再按 K' : '屋里没人可抓', 900);
+      return;
+    }
+    var s = nearestStudent(CATCH_RANGE);
+    if (!s) { banner('身边没人，走近一点再按 K', 800); return; }
+    catchSuccess(s);
+  }
+
+  function catchSuccess(s) {
+    var T = TYPES[s.type], i;
+    s.dead = true;
+    /* 立刻从数组里摘掉：绝不留一个"死掉还在原地"的残影 */
+    for (i = students.length - 1; i >= 0; i--) {
+      if (students[i] === s) { students.splice(i, 1); }
+    }
+    score += T.pts;
+    caught++;
+    popFx(s.x, s.y - 22, '+' + T.pts, '#ffd166');
+    burst(s.x, s.y, 16, T.color);
+    ringFx(s.x, s.y, 'rgba(255,209,102,.9)', 6, 48, 0.45);
+    shake = Math.max(shake, 6);
+    flash = 0.12; flashCol = '255,209,102';
+    banner('抓住' + T.name + ' +' + T.pts, 1000);
+    if (s.type === 'cat') { spawnT.cat = 6; }
+    else if (s.type === 'ghost') { spawnT.ghost = 16; }
+    else if (s.type === 'toilet') { spawnT.toilet = 20; }
+  }
+
+  /* ============================================================
+     12. 查寝 / 咆哮 / 喝水 / 手电开关
+     ============================================================ */
+  function findDoor() {
+    var best = null, bd = DOOR_RANGE * DOOR_RANGE, i, rm, d;
+    for (i = 0; i < rooms.length; i++) {
+      rm = rooms[i];
+      if (!rm.door) { continue; }
+      d = dist2(player.x, player.y, rm.door.x, rm.door.y);
+      if (d < bd) { bd = d; best = rm; }
+    }
+    return best;
+  }
+
+  function searchDoor() {
+    if (player.stun > 0 || player.shout > 0 || player.drink > 0) { return; }
+
+    /* 已经进屋了：F 只负责从门口出去 */
+    if (inRoom()) {
+      var rmIn = roomSc.room;
+      if (dist2(player.x, player.y, ROOM_DOOR.x, ROOM_DOOR.y) < 52 * 52 && roomSc.enterT > 0.5) {
+        leaveRoom();
+        return;
+      }
+      if (rmIn.epic) { banner('走到桌边按 K 抓住他', 1100); return; }
+      banner('屋里没人违纪，走到门口按 F 出去', 1000);
+      return;
+    }
+
+    /* 走廊里：站在门口推门查寝 */
+    var rm = findDoor();
+    if (!rm) { banner('站到宿舍门口再按 F', 800); return; }
+    ringFx(rm.door.x, rm.door.y, 'rgba(120,180,255,.9)', 6, 52, 0.4);
+    shake = Math.max(shake, 4);
+    enterRoom(rm);
+  }
+
+  /* 推门进宿舍：换成宿舍内部场景 */
+  function enterRoom(rm) {
+    scene = 'room';
+    roomSc = { room: rm, enterT: 0 };
+    curTarget = null;
+    player.x = ROOM_DOOR.x;
+    player.y = ROOM_DOOR.y - 34;
+    player.fx = 0; player.fy = -1;
+    player.drink = 0;
+    burst(ROOM_DOOR.x, ROOM_DOOR.y - 20, 10, 'rgba(255,209,102,.9)');
+    banner(rm.epic ? ('推门查寝 · ' + roomLabel(rm) + ' · 屋里的屏幕还亮着') : ('推门查寝 · ' + roomLabel(rm)), 2600);
+  }
+
+  /* ============================================================
+     12.5 隐藏剧情（每局随机刷在宿舍里）
+     ============================================================ */
+  function showPopup(title, text, color) {
+    popup = { title: title, text: text, color: color || '#ffd166', life: 4.6, max: 4.6 };
+  }
+
+  function countPlots() {
+    var n = 0;
+    for (var i = 0; i < rooms.length; i++) {
+      if (rooms[i].plot >= 0 && !rooms[i].plotTaken) { n++; }
+    }
+    return n;
+  }
+  /* countPlots 只给调试看，正式流程用 freePlot 判还有没有没用过的剧情 */
+
+  /* 本局还没用过的剧情（每条剧情一局只出现一次） */
+  function freePlot() {
+    var pool = [], i;
+    for (i = 0; i < PLOTS.length; i++) {
+      if (!plotUsed[i]) { pool.push(i); }
+    }
+    if (!pool.length) { return -1; }
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  /* 把一条还没用过的剧情放进一间还没有剧情的宿舍 */
+  function rollPlot() {
+    var pi = freePlot();
+    if (pi < 0) { return; }
+    var pool = [], i;
+    for (i = 0; i < rooms.length; i++) {
+      if (rooms[i].plot < 0) { pool.push(i); }
+    }
+    if (!pool.length) { return; }
+    var r = pool[Math.floor(Math.random() * pool.length)];
+    rooms[r].plot = pi;
+    rooms[r].plotTaken = false;
+    plotUsed[pi] = true;
+  }
+
+  function resetPlots() {
+    var i;
+    for (i = 0; i < PLOTS.length; i++) { plotUsed[i] = false; }
+    for (i = 0; i < rooms.length; i++) { rooms[i].plot = -1; rooms[i].plotTaken = false; }
+    for (i = 0; i < 10; i++) { rollPlot(); }   /* 开局先摆 10 处，其余边玩边刷 */
+    plotT = 10;
+  }
+
+  /* 走进屋里那堆东西旁边，就自动撞见剧情（不用按任何键去"查看"） */
+  function checkPlotTouch() {
+    if (!roomSc) { return; }
+    var rm = roomSc.room;
+    if (rm.plot < 0 || rm.plotTaken) { return; }
+    var p = PLOTS[rm.plot];
+    if (dist2(player.x, player.y, p.x, p.y) < PLOT_SEE * PLOT_SEE) { revealPlot(rm); }
+  }
+
+  function revealPlot(rm) {
+    var p = PLOTS[rm.plot];
+    rm.plotTaken = true;
+    score += 1;                          /* 每条隐藏剧情统一 +1 纪律值 */
+    burst(p.x, p.y, 16, '#ffd166');
+    ringFx(p.x, p.y, 'rgba(255,209,102,.9)', 6, 56, 0.5);
+    popFx(p.x, p.y - 26, '+1', '#ffd166');
+    shake = Math.max(shake, 4);
+    showPopup('屋里发现 · ' + p.t + ' · 纪律 +1', p.d, '#ffd166');
+  }
+
+  /* 从宿舍退回走廊：沿门的朝向推出去，别卡在墙里 */
+  function leaveRoom() {
+    if (!roomSc) { return; }
+    var d = roomSc.room.door;
+    var k = 22, ox = 0, oy = 0;
+    if (d) {
+      if (d.side === 'T') { oy = -k; }
+      else if (d.side === 'B') { oy = k; }
+      else if (d.side === 'L') { ox = -k; }
+      else { ox = k; }
+      player.x = d.x + ox;
+      player.y = d.y + oy;
+      var tries = 0;
+      while (!circleOk(player.x, player.y, player.r) && tries++ < 8) {
+        player.x = d.x + ox * (1 + tries * 0.5);
+        player.y = d.y + oy * (1 + tries * 0.5);
+      }
+    }
+    scene = 'corridor';
+    roomSc = null;
+    camX = player.x; camY = player.y;
+    banner('回到走廊', 700);
+  }
+
+  /* 在宿舍里逮到电竞狂人 */
+  function catchEpic(rm) {
+    rm.epic = false;
+    epicRoom = -1;
+    epicT = 25;
+    score += TYPES.epic.pts;
+    caught++;
+    shake = Math.max(shake, 9);
+    flash = 0.32; flashCol = '176,108,240';
+    burst(EPIC_SEAT.x, EPIC_SEAT.y, 26, TYPES.epic.color);
+    ringFx(EPIC_SEAT.x, EPIC_SEAT.y, 'rgba(255,209,102,.9)', 6, 60, 0.5);
+    popFx(EPIC_SEAT.x, EPIC_SEAT.y - 26, '+' + TYPES.epic.pts, '#ffd166');
+    banner('揪起电竞狂人 +' + TYPES.epic.pts, 1400);
+  }
+
+  function doRage() {
+    if (player.stun > 0 || player.shout > 0 || player.drink > 0) { return; }
+    if (player.rageCd > 0) { banner('还没缓过来（' + Math.ceil(player.rageCd) + 's）', 800); return; }
+    if (player.st < RAGE_COST) { banner('体力不够吼了', 900); return; }
+    player.st -= RAGE_COST;
+    player.rageCd = RAGE_CD;
+    player.slowT = RAGE_TIME;
+    shake = 18;
+    ringFx(player.x, player.y, 'rgba(255,209,102,.85)', 10, 340, 0.6);
+    for (var i = 0; i < students.length; i++) {
+      students[i].panicT = RAGE_TIME;
+      students[i].slowT = RAGE_TIME;
+      students[i].discoverT = 0;
+      students[i].fear = 0.5;
+    }
+    banner('还不睡觉！全场减速 3 秒', 1200);
+  }
+
+  /* 松手即打断：起手只提示，真正的读条在 updateDrink 里按住 E 才涨 */
+  function startDrink() {
+    if (player.stun > 0 || player.shout > 0) { return; }
+    if (player.st >= player.stMax - 0.5) { banner('体力是满的', 800); return; }
+    banner('按住 E 喝枸杞水 · 松手就白喝', 900);
+  }
+
+  function toggleTorch() {
+    if (player.stun > 0 || player.shout > 0 || player.drink > 0) { return; }
+    if (!torch && player.batt <= 0) { banner('手电没电了', 800); return; }
+    torch = !torch;
+  }
+
+  /* ============================================================
+     13. 血压 / 刷新 / 胜负
+     ============================================================ */
+  function updateBP(dt) {
+    var exposed = false, i, s;
+    if (inRoom()) {
+      /* 屋里看不见走廊，血压慢慢回落 */
+      player.bp = clamp(player.bp - BP_DECAY * dt, 0, 100);
+      return;
+    }
+    for (i = 0; i < students.length; i++) {
+      s = students[i];
+      if (s.dead || s.type === 'toilet') { continue; }   /* 躲在厕所的看不见 */
+      var d = dist2(s.x, s.y, player.x, player.y);
+      var seen = s.lit || (d < 250 * 250 && losClear(player.x, player.y, s.x, s.y));
+      if (seen) { s.discoverT += dt; } else { s.discoverT = Math.max(0, s.discoverT - dt * 1.6); }
+      if (s.discoverT > BP_GRACE) { exposed = true; }
+    }
+    player.bp = clamp(player.bp + (exposed ? BP_RATE : -BP_DECAY) * dt, 0, 100);
+
+    if (player.bp >= 100) {
+      player.bp = 0;
+      player.shout = 2;
+      player.drink = 0;
+      shake = 24; flash = 0.6; flashCol = '255,90,90';
+      banner('血压爆表！原地破口大骂 2 秒', 1600);
+      ringFx(player.x, player.y, 'rgba(255,93,93,.9)', 12, 260, 0.5);
+    }
+  }
+
+  function updateSpawn(dt) {
+    spawnT.cat -= dt;
+    if (spawnT.cat <= 0) {
+      if (countType('cat') < 3) { addStudent('cat'); spawnT.cat = 6; }
+      else { spawnT.cat = 2; }
+    }
+    spawnT.ghost -= dt;
+    if (spawnT.ghost <= 0) {
+      if (countType('ghost') < 1) { addStudent('ghost'); spawnT.ghost = 16; banner('老六出现了', 1000); }
+      else { spawnT.ghost = 3; }
+    }
+    spawnT.toilet -= dt;
+    if (spawnT.toilet <= 0) {
+      if (countType('toilet') < 1) { addStudent('toilet'); spawnT.toilet = 20; }
+      else { spawnT.toilet = 3; }
+    }
+  }
+
+  function updateEpic(dt) {
+    if (epicRoom >= 0) { return; }
+    epicT -= dt;
+    if (epicT <= 0) {
+      /* 优先挑离玩家不太远、有门的宿舍，3 分钟的局才找得到 */
+      var near = [], far = [], i, d;
+      for (i = 0; i < rooms.length; i++) {
+        if (!rooms[i].door) { continue; }
+        d = dist2(rooms[i].door.x, rooms[i].door.y, player.x, player.y);
+        if (d < 1100 * 1100) { near.push(i); } else { far.push(i); }
+      }
+      for (i = 0; i < rooms.length; i++) { rooms[i].epic = false; }
+      var pool = near.length ? near : far;
+      if (!pool.length) { epicT = 3; return; }
+      var r = pool[Math.floor(Math.random() * pool.length)];
+      rooms[r].epic = true;
+      epicRoom = r;
+      epicHinted = false;
+      /* 不告诉玩家是哪一间：走近了才给一句居中黄字 */
+    }
+  }
+
+  function gameOver(kind) {
+    if (state !== 'playing') { return; }
+    state = 'over';
+    player.drink = 0; player.stun = 0; player.shout = 0;
+    var win = (kind === 'time' && score >= TARGET_SCORE);
+    if (kind === 'sock') { elOverTitle.textContent = '连夜送医'; }
+    else if (win) { elOverTitle.textContent = '全勤奖到手'; }
+    else { elOverTitle.textContent = '早会挨骂'; }
+    if (win) { elOver.classList.remove('blood'); flash = 0.35; flashCol = '255,209,102'; }
+    else { elOver.classList.add('blood'); flash = 0.6; flashCol = '255,40,40'; }
+    elOverStats.textContent = '纪律值 ' + score + ' / 目标 ' + TARGET_SCORE +
+      ' · 抓到 ' + caught + ' 人 · 踩袜子 ' + socksHit + ' 次';
+    elOver.classList.remove('hidden');
+  }
+
+  /* ============================================================
+     14. 主更新
+     ============================================================ */
+  function update(dt) {
+    tNow += dt;
+
+    if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) { elBanner.classList.remove('show'); } }
+    if (shake > 0) { shake *= Math.pow(0.02, dt); if (shake < 0.4) { shake = 0; } }
+    if (flash > 0) { flash -= dt; if (flash < 0) { flash = 0; } }
+
+    timeLeft -= dt;
+    if (timeLeft <= 0) {
+      timeLeft = 0;
+      updateHUD();
+      gameOver('time');
+      return;
+    }
+
+    updatePlayer(dt);      /* 宿管本身（走廊 / 宿舍内部各一套边界） */
+
+    /* 隐藏剧情：隔一阵把一条还没出现过的剧情放进空宿舍（每条一局只出现一次） */
+    plotT -= dt;
+    if (plotT <= 0) {
+      plotT = 16;
+      rollPlot();
+    }
+    if (popup) {
+      popup.life -= dt;
+      if (popup.life <= 0) { popup = null; }
+    }
+
+    if (!inRoom()) {
+      updateTorch(dt);     /* 手电与定身 */
+      updateSocks(dt);     /* 臭袜子 */
+      updateBP(dt);        /* 血压 */
+      updateEpic(dt);      /* 电竞狂人换房 */
+      updateSpawn(dt);     /* 刷新学生 */
+      curTarget = findDoor();
+      followCam(dt);
+      /* 走近电竞那间就居中提示一句（不说是哪一间），停久一点 */
+      if (!epicHinted && epicRoom >= 0 && rooms[epicRoom].door) {
+        var ed = rooms[epicRoom].door;
+        if (dist2(player.x, player.y, ed.x, ed.y) < 300 * 300) {
+          epicHinted = true;
+          banner('附近某间屋里的屏幕还亮着 · 按 F 推门查寝', 3200);
+        }
+      }
+    } else {
+      curTarget = null;
+      roomSc.enterT += dt;   /* 刚进屋的 0.5 秒内不响应门口的 F，免得一按就出门 */
+      updateTorch(dt);       /* 屋里也照样耗电 / 回电 */
+      checkPlotTouch();      /* 走到那堆东西旁边就撞见 */
+    }
+
+    updateStudents(dt);    /* 走廊里的学生一直在走 */
+    separateStudents();    /* 谁也别贴谁，更不许重叠 */
+    updateParts(dt);
+    updateHUD();
+  }
+
+  function followCam(dt) {
+    var k = Math.min(1, dt * 9);
+    camX += (player.x - camX) * k;
+    camY += (player.y - camY) * k;
+    var halfW = W / 2, halfH = H / 2;
+    var wx0 = worldRect.x0, wx1 = worldRect.x1, wy0 = worldRect.y0, wy1 = worldRect.y1;
+    camX = (wx1 - wx0 <= W) ? (wx0 + wx1) / 2 : clamp(camX, wx0 + halfW, wx1 - halfW);
+    camY = (wy1 - wy0 <= H) ? (wy0 + wy1) / 2 : clamp(camY, wy0 + halfH, wy1 - halfH);
+  }
+
+  /* ============================================================
+     15. 绘制工具（与《逃离馨斋1010》同一套）
+     ============================================================ */
+  function fog(px, py, radius) {
+    var g = ctx.createRadialGradient(px, py, radius * 0.52, px, py, radius);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(0.62, 'rgba(0,0,0,.28)');
+    g.addColorStop(1, 'rgba(2,4,9,1)');
+    ctx.beginPath();
+    ctx.arc(px, py, radius, 0, Math.PI * 2);
+    ctx.fillStyle = g;
+    ctx.fill();
+
+    /* 圆之外：纯黑 */
+    ctx.beginPath();
+    ctx.rect(0, 0, W, H);
+    ctx.arc(px, py, radius, 0, Math.PI * 2);
+    ctx.fillStyle = '#02040a';
+    ctx.fill('evenodd');
+  }
+
+  function screenFX() {
+    if (flash > 0.01) {
+      ctx.fillStyle = 'rgba(' + flashCol + ',' + (flash * 0.5).toFixed(3) + ')';
+      ctx.fillRect(0, 0, W, H);
+    }
+    var vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.95);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(80,0,10,.26)');
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  function wallSegs(side, r, opens) {
+    var e0, e1, segs = [], i;
+    if (side === 'T' || side === 'B') { e0 = r.x0; e1 = r.x1; }
+    else { e0 = r.y0; e1 = r.y1; }
+    var list = [];
+    for (i = 0; i < opens.length; i++) { if (opens[i].s === side) { list.push(opens[i]); } }
+    list.sort(function (p, q) { return p.p0 - q.p0; });
+    var cur = e0;
+    for (i = 0; i < list.length; i++) {
+      var o = list[i];
+      if (o.p0 > cur) { segs.push([cur, Math.min(o.p0, e1)]); }
+      cur = Math.max(cur, o.p1);
+    }
+    if (cur < e1) { segs.push([cur, e1]); }
+    return segs;
+  }
+
+  function drawRoomBlock(rm) {
+    var r = rm.r;
+    ctx.fillStyle = '#070c15';
+    ctx.fillRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+    ctx.strokeStyle = 'rgba(58,76,105,.55)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(r.x0 + 1, r.y0 + 1, r.x1 - r.x0 - 2, r.y1 - r.y0 - 2);
+
+    ctx.fillStyle = 'rgba(120,150,190,.62)';
+    ctx.font = '700 10px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(roomLabel(rm), rm.cx, rm.cy);
+  }
+
+  function drawArea(a) {
+    var r = a.p;
+    var col = '#101725';
+    if (a.kind === 'stairs') { col = '#151d2b'; }
+    if (a.kind === 'elev') { col = '#1a2231'; }
+    if (a.kind === 'wc') { col = '#0e1520'; }
+
+    ctx.fillStyle = col;
+    ctx.fillRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+
+    /* 地砖 */
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(90,130,180,.07)';
+    ctx.lineWidth = 1;
+    var x, y;
+    for (x = Math.ceil(Math.max(r.x0, camL) / 32) * 32; x < Math.min(r.x1, camR); x += 32) {
+      ctx.beginPath(); ctx.moveTo(x, r.y0); ctx.lineTo(x, r.y1); ctx.stroke();
+    }
+    for (y = Math.ceil(Math.max(r.y0, camT) / 32) * 32; y < Math.min(r.y1, camB); y += 32) {
+      ctx.beginPath(); ctx.moveTo(r.x0, y); ctx.lineTo(r.x1, y); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawWalls(a) {
+    var r = a.p, sides = ['T', 'B', 'L', 'R'], i, j, segs;
+    for (i = 0; i < 4; i++) {
+      segs = wallSegs(sides[i], r, a.opens);
+      for (j = 0; j < segs.length; j++) {
+        var s0 = segs[j][0], s1 = segs[j][1];
+        if (s1 - s0 < 2) { continue; }
+        ctx.lineWidth = 7;
+        ctx.strokeStyle = '#1b2536';
+        ctx.beginPath();
+        if (sides[i] === 'T') { ctx.moveTo(s0, r.y0); ctx.lineTo(s1, r.y0); }
+        else if (sides[i] === 'B') { ctx.moveTo(s0, r.y1); ctx.lineTo(s1, r.y1); }
+        else if (sides[i] === 'L') { ctx.moveTo(r.x0, s0); ctx.lineTo(r.x0, s1); }
+        else { ctx.moveTo(r.x1, s0); ctx.lineTo(r.x1, s1); }
+        ctx.stroke();
+
+        ctx.lineWidth = 1.6;
+        ctx.strokeStyle = 'rgba(79,156,249,.16)';
+        ctx.stroke();
+      }
+    }
+  }
+
+  function drawDoorMarks(a) {
+    if (!a.doorGlow) { return; }
+    var r = a.p, i, o, x0, y0, x1, y1, horiz, t = 10;
+    for (i = 0; i < a.opens.length; i++) {
+      o = a.opens[i];
+      horiz = (o.s === 'T' || o.s === 'B');
+      if (o.s === 'T') { x0 = o.p0; x1 = o.p1; y0 = y1 = r.y0; }
+      else if (o.s === 'B') { x0 = o.p0; x1 = o.p1; y0 = y1 = r.y1; }
+      else if (o.s === 'L') { y0 = o.p0; y1 = o.p1; x0 = x1 = r.x0; }
+      else { y0 = o.p0; y1 = o.p1; x0 = x1 = r.x1; }
+
+      ctx.strokeStyle = 'rgba(255,209,102,.38)';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0); ctx.lineTo(x1, y1);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(255,236,179,.32)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      if (horiz) {
+        ctx.moveTo(x0, y0 - t); ctx.lineTo(x0, y0 + t);
+        ctx.moveTo(x1, y1 - t); ctx.lineTo(x1, y1 + t);
+      } else {
+        ctx.moveTo(x0 - t, y0); ctx.lineTo(x0 + t, y0);
+        ctx.moveTo(x1 - t, y1); ctx.lineTo(x1 + t, y1);
+      }
+      ctx.stroke();
+    }
+  }
+
+  function drawElevRoom() {
+    for (var ei = 0; ei < elevRects.length; ei++) {
+      drawOneElev(elevRects[ei]);
+      drawElevExitSign(elevRects[ei]);
+    }
+  }
+
+  function drawElevExitSign(r) {
+    var cx = (r.x0 + r.x1) / 2, w = 74, h = 15;
+    var x = cx - w / 2, y = r.y0 + 4;
+    ctx.fillStyle = 'rgba(32,120,80,.95)';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = 'rgba(216,255,233,.5)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    ctx.fillStyle = '#d8ffe9';
+    ctx.font = '700 10px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('安全出口', cx, y + h / 2 + 0.5);
+  }
+
+  function drawOneElev(r) {
+    if (!r) { return; }
+    var w = r.x1 - r.x0, h = r.y1 - r.y0;
+
+    ctx.strokeStyle = 'rgba(120,150,190,.45)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(r.x0 + 3, r.y0 + 3, w - 6, h - 6);
+
+    if (r.quad) {
+      var vgap = 10;
+      var vh = Math.min(44, (h - 30) / 2 - vgap / 2);
+      var vy = r.y0 + (h - (vh * 2 + vgap)) / 2;
+      for (var s = 0; s < 2; s++) {
+        var vx = (s === 0) ? r.x0 + 8 : r.x1 - 8 - 22;
+        for (var k = 0; k < 2; k++) {
+          var yy = vy + k * (vh + vgap);
+          ctx.fillStyle = '#202a3c';
+          ctx.fillRect(vx, yy, 22, vh);
+          ctx.strokeStyle = 'rgba(255,209,102,.7)';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(vx + 1, yy + 1, 20, vh - 2);
+          ctx.beginPath();
+          ctx.moveTo(vx + 6, yy + vh / 2);
+          ctx.lineTo(vx + 16, yy + vh / 2);
+          ctx.stroke();
+        }
+      }
+    } else {
+      var gap = 8, pad = 10;
+      var dw = (w - pad * 2 - gap) / 2;
+      var dh = Math.min(46, h * 0.28);
+      var dy = r.y1 - dh - 10;
+      for (var i = 0; i < 2; i++) {
+        var dx = r.x0 + pad + i * (dw + gap);
+        ctx.fillStyle = '#202a3c';
+        ctx.fillRect(dx, dy, dw, dh);
+        ctx.strokeStyle = 'rgba(255,209,102,.7)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(dx + 1, dy + 1, dw - 2, dh - 2);
+        ctx.beginPath();
+        ctx.moveTo(dx + dw / 2, dy + 5);
+        ctx.lineTo(dx + dw / 2, dy + dh - 5);
+        ctx.stroke();
+      }
+    }
+
+    ctx.fillStyle = 'rgba(190,215,245,.8)';
+    ctx.font = '700 11px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('电梯间', (r.x0 + r.x1) / 2, r.y0 + 30);
+  }
+
+  function drawStairNiche() {
+    for (var si = 0; si < stairRects.length; si++) { drawOneStair(stairRects[si]); }
+  }
+
+  function drawOneStair(r) {
+    if (!r) { return; }
+    var w = r.x1 - r.x0, h = r.y1 - r.y0;
+    ctx.fillStyle = '#151d2b';
+    ctx.fillRect(r.x0 + 2, r.y0 + 2, w - 4, h - 4);
+    ctx.fillStyle = 'rgba(32,120,80,.95)';
+    ctx.fillRect(r.x0 + 6, r.y0 + 5, Math.min(w - 12, 74), 15);
+    ctx.fillStyle = '#d8ffe9';
+    ctx.font = '700 10px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('安全出口', r.x0 + 6 + Math.min(w - 12, 74) / 2, r.y0 + 12.5);
+  }
+
+  function drawWallExit() {
+    for (var i = 0; i < facs.length; i++) {
+      var f = facs[i];
+      if (f.t !== 'exit') { continue; }
+      var r = f.p;
+      ctx.fillStyle = 'rgba(32,120,80,.95)';
+      ctx.fillRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+      ctx.strokeStyle = 'rgba(216,255,233,.5)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(r.x0 + 0.5, r.y0 + 0.5, r.x1 - r.x0 - 1, r.y1 - r.y0 - 1);
+      ctx.fillStyle = '#d8ffe9';
+      ctx.font = '700 9px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('出口', (r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2 + 1);
+    }
+  }
+
+  function drawWc() {
+    for (var wi = 0; wi < wcRects.length; wi++) { drawOneWc(wcRects[wi]); }
+  }
+
+  function drawOneWc(r) {
+    if (!r) { return; }
+    var w = r.x1 - r.x0, h = r.y1 - r.y0;
+    var cy = (r.y0 + r.y1) / 2;
+
+    ctx.strokeStyle = 'rgba(120,150,190,.4)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(r.x0 + 3, r.y0 + 3, w - 6, h - 6);
+
+    var sx = r.x0 + w * 0.46;
+    ctx.strokeStyle = 'rgba(120,150,190,.4)';
+    ctx.lineWidth = 1.5;
+    for (var i = 1; i <= 2; i++) {
+      var y = r.y0 + h * i / 3;
+      ctx.beginPath();
+      ctx.moveTo(r.x0 + 5, y);
+      ctx.lineTo(sx, y);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.moveTo(sx, r.y0 + 5);
+    ctx.lineTo(sx, r.y1 - 5);
+    ctx.stroke();
+
+    ctx.fillStyle = '#1b2536';
+    ctx.fillRect(sx + 8, r.y0 + 10, Math.max(10, r.x1 - sx - 18), h - 20);
+
+    var lbx = (r.x0 + 5 + sx) / 2;
+    ctx.fillStyle = 'rgba(6,11,20,.88)';
+    ctx.fillRect(lbx - 18, cy - 8, 36, 16);
+    ctx.strokeStyle = 'rgba(120,190,255,.5)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(lbx - 18, cy - 8, 36, 16);
+    ctx.fillStyle = '#dbeaff';
+    ctx.font = '700 12px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('厕所', lbx, cy);
+  }
+
+  function drawDoor(rm) {
+    if (!rm.door) { return; }
+    var d = rm.door;
+    ctx.strokeStyle = 'rgba(120,150,190,.75)';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    if (d.side === 'T' || d.side === 'B') {
+      ctx.moveTo(d.x - 10, d.y); ctx.lineTo(d.x + 10, d.y);
+    } else {
+      ctx.moveTo(d.x, d.y - 10); ctx.lineTo(d.x, d.y + 10);
+    }
+    ctx.stroke();
+  }
+
+  function drawFac(f) {
+    var r = f.p, cx = f.cx, cy = f.cy;
+    if (f.t === 'stairs') {
+      ctx.fillStyle = '#182234';
+      ctx.fillRect(r.x0 + 4, r.y0 + 4, r.x1 - r.x0 - 8, r.y1 - r.y0 - 8);
+      ctx.strokeStyle = 'rgba(160,190,230,.5)';
+      ctx.lineWidth = 1.5;
+      for (var i = 0; i < 6; i++) {
+        var yy = r.y0 + 8 + i * ((r.y1 - r.y0 - 16) / 6);
+        ctx.beginPath();
+        ctx.moveTo(r.x0 + 8, yy);
+        ctx.lineTo(r.x1 - 8, yy);
+        ctx.stroke();
+      }
+      label(cx, cy, '楼梯');
+    } else if (f.t === 'elev') {
+      ctx.fillStyle = '#202a3c';
+      ctx.fillRect(r.x0 + 3, r.y0 + 3, r.x1 - r.x0 - 6, r.y1 - r.y0 - 6);
+      ctx.strokeStyle = 'rgba(255,209,102,.6)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, r.y0 + 6); ctx.lineTo(cx, r.y1 - 6);
+      ctx.stroke();
+      label(cx, cy, '电梯');
+    }
+  }
+
+  function label(x, y, text) {
+    ctx.fillStyle = 'rgba(190,215,245,.8)';
+    ctx.font = '700 10px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x, y + 18);
+  }
+
+  function drawParts() {
+    for (var i = 0; i < parts.length; i++) {
+      var p = parts[i];
+      var a = Math.max(0, 1 - p.t / p.life);
+      if (p.kind === 'ring') {
+        var prog = p.t / p.life;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r0 + (p.r1 - p.r0) * prog, 0, Math.PI * 2);
+        ctx.strokeStyle = p.c;
+        ctx.globalAlpha = a * 0.9;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      } else if (p.kind === 'smoke') {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(' + p.c + ',' + (a * 0.5) + ')';
+        ctx.fill();
+      } else {
+        ctx.globalAlpha = a;
+        ctx.fillStyle = p.c;
+        ctx.fillRect(p.x - p.r / 2, p.y - p.r / 2, p.r, p.r);
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  function drawPops() {
+    ctx.font = '700 14px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (var i = 0; i < pops.length; i++) {
+      var p = pops[i];
+      ctx.globalAlpha = clamp(p.life / p.max, 0, 1);
+      ctx.fillStyle = p.color;
+      ctx.fillText(p.text, p.x, p.y);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function shadowEllipse(x, y, r) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(1, 0.42);
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,.34)';
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /* 宿管阿姨：蓝制服 + 红袖章 + 手电 */
+  function drawPlayer() {
+    shadowEllipse(player.x, player.y + 7, player.r);
+
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2);
+    ctx.fillStyle = player.stun > 0 ? '#7b6a8a' : '#4f9cf9';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#bfe3ff';
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.r - 3, 0.2, 1.7);
+    ctx.strokeStyle = '#ff5d5d';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(player.x, player.y);
+    ctx.lineTo(player.x + player.fx * (player.r + 8), player.y + player.fy * (player.r + 8));
+    ctx.strokeStyle = torch && player.batt > 0 ? 'rgba(255,240,190,.95)' : 'rgba(159,224,255,.75)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    if (player.stun > 0) {
+      ctx.fillStyle = '#ffd166';
+      ctx.font = '700 11px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillText('眩晕', player.x, player.y - player.r - 10);
+    }
+    if (player.shout > 0) {
+      ctx.fillStyle = '#ff5d5d';
+      ctx.font = '700 11px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillText('破口大骂', player.x, player.y - player.r - 10);
+    }
+    /* 用 tired（体力 0 才亮、回到 18 才灭）而不是 st<=0，避免在 0 附近一闪一闪 */
+    if (player.tired && player.stun <= 0 && player.shout <= 0) {
+      ctx.fillStyle = 'rgba(255,209,102,.92)';
+      ctx.font = '600 10px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillText('腿软 · 按住 E 喝水', player.x, player.y + player.r + 12);
+    }
+  }
+
+  function drawStudent(s) {
+    var T = TYPES[s.type];
+    var x = s.x, y = s.y;
+    shadowEllipse(x, y + s.r * 0.7, s.r);
+
+    ctx.beginPath();
+    ctx.arc(x, y, s.r, 0, Math.PI * 2);
+    ctx.fillStyle = s.stunT > 0 ? '#8ea0c0' : T.color;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255,255,255,.42)';
+    ctx.stroke();
+
+    if (s.type === 'cat') {
+      ctx.fillStyle = T.color;
+      ctx.beginPath();
+      ctx.moveTo(x - 8, y - 6); ctx.lineTo(x - 4, y - 15); ctx.lineTo(x + 1, y - 6);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(x + 8, y - 6); ctx.lineTo(x + 4, y - 15); ctx.lineTo(x - 1, y - 6);
+      ctx.closePath(); ctx.fill();
+    } else if (s.type === 'toilet') {
+      ctx.beginPath();
+      ctx.arc(x + 8, y - 5, 2.2, 0, Math.PI * 2);
+      ctx.fillStyle = '#ff9a3c';
+      ctx.fill();
+    } else if (s.type === 'ghost') {
+      ctx.fillStyle = T.color;
+      ctx.beginPath();
+      ctx.moveTo(x - 7, y - 8); ctx.lineTo(x - 14, y - 16); ctx.lineTo(x - 2, y - 11);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(x + 7, y - 8); ctx.lineTo(x + 14, y - 16); ctx.lineTo(x + 2, y - 11);
+      ctx.closePath(); ctx.fill();
+    }
+
+    /* 眼睛 */
+    ctx.fillStyle = 'rgba(10,16,26,.85)';
+    ctx.beginPath(); ctx.arc(x - 3.5, y - 1, 1.7, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 3.5, y - 1, 1.7, 0, Math.PI * 2); ctx.fill();
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    if (s.fear > 0 && s.type !== 'toilet') {
+      ctx.fillStyle = '#ffd166';
+      ctx.font = '700 16px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillText('!', x, y - s.r - 8);
+    }
+    if (s.lit) {
+      ctx.beginPath();
+      ctx.arc(x, y, s.r + 3, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,238,170,.85)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    if (s.stunT > 0) {
+      ctx.fillStyle = 'rgba(200,230,255,.92)';
+      ctx.font = '700 10px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillText('定', x, y + s.r + 11);
+    }
+  }
+
+  function drawSocks() {
+    for (var i = 0; i < socks.length; i++) {
+      var k = socks[i];
+      var a = k.life > 3 ? 1 : Math.max(0, k.life / 3);
+      ctx.save();
+      ctx.globalAlpha = a;
+      var pulse = 0.5 + 0.5 * Math.sin(k.t * 5);
+      ctx.beginPath();
+      ctx.arc(k.x, k.y, 10 + pulse * 3, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(150,220,150,.28)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(k.x - 6, k.y - 4);
+      ctx.quadraticCurveTo(k.x + 2, k.y - 8, k.x + 6, k.y - 2);
+      ctx.quadraticCurveTo(k.x + 9, k.y + 4, k.x + 2, k.y + 5);
+      ctx.quadraticCurveTo(k.x - 6, k.y + 6, k.x - 6, k.y - 4);
+      ctx.fillStyle = '#6b7b5c';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(200,230,190,.45)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  /* 光锥的填充（扇形路径已经由 beamShape 画好） */
+  function fillBeam(ox, oy) {
+    var g = ctx.createRadialGradient(ox, oy, 10, ox, oy, LIGHT_RANGE);
+    g.addColorStop(0, 'rgba(255,246,205,.42)');
+    g.addColorStop(0.55, 'rgba(255,235,165,.20)');
+    g.addColorStop(1, 'rgba(255,230,150,0)');
+    ctx.fillStyle = g;
+    ctx.fill();
+  }
+
+  /* 扇形路径：distFn 决定每条射线被什么挡住 */
+  function beamShape(ox, oy, face, distFn) {
+    var HALF = LIGHT_HALF, N = 22, i, a, t;
+    ctx.beginPath();
+    ctx.moveTo(ox, oy);
+    for (i = 0; i <= N; i++) {
+      a = face - HALF + (2 * HALF) * i / N;
+      t = distFn(ox, oy, Math.cos(a), Math.sin(a), LIGHT_RANGE);
+      ctx.lineTo(ox + Math.cos(a) * t, oy + Math.sin(a) * t);
+    }
+    ctx.closePath();
+  }
+
+  /* 宿舍内部：射线打到房间的墙上就停（房间是个矩形） */
+  function roomRayDist(ox, oy, dx, dy, maxT) {
+    var B = ROOM_BOX, t = maxT;
+    if (dx > 0) { t = Math.min(t, (B.x1 - ox) / dx); }
+    else if (dx < 0) { t = Math.min(t, (B.x0 - ox) / dx); }
+    if (dy > 0) { t = Math.min(t, (B.y1 - oy) / dy); }
+    else if (dy < 0) { t = Math.min(t, (B.y0 - oy) / dy); }
+    if (t < 0) { t = 0; }
+    return Math.min(maxT, t);
+  }
+
+  /* 走廊里的手电光锥：画在雾后面，按走廊墙裁剪 */
+  function drawBeam() {
+    if (!torch || player.batt <= 0) { return; }
+    var ox = player.x - camL, oy = player.y - camT;
+    beamShape(ox, oy, Math.atan2(player.fy, player.fx), rayDist);
+    fillBeam(ox, oy);
+  }
+
+  /* 宿舍里的手电光锥：同一套效果，只是被房间的墙挡住 */
+  function drawRoomBeam() {
+    if (!torch || player.batt <= 0) { return; }
+    beamShape(player.x, player.y, Math.atan2(player.fy, player.fx), roomRayDist);
+    fillBeam(player.x, player.y);
+  }
+
+  /* 操作提示：一至两条，压在你头顶 */
+  function drawPrompts(list, psx, psy) {
+    if (!list.length) { return; }
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '700 12px "PingFang SC","Microsoft YaHei",sans-serif';
+    for (var i = 0; i < list.length; i++) {
+      var txt = list[i].t;
+      var w = ctx.measureText(txt).width + 18;
+      var y = psy - 54 - i * 24;
+      ctx.fillStyle = 'rgba(8,14,24,.82)';
+      ctx.fillRect(psx - w / 2, y - 10, w, 21);
+      ctx.fillStyle = list[i].c || '#ffd166';
+      ctx.fillText(txt, psx, y);
+    }
+  }
+
+  /* 椭圆小工具（不用 ctx.ellipse，保持各处一致） */
+  function oval(x, y, rx, ry, col) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(1, ry / rx);
+    ctx.beginPath();
+    ctx.arc(0, 0, rx, 0, Math.PI * 2);
+    ctx.fillStyle = col;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /* 屋里的隐藏剧情：直接把现场画出来，进门就能看见
+     每样东西都摆在它该在的地方：桌子上的东西画在桌面框里，被子里的画在床垫/被子上，
+     猫在柜子里，海报贴墙上，字条贴门上，锅和袜子堆在床底边的地上 */
+  function drawPlotObject(p) {
+    var x = p.x, y = p.y;
+    var k = p.kind;
+
+    if (k === 'pot') {
+      /* 床底下拖出来一半的电煮锅 + 热气（床沿正下方，地上） */
+      oval(x, y + 12, 22, 6, 'rgba(0,0,0,.35)');
+      ctx.fillStyle = '#2b3549';
+      ctx.fillRect(x - 16, y - 2, 32, 18);
+      ctx.strokeStyle = 'rgba(190,215,245,.6)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x - 16, y - 2, 32, 18);
+      oval(x, y - 2, 16, 7, '#3a4a63');
+      ctx.fillStyle = 'rgba(255,209,102,.75)';
+      ctx.fillRect(x - 6, y - 5, 12, 3);
+      /* 把手 */
+      ctx.strokeStyle = 'rgba(190,215,245,.55)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x - 16, y + 4); ctx.lineTo(x - 22, y + 4);
+      ctx.moveTo(x + 16, y + 4); ctx.lineTo(x + 22, y + 4);
+      ctx.stroke();
+      /* 热气 */
+      ctx.strokeStyle = 'rgba(220,235,255,.5)';
+      ctx.lineWidth = 1.5;
+      for (var i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(x - 8 + i * 8, y - 8);
+        ctx.quadraticCurveTo(x - 12 + i * 8, y - 17, x - 6 + i * 8, y - 24);
+        ctx.stroke();
+      }
+    } else if (k === 'boxes') {
+      /* 地上的一箱泡面 */
+      oval(x, y + 14, 22, 6, 'rgba(0,0,0,.3)');
+      ctx.fillStyle = '#7a5c3a';
+      ctx.fillRect(x - 20, y - 8, 40, 22);
+      ctx.strokeStyle = 'rgba(230,205,160,.5)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x - 20, y - 8, 40, 22);
+      ctx.fillStyle = '#8d6a43';
+      for (var b2 = 0; b2 < 2; b2++) {
+        ctx.fillRect(x - 16 + b2 * 18, y - 4, 14, 14);
+        ctx.strokeStyle = 'rgba(240,225,200,.4)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x - 16 + b2 * 18, y - 4, 14, 14);
+      }
+    } else if (k === 'takeout') {
+      /* 长桌上的外卖盒摞 */
+      for (var j = 0; j < 4; j++) {
+        ctx.fillStyle = j % 2 ? '#5c4a33' : '#6d583c';
+        ctx.fillRect(x - 15, y + 6 - j * 6, 30, 6);
+        ctx.strokeStyle = 'rgba(230,205,160,.45)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x - 15, y + 6 - j * 6, 30, 6);
+      }
+      ctx.fillStyle = 'rgba(255,209,102,.5)';
+      ctx.fillRect(x - 12, y - 20, 24, 3);
+    } else if (k === 'letter') {
+      /* 枕头底下露出来的情书（画在床上） */
+      oval(x, y, 34, 22, 'rgba(196,220,248,.28)');
+      ctx.fillStyle = '#dfe7f3';
+      ctx.fillRect(x - 13, y - 12, 26, 20);
+      ctx.strokeStyle = 'rgba(120,150,190,.7)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x - 13, y - 12, 26, 20);
+      ctx.strokeStyle = 'rgba(90,120,160,.75)';
+      ctx.beginPath();
+      for (var r2 = 0; r2 < 3; r2++) {
+        ctx.moveTo(x - 9, y - 7 + r2 * 6);
+        ctx.lineTo(x + 9, y - 7 + r2 * 6);
+      }
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,93,93,.9)';
+      ctx.beginPath();
+      ctx.arc(x + 9, y + 7, 3, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (k === 'sign') {
+      /* 贴在门上的字条 */
+      ctx.fillStyle = '#e8e1cf';
+      ctx.fillRect(x - 26, y - 10, 52, 20);
+      ctx.strokeStyle = 'rgba(120,110,90,.8)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x - 26, y - 10, 52, 20);
+      ctx.strokeStyle = 'rgba(90,80,60,.8)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (var s2 = 0; s2 < 2; s2++) {
+        ctx.moveTo(x - 20, y - 3 + s2 * 7);
+        ctx.lineTo(x + 20, y - 3 + s2 * 7);
+      }
+      ctx.stroke();
+      /* 胶带 */
+      ctx.fillStyle = 'rgba(255,255,255,.35)';
+      ctx.fillRect(x - 30, y - 12, 10, 5);
+      ctx.fillRect(x + 20, y - 12, 10, 5);
+    } else if (k === 'socks') {
+      /* 床底边的袜子堆（地上） */
+      oval(x, y + 8, 24, 8, 'rgba(0,0,0,.35)');
+      oval(x, y + 4, 20, 9, 'rgba(60,52,40,.9)');
+      for (var s3 = 0; s3 < 5; s3++) {
+        oval(x - 12 + s3 * 6, y - 2 - (s3 % 2) * 5, 6, 4, s3 % 2 ? '#6b7b5c' : '#4e5b43');
+      }
+    } else if (k === 'phone') {
+      /* 被子底下亮着的手机（画在床的被子那一块） */
+      oval(x, y, 30, 20, 'rgba(79,156,249,.20)');
+      oval(x, y, 18, 12, 'rgba(79,156,249,.30)');
+      ctx.fillStyle = '#1b2433';
+      ctx.fillRect(x - 6, y - 10, 13, 20);
+      ctx.fillStyle = 'rgba(160,225,255,' + (0.65 + 0.35 * Math.sin(tNow * 6)) + ')';
+      ctx.fillRect(x - 4, y - 8, 9, 16);
+    } else if (k === 'poster') {
+      /* 贴在北墙上的复习计划 */
+      ctx.fillStyle = '#e6ecf6';
+      ctx.fillRect(x - 22, y - 16, 44, 30);
+      ctx.strokeStyle = 'rgba(120,150,190,.75)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x - 22, y - 16, 44, 30);
+      ctx.strokeStyle = 'rgba(90,120,160,.8)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (var q = 0; q < 5; q++) {
+        ctx.moveTo(x - 17, y - 10 + q * 5.5);
+        ctx.lineTo(x + 17 - (q % 2) * 9, y - 10 + q * 5.5);
+      }
+      ctx.stroke();
+    } else if (k === 'dummy') {
+      /* 被窝里鼓起来的人形（画在被子上） */
+      oval(x, y + 4, 30, 34, 'rgba(79,156,249,.30)');
+      oval(x, y - 16, 14, 12, 'rgba(79,156,249,.45)');
+      oval(x, y + 22, 17, 9, 'rgba(79,156,249,.24)');
+      ctx.fillStyle = 'rgba(30,26,24,.85)';
+      ctx.beginPath();
+      ctx.arc(x, y - 22, 5, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (k === 'cat') {
+      /* 柜格里窝着的猫 */
+      ctx.fillStyle = 'rgba(10,16,26,.5)';
+      ctx.fillRect(x - 20, y - 18, 40, 36);
+      oval(x, y + 4, 15, 10, '#8a7f70');
+      oval(x - 8, y - 8, 8, 7, '#9a8f80');
+      ctx.fillStyle = '#8a7f70';
+      ctx.beginPath();
+      ctx.moveTo(x - 13, y - 12); ctx.lineTo(x - 11, y - 19); ctx.lineTo(x - 6, y - 13);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(x - 4, y - 13); ctx.lineTo(x - 1, y - 19); ctx.lineTo(x + 2, y - 12);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(255,230,150,.9)';
+      ctx.beginPath(); ctx.arc(x - 10, y - 8, 1.6, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x - 5, y - 8, 1.6, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#8a7f70';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(x + 12, y + 4);
+      ctx.quadraticCurveTo(x + 22, y + 2, x + 18, y - 8);
+      ctx.stroke();
+    } else if (k === 'sleeper') {
+      /* 桌上的台灯 + 趴在桌上睡着的人 */
+      var lg = ctx.createRadialGradient(x + 6, y, 4, x + 6, y, 74);
+      lg.addColorStop(0, 'rgba(255,238,170,.32)');
+      lg.addColorStop(1, 'rgba(255,238,170,0)');
+      ctx.fillStyle = lg;
+      ctx.beginPath();
+      ctx.arc(x + 6, y, 74, 0, Math.PI * 2);
+      ctx.fill();
+      /* 台灯底座 + 灯罩（都在桌面上） */
+      ctx.fillStyle = '#2b3549';
+      ctx.fillRect(x - 8, y - 20, 4, 26);
+      oval(x, y - 21, 10, 6, '#ffd88a');
+      ctx.fillStyle = 'rgba(255,240,190,.85)';
+      ctx.fillRect(x - 6, y - 22, 12, 2);
+      /* 人趴在桌沿上 */
+      oval(x + 30, y + 16, 13, 16, '#4a5a78');
+      oval(x + 22, y + 6, 11, 10, '#c9d6ea');
+      ctx.fillStyle = 'rgba(30,40,58,.9)';
+      ctx.beginPath(); ctx.arc(x + 20, y + 4, 8, 0, Math.PI * 2); ctx.fill();
+    } else if (k === 'books') {
+      /* 桌面上的一摞空白作业本 */
+      for (var b3 = 0; b3 < 4; b3++) {
+        ctx.fillStyle = b3 % 2 ? '#3b6ea8' : '#31598a';
+        ctx.fillRect(x - 16, y + 8 - b3 * 5, 32, 5);
+        ctx.strokeStyle = 'rgba(200,225,255,.35)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x - 16, y + 8 - b3 * 5, 32, 5);
+      }
+      ctx.fillStyle = 'rgba(255,255,255,.22)';
+      ctx.fillRect(x - 12, y - 12, 24, 2);
+    }
+  }
+
+  /* 屏幕下方的隐藏剧情卡片 */
+  function drawPopup() {
+    if (!popup) { return; }
+    var a = clamp(popup.life / 0.9, 0, 1);
+    var w = Math.min(620, W - 60);
+    var x0 = (W - w) / 2, y0 = H - 104;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.fillStyle = 'rgba(8,14,24,.74)';
+    ctx.fillRect(x0, y0, w, 64);
+    ctx.strokeStyle = popup.color;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x0 + 0.5, y0 + 0.5, w - 1, 63);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = popup.color;
+    ctx.font = '700 13px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText(popup.title, x0 + 14, y0 + 19);
+    ctx.fillStyle = '#dbeaff';
+    ctx.font = '600 12.5px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText(popup.text, x0 + 14, y0 + 43);
+    ctx.restore();
+  }
+
+  /* 喝枸杞水的读条：走廊和宿舍内部共用同一个 */
+  function drawDrinkBar(psx, psy) {
+    if (player.drink <= 0) { return; }
+    var barP = clamp(player.drink / DRINK_TIME, 0, 1);
+    ctx.fillStyle = 'rgba(6,10,18,.75)';
+    ctx.fillRect(psx - 26, psy - 27, 52, 9);
+    ctx.fillStyle = 'rgba(255,255,255,.25)';
+    ctx.fillRect(psx - 24, psy - 25, 48, 5);
+    ctx.fillStyle = '#7ef0c0';
+    ctx.fillRect(psx - 24, psy - 25, 48 * barP, 5);
+    ctx.fillStyle = 'rgba(126,240,192,.9)';
+    ctx.font = '600 10px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('喝水中 松手就白喝', psx, psy - 36);
+  }
+
+  /* 走廊里的提示：门口 F 查寝、身边有人就提示 K 抓人 */
+  function drawPrompt() {
+    var psx = player.x - camL, psy = player.y - camT;
+    var list = [];
+    if (state === 'playing') {
+      if (curTarget) {
+        list.push({
+          t: 'F 推门查寝 ' + roomLabel(curTarget),
+          c: '#ffd166'
+        });
+      }
+      var s = nearestStudent(CATCH_RANGE);
+      if (s) { list.push({ t: 'K 抓' + TYPES[s.type].name, c: '#ffd166' }); }
+    }
+    drawPrompts(list, psx, psy);
+
+    drawDrinkBar(psx, psy);
+  }
+
+  /* ============================================================
+     16. 绘制：走廊（馨斋那张图）
+     ============================================================ */
+  function drawCorridor() {
+    var i, r;
+
+    var shx = 0, shy = 0;
+    if (shake > 0.3) {
+      shx = (Math.random() - 0.5) * shake;
+      shy = (Math.random() - 0.5) * shake;
+    }
+    camL = camX - W / 2 + shx;
+    camT = camY - H / 2 + shy;
+    camR = camL + W;
+    camB = camT + H;
+
+    ctx.setTransform(UNIT, 0, 0, UNIT, 0, 0);
+    ctx.fillStyle = '#02040a';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.save();
+    ctx.translate(-camL, -camT);
+
+    /* 宿舍方块 */
+    for (i = 0; i < rooms.length; i++) {
+      r = rooms[i].r;
+      if (r.x1 < camL - 60 || r.x0 > camR + 60 || r.y1 < camT - 60 || r.y0 > camB + 60) { continue; }
+      drawRoomBlock(rooms[i]);
+    }
+
+    /* 走廊地面 */
+    for (i = 0; i < areas.length; i++) {
+      r = areas[i].p;
+      if (r.x1 < camL - 60 || r.x0 > camR + 60 || r.y1 < camT - 60 || r.y0 > camB + 60) { continue; }
+      drawArea(areas[i]);
+    }
+
+    /* 实心墙体块 */
+    for (i = 0; i < wallFills.length; i++) {
+      r = wallFills[i];
+      if (r.x1 < camL - 60 || r.x0 > camR + 60 || r.y1 < camT - 60 || r.y0 > camB + 60) { continue; }
+      ctx.fillStyle = WALL_FILL_COL;
+      ctx.fillRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+    }
+
+    /* 墙体 + 门洞 */
+    for (i = 0; i < areas.length; i++) {
+      r = areas[i].p;
+      if (r.x1 < camL - 60 || r.x0 > camR + 60 || r.y1 < camT - 60 || r.y0 > camB + 60) { continue; }
+      drawWalls(areas[i]);
+      drawDoorMarks(areas[i]);
+    }
+
+    /* 房门 */
+    for (i = 0; i < rooms.length; i++) {
+      r = rooms[i].r;
+      if (r.x1 < camL - 60 || r.x0 > camR + 60 || r.y1 < camT - 60 || r.y0 > camB + 60) { continue; }
+      drawDoor(rooms[i]);
+    }
+
+    /* 设施 */
+    for (i = 0; i < facs.length; i++) {
+      if (facs[i].custom) { continue; }
+      r = facs[i].p;
+      if (r.x1 < camL - 60 || r.x0 > camR + 60 || r.y1 < camT - 60 || r.y0 > camB + 60) { continue; }
+      drawFac(facs[i]);
+    }
+
+    drawStairNiche();
+    drawElevRoom();
+    drawWc();
+    drawWallExit();
+
+    /* 地上的臭袜子、学生、宿管、飘字 */
+    drawSocks();
+    for (i = 0; i < students.length; i++) { drawStudent(students[i]); }
+    drawParts();
+    drawPlayer();
+    drawPops();
+
+    ctx.restore();
+
+    /* 夜色迷雾：视野恒定，开灯也不扩大；照明只靠光锥 */
+    fog(player.x - camL, player.y - camT, FOG_R);
+    /* 夜色一直压着：只有手电光锥能把它照亮 */
+    ctx.fillStyle = 'rgba(4,8,16,.20)';
+    ctx.fillRect(0, 0, W, H);
+    /* 手电光锥打在雾后面，才是真的照出去 */
+    drawBeam();
+    screenFX();
+    drawPrompt();
+    drawPopup();
+  }
+
+  /* ============================================================
+     16.5 绘制：宿舍内部（六人寝，与《逃离馨斋1010》同一套房间）
+     ============================================================ */
+  function drawRoom() {
+    var box = ROOM_BOX, rm = roomSc.room;
+
+    ctx.setTransform(UNIT, 0, 0, UNIT, 0, 0);
+    ctx.fillStyle = '#02040a';
+    ctx.fillRect(0, 0, W, H);
+
+    /* 房间地面 */
+    ctx.fillStyle = '#0a1019';
+    ctx.fillRect(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(90,130,180,.08)';
+    ctx.lineWidth = 1;
+    var x, y;
+    for (x = box.x0; x < box.x1; x += 32) {
+      ctx.beginPath(); ctx.moveTo(x, box.y0); ctx.lineTo(x, box.y1); ctx.stroke();
+    }
+    for (y = box.y0; y < box.y1; y += 32) {
+      ctx.beginPath(); ctx.moveTo(box.x0, y); ctx.lineTo(box.x1, y); ctx.stroke();
+    }
+    ctx.restore();
+
+    /* 墙 */
+    ctx.lineWidth = 8;
+    ctx.strokeStyle = '#1b2536';
+    ctx.strokeRect(box.x0 + 4, box.y0 + 4, box.x1 - box.x0 - 8, box.y1 - box.y0 - 8);
+    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = 'rgba(79,156,249,.18)';
+    ctx.strokeRect(box.x0 + 4, box.y0 + 4, box.x1 - box.x0 - 8, box.y1 - box.y0 - 8);
+
+    /* 家具：三张上下铺、并排四座长桌 + 右边两座、门口六人柜 */
+    drawBunks();
+    drawDesks();
+    drawCabinet();
+
+    /* 电竞狂人：坐在长桌最中间的座位上打游戏（放在雾之后画，见下面） */
+    if (rm.plot >= 0) { drawPlotObject(PLOTS[rm.plot]); }
+
+    /* 门口 */
+    ctx.strokeStyle = 'rgba(255,209,102,.8)';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(ROOM_DOOR.x - 40, box.y1); ctx.lineTo(ROOM_DOOR.x + 40, box.y1);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,209,102,.55)';
+    ctx.font = '700 11px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('门', ROOM_DOOR.x, box.y1 - 16);
+
+    /* 房间号 */
+    ctx.fillStyle = 'rgba(120,150,190,.55)';
+    ctx.font = '700 15px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(roomLabel(rm), (box.x0 + box.x1) / 2, box.y0 + 26);
+
+    drawParts();
+    drawPlayer();
+    drawPops();
+
+    fog(player.x, player.y, FOG_R);
+    /* 夜色一直压着：只有手电光锥能把它照亮 */
+    ctx.fillStyle = 'rgba(4,8,16,.20)';
+    ctx.fillRect(0, 0, W, H);
+    /* 屋里那台电脑一直亮着：光画在雾之后，推门进来就看得见 */
+    if (rm.epic) { drawEpicInRoom(); }
+    drawRoomBeam();
+    screenFX();
+    drawRoomPrompt();
+    drawPopup();
+  }
+
+  /* 三张竖放的上下铺：床架 + 床垫 + 枕头 + 被子 + 靠房间内侧的梯子 */
+  function drawBunks() {
+    for (var i = 0; i < BUNK.length; i++) {
+      var b = BUNK[i];
+      var w = b.x1 - b.x0, h = b.y1 - b.y0;
+
+      ctx.fillStyle = '#16202e';
+      ctx.fillRect(b.x0, b.y0, w, h);
+      ctx.strokeStyle = 'rgba(120,150,190,.45)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(b.x0 + 1, b.y0 + 1, w - 2, h - 2);
+
+      ctx.fillStyle = 'rgba(79,156,249,.18)';
+      ctx.fillRect(b.x0 + 6, b.y0 + 6, w - 12, h - 12);
+
+      ctx.fillStyle = 'rgba(196,220,248,.55)';
+      ctx.fillRect(b.x0 + 10, b.y0 + 12, w - 20, 22);
+
+      ctx.fillStyle = 'rgba(79,156,249,.32)';
+      ctx.fillRect(b.x0 + 10, b.y0 + 42, w - 20, h - 54);
+
+      /* 梯子：放在朝房间中央的一侧 */
+      var ladX = (b.x0 > 450) ? b.x0 + 3 : b.x1 - 3;
+      ctx.strokeStyle = 'rgba(160,190,230,.5)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(ladX, b.y0 + 14);
+      ctx.lineTo(ladX, b.y1 - 14);
+      ctx.stroke();
+      for (var r = 0; r < 5; r++) {
+        var ly = b.y0 + 18 + r * ((h - 36) / 5);
+        ctx.beginPath();
+        ctx.moveTo(ladX - 5, ly);
+        ctx.lineTo(ladX + 5, ly);
+        ctx.stroke();
+      }
+    }
+  }
+
+  /* 桌子：靠左墙的并排四座长桌 + 另一边靠右墙的两座 */
+  function drawDesks() {
+    drawDesk(DESK4, 4, 'R');
+    drawDesk(DESK2, 2, 'L');
+  }
+
+  function drawDesk(d, count, seatSide) {
+    var w = d.x1 - d.x0, h = d.y1 - d.y0;
+
+    ctx.fillStyle = '#1c2736';
+    ctx.fillRect(d.x0, d.y0, w, h);
+    ctx.strokeStyle = 'rgba(150,180,220,.45)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(d.x0 + 1, d.y0 + 1, w - 2, h - 2);
+    ctx.fillStyle = 'rgba(255,209,102,.10)';
+    ctx.fillRect(d.x0 + 5, d.y0 + 5, w - 10, 5);
+
+    var horiz = w >= h;
+    for (var i = 0; i < count; i++) {
+      var cx, cy;
+      if (horiz) {
+        cx = d.x0 + w * (i + 0.5) / count;
+        cy = (seatSide === 'B') ? d.y1 + 15 : d.y0 - 15;
+      } else {
+        cy = d.y0 + h * (i + 0.5) / count;
+        cx = (seatSide === 'R') ? d.x1 + 15 : d.x0 - 15;
+      }
+      ctx.beginPath();
+      ctx.arc(cx, cy, 8, 0, Math.PI * 2);
+      ctx.fillStyle = '#26344a';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(160,190,230,.45)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  }
+
+  /* 贴左墙的六人柜：2 列 × 3 行 = 6 格 */
+  function drawCabinet() {
+    var c = CABINET;
+    var w = c.x1 - c.x0, h = c.y1 - c.y0;
+
+    ctx.fillStyle = '#1a2434';
+    ctx.fillRect(c.x0, c.y0, w, h);
+    ctx.strokeStyle = 'rgba(150,180,220,.5)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(c.x0 + 1, c.y0 + 1, w - 2, h - 2);
+
+    ctx.strokeStyle = 'rgba(150,180,220,.35)';
+    ctx.lineWidth = 1;
+    var cw = w / 2, ch = h / 3, i;
+    for (i = 1; i < 2; i++) {
+      ctx.beginPath();
+      ctx.moveTo(c.x0 + i * cw, c.y0 + 3);
+      ctx.lineTo(c.x0 + i * cw, c.y1 - 3);
+      ctx.stroke();
+    }
+    for (i = 1; i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(c.x0 + 3, c.y0 + i * ch);
+      ctx.lineTo(c.x1 - 3, c.y0 + i * ch);
+      ctx.stroke();
+    }
+  }
+
+  /* 电竞狂人：长桌上的笔记本亮着屏，人缩在椅子上 */
+  function drawEpicInRoom() {
+    var pulse = 0.6 + 0.4 * Math.sin(tNow * 7);
+    var x = EPIC_SEAT.x, y = EPIC_SEAT.y;
+
+    /* 屏幕光 */
+    var g = ctx.createRadialGradient(DESK4.x1 + 4, y, 4, DESK4.x1 + 4, y, 120);
+    g.addColorStop(0, 'rgba(176,108,240,' + (0.30 + pulse * 0.20) + ')');
+    g.addColorStop(1, 'rgba(176,108,240,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(DESK4.x1 - 130, y - 130, 260, 260);
+
+    /* 笔记本 */
+    ctx.fillStyle = '#3d4a60';
+    ctx.fillRect(DESK4.x0 + 22, y - 12, 30, 22);
+    ctx.fillStyle = 'rgba(200,170,255,' + (0.6 + pulse * 0.4) + ')';
+    ctx.fillRect(DESK4.x0 + 25, y - 9, 24, 16);
+
+    /* 人 */
+    shadowEllipse(x, y + 8, 11);
+    ctx.beginPath();
+    ctx.arc(x, y, 11, 0, Math.PI * 2);
+    ctx.fillStyle = TYPES.epic.color;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255,255,255,.45)';
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(10,16,26,.85)';
+    ctx.beginPath(); ctx.arc(x - 3.5, y - 1, 1.7, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 3.5, y - 1, 1.7, 0, Math.PI * 2); ctx.fill();
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffd166';
+    ctx.font = '700 16px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText('!', x, y - 22);
+    if (dist2(player.x, player.y, EPIC_SEAT.x, EPIC_SEAT.y) < 46 * 46) {
+      ctx.beginPath();
+      ctx.arc(x, y, 19, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,209,102,.9)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+
+  /* 宿舍里的提示：桌边 K 抓人 · 门口 F 出去 */
+  function drawRoomPrompt() {
+    if (state !== 'playing') { return; }
+    var rm = roomSc.room, list = [];
+
+    if (rm.epic && dist2(player.x, player.y, EPIC_SEAT.x, EPIC_SEAT.y) < CATCH_RANGE * CATCH_RANGE) {
+      list.push({ t: 'K 抓住电竞狂人', c: '#ff8080' });
+    }
+    if (dist2(player.x, player.y, ROOM_DOOR.x, ROOM_DOOR.y) < 52 * 52 && roomSc.enterT > 0.5) {
+      list.push({ t: 'F 推门出去', c: '#a7bbd8' });
+    }
+    drawPrompts(list, player.x, player.y);
+    drawDrinkBar(player.x, player.y);
+  }
+  /* ============================================================
+     17. 输入
+     ============================================================ */
+  var keys = Object.create(null);
+
+  window.addEventListener('keydown', function (e) {
+    var k = (e.key || '').toLowerCase();
+    var fresh = !keys[k];
+    keys[k] = true;
+
+    if (k === 'w' || k === 'a' || k === 's' || k === 'd' || k === ' ' ||
+        k === 'arrowup' || k === 'arrowdown' || k === 'arrowleft' || k === 'arrowright') {
+      e.preventDefault();
+    }
+    if (k === 'j' || k === 'f' || k === 'k' || k === 'l' || k === 'e') { e.preventDefault(); }
+
+    if (state !== 'playing') {
+      if (fresh && (k === 'enter' || k === ' ')) { start(); }
+      return;
+    }
+    if (!fresh) { return; }
+
+    if (k === 'j') { toggleTorch(); }
+    else if (k === 'f') { searchDoor(); }
+    else if (k === 'l') { doRage(); }
+    else if (k === 'e') { startDrink(); }
+    else if (k === 'k') { pressK(); }
+  });
+
+  window.addEventListener('keyup', function (e) {
+    var k = (e.key || '').toLowerCase();
+    keys[k] = false;
+  });
+
+  /* 失焦必须清空按键，否则切回来会一直往一个方向跑 */
+  window.addEventListener('blur', function () {
+    keys = Object.create(null);
+  });
+  document.addEventListener('visibilitychange', function () { last = 0; });
+  window.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+  /* 触屏设备：本作需要键盘，只显示拦截面板 */
+  function isTouchOnlyDevice() {
+    try {
+      var tp = navigator.maxTouchPoints || 0;
+      var ua = navigator.userAgent || '';
+      var mobileUA = /Android|iPhone|iPad|iPod|Mobile|Tablet|Silk|Kindle/i.test(ua);
+      if (window.matchMedia) {
+        if (window.matchMedia('(pointer: coarse)').matches &&
+            window.matchMedia('(hover: none)').matches) { return true; }
+        if (mobileUA) { return true; }
+      }
+      return mobileUA || (tp > 0 && window.matchMedia && !window.matchMedia('(any-pointer: fine)').matches);
+    } catch (e) { return false; }
+  }
+
+  /* ============================================================
+     18. 开局 / 重开 / 主循环
+     ============================================================ */
+  function reset() {
+    timeLeft = TIME_LIMIT;
+    tNow = 0; bannerT = 0; last = 0;
+    score = 0; socksHit = 0; caught = 0;
+    shake = 0; flash = 0; flashCol = '255,60,60';
+
+    scene = 'corridor';
+    roomSc = null;
+
+    player.x = gx(20); player.y = gy(70);
+    player.fx = 0; player.fy = 1;
+    player.st = player.stMax;
+    player.bp = 0;
+    player.batt = 100;
+    player.stun = 0; player.drink = 0; player.shout = 0;
+    drinkLock = false;
+    player.rageCd = 0; player.slowT = 0;
+    player.tired = false; player.stepAcc = 0;
+
+    torch = false;
+    curTarget = null;
+
+    students.length = 0;
+    socks.length = 0;
+    parts.length = 0;
+    pops.length = 0;
+
+    spawnT.cat = 0.6;
+    spawnT.ghost = 20;
+    spawnT.toilet = 4;
+
+    epicRoom = -1; epicT = 6;
+    epicHinted = false;
+    for (var i = 0; i < rooms.length; i++) { rooms[i].epic = false; }
+    resetPlots();               /* 每局随机刷一批隐藏剧情 */
+    popup = null;
+
+    camX = player.x; camY = player.y;
+    keys = Object.create(null);
+    elClock.style.color = '';
+    elBanner.classList.remove('show');
+    elOver.classList.remove('blood');
+    updateHUD();
+  }
+
+  function start() {
+    reset();
+    state = 'playing';
+    elIntro.classList.add('hidden');
+    elOver.classList.add('hidden');
+    banner('天亮前抓够 ' + TARGET_SCORE + ' 纪律值', 1500);
+  }
+
+  function draw() {
+    if (scene === 'room' && roomSc) { drawRoom(); return; }
+    drawCorridor();
+  }
+
+  function tick(ts) {
+    var now = ts / 1000;
+    if (!last) { last = now; }
+    var dt = Math.min(0.05, Math.max(0, now - last));
+    last = now;
+    if (state === 'playing') { update(dt); }
+    draw();
+  }
+  function loop(ts) { tick(ts); requestAnimationFrame(loop); }
+
+  document.getElementById('startBtn').addEventListener('click', start);
+  document.getElementById('retryBtn').addEventListener('click', start);
+  /* 拦截面板的返回按钮：放进站点 proF/ 后就能跳回主页 */
+  document.getElementById('mobileBack').addEventListener('click', function () {
+    location.href = '主页.html';
+  });
+
+  reset();                      /* 先备好地图，开场画面背后就是真实走廊 */
+
+  if (isTouchOnlyDevice()) {
+    elIntro.classList.add('hidden');
+    document.getElementById('mobile').classList.remove('hidden');
+    draw();                     /* 交一张静态底图，不留白 */
+  } else {
+    requestAnimationFrame(loop);
+  }
+})();
+</script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
