@@ -37,7 +37,7 @@
       "games": [
         {"file":"proF/俄罗斯方块.html","name":"方块风暴","icon":"🧩","desc":"消行冲分 · 幽灵落点","pcOnly":false,"c1":"#c04bd8","c2":"#6d2280"},
         {"file":"proF/叶初打飞机.html","name":"星海突击","icon":"✈️","desc":"竖版弹幕 · 闪避走位","pcOnly":false,"c1":"#4f6bd8","c2":"#24307a"},
-        {"file":"proF/重制版PVZ.html","name":"植物VS僵尸","icon":"🌻","desc":"种向日葵攒 token","pcOnly":true,"c1":"#7ab648","c2":"#2e5a1a"}
+        {"file":"proF/重制版PVZ.html","name":"植物VS僵尸","icon":"🌻","desc":"种向日葵攒 token","pcOnly":false,"c1":"#7ab648","c2":"#2e5a1a"}
       ]
     }
   ]
