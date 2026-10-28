@@ -6,10 +6,8 @@
 <title>盗版植物大战僵尸</title>
 <link rel="stylesheet" href="../ui/yc-ui.css">
 <style>
+  #hud { justify-content: flex-end; gap: 10px; }
   #hud .chip b { color: #7ad0ff; }
-  /* 顶部信息全部靠右：Token 紧挨计时器，两颗胶囊顶边对齐 */
-  #hud { justify-content: flex-end; align-items: flex-start; }
-  #hud .hud-right { display: flex; align-items: flex-start; gap: 8px; }
   #hint { color: #d8f0c8; }
   #over.win .panel h1 { color: #b6ff9a; text-shadow: 0 0 18px rgba(120,255,120,.6); }
   #over.win .panel p { color: #cfe8c0; }
@@ -23,19 +21,17 @@
     <canvas id="cv"></canvas>
 
     <div id="hud">
-      <div class="hud-right">
-        <div class="chip">Token <b id="sunCount">100</b></div>
-        <div class="chip" id="clock">02:30</div>
-      </div>
+      <div class="chip">Token <b id="sunCount">100</b></div>
+      <div class="chip" id="clock">05:00</div>
     </div>
 
     <div id="banner"></div>
-    <div id="hint">点卡片选植物种草坪；蓝色 token 点了就收；双发射手火焰+寒冰齐发</div>
+    <div id="hint">点卡片选植物种草坪；点 token 收集；铲子能铲走植物；奶龙僵尸会笑晕植物</div>
 
     <div class="overlay" id="intro">
       <div class="panel">
-        <h1>植物VS僵尸</h1>
-        <p>种向日葵攒 token，用豌豆 / 双发 / 坚果 / 土豆地雷抵御僵尸，撑过 2 分 30 秒就赢。<br>僵尸走到最左边红线就输。</p>
+        <h1>虫豸版PVZ</h1>
+        <p>种向日葵攒 token，用豌豆 / 双发 / 青梅绿茶 / 坚果 / 睡蘑菇 / 地雷抵御僵尸，撑过 5 分钟就赢。<br>僵尸走到最左边红线就输。</p>
         <button class="btn" id="startBtn" type="button">开始防守</button>
       </div>
     </div>
@@ -68,7 +64,7 @@
   var GRID_X2 = GRID_X + COLS * CW;
   var GRID_Y2 = GRID_Y + ROWS * CH;
 
-  var GAME_TIME = 150;   /* 2 分 30 秒 */
+  var GAME_TIME = 300;
 
   function resize() {
     var s = Math.min((window.innerWidth - 24) / W, (window.innerHeight - 24) / H);
@@ -86,21 +82,29 @@
   window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
   resize();
 
-  /* ================= 植物/僵尸配置 ================= */
+  /* ================= 配置 ================= */
   var SEEDS = [
-    { key: 'sunflower',   name: '向日葵',     cost: 50,  hp: 100, cd: 6.0 },
-    { key: 'peashooter',  name: '豌豆射手', cost: 100, hp: 100, cd: 6.0 },
-    { key: 'repeater',    name: '双发射手', cost: 200, hp: 100, cd: 8.0 },
-    { key: 'wallnut',     name: '坚果',     cost: 50,  hp: 400, cd: 12.0 },
-    { key: 'potatomine',  name: '土豆地雷', cost: 25,  hp: 100, cd: 20.0 }
+    { key: 'sunflower',     name: '向日葵',     cost: 50,  hp: 100, cd: 6.0 },
+    { key: 'twinsunflower', name: '双头向日葵', cost: 125, hp: 100, cd: 6.0 },
+    { key: 'peashooter',   name: '豌豆射手',   cost: 100, hp: 100, cd: 6.0 },
+    { key: 'repeater',      name: '双发射手',   cost: 200, hp: 100, cd: 8.0 },
+    { key: 'greenplum',     name: '青梅绿茶',   cost: 175, hp: 100, cd: 6.0 },
+    { key: 'wallnut',       name: '坚果',       cost: 50,  hp: 400, cd: 12.0 },
+    { key: 'sleepshroom',   name: '睡蘑菇',     cost: 150, hp: 800, cd: 15.0 },
+    { key: 'potatomine',    name: '土豆地雷',   cost: 25,  hp: 100, cd: 20.0 }
   ];
-  var CARD_Y = 8, CARD_H = 48, CARD_W = 72, CARD_GAP = 6;
+  var CARD_Y = 8, CARD_H = 48, CARD_W = 56, CARD_GAP = 4;
   var CARD_X0 = 12;
+  /* 铲子按钮 */
+  var SHOVEL_W = 40;
+  var shovelX = CARD_X0 + SEEDS.length * (CARD_W + CARD_GAP) + 4;
 
   var ZOMBIE_TYPES = {
-    normal: { hp: 100, speed: 14 },
-    cone:   { hp: 200, speed: 12 },
-    bucket: { hp: 350, speed: 10 }
+    normal:    { hp: 100, speed: 14 },
+    cone:      { hp: 200, speed: 12 },
+    bucket:    { hp: 350, speed: 10 },
+    naidragon: { hp: 700, speed: 11 },
+    giant:     { hp: 1500, speed: 7 }
   };
 
   /* ================= 状态 ================= */
@@ -115,7 +119,7 @@
 
   var last = 0, bannerT = 0;
   var sun = 100;
-  var sunCollected = 0;     /* 累计拾取 token 数（用于成就） */
+  var sunCollected = 0;
   var timeLeft = GAME_TIME;
   var kills = 0;
   var grid = [];
@@ -127,13 +131,12 @@
   var zombies = [];
   var suns = [];
   var particles = [];
-  var selected = null;
+  var selected = null;     /* 植物 key 或 'shovel' */
   var seedCooldown = {};
   var spawnTimer = 0;
   var skySunTimer = 0;
   var elapsed = 0;
-  /* 成就 */
-  var achievementT = 0;     /* >0 表示正在显示 */
+  var achievementT = 0;
   var achievementShown = false;
 
   function banner(text, ms) {
@@ -149,7 +152,7 @@
 
   function reset() {
     sun = 100; sunCollected = 0; timeLeft = GAME_TIME; kills = 0;
-    elapsed = 0; spawnTimer = 7.5; skySunTimer = 4;
+    elapsed = 0; spawnTimer = 12; skySunTimer = 4;
     selected = null; bannerT = 0;
     achievementT = 0; achievementShown = false;
     grid = [];
@@ -170,13 +173,13 @@
     state = 'playing';
     elIntro.classList.add('hidden');
     elOver.classList.add('hidden');
-    banner('守住 2 分 30 秒！', 1400);
+    banner('守住 5 分钟！', 1400);
   }
   function gameOver(win) {
     state = 'over';
     if (win) {
       elOverTitle.textContent = '你守住了草坪！';
-      elOverStats.textContent = '撑过 2 分 30 秒，共击退僵尸 ' + kills + ' 只，累计拾取 token ' + sunCollected + ' 个。';
+      elOverStats.textContent = '撑过 5 分钟，击退僵尸 ' + kills + ' 只，累计 token ' + sunCollected + '。';
       elOver.classList.add('win');
     } else {
       elOverTitle.textContent = '僵尸冲进了家…';
@@ -203,6 +206,10 @@
     }
     return -1;
   }
+  function shovelAt(x, y) {
+    if (y < CARD_Y || y > CARD_Y + CARD_H) return false;
+    return x >= shovelX && x <= shovelX + SHOVEL_W;
+  }
   function cellAt(x, y) {
     if (x < GRID_X || x >= GRID_X2 || y < GRID_Y || y >= GRID_Y2) return null;
     var c = Math.floor((x - GRID_X) / CW);
@@ -224,7 +231,6 @@
         elSun.textContent = '' + sun;
         suns.splice(i, 1);
         burst(s.x, s.y, '#5ac8ff', 8);
-        /* 成就判定 */
         if (!achievementShown && sunCollected >= 1000) {
           achievementShown = true;
           achievementT = 3;
@@ -233,22 +239,37 @@
       }
     }
 
-    /* 2. 点卡片 */
+    /* 2. 点铲子 */
+    if (shovelAt(wx, wy)) {
+      if (selected === 'shovel') { selected = null; }
+      else { selected = 'shovel'; }
+      return;
+    }
+
+    /* 3. 点卡片 */
     var ci = cardIndexAt(wx, wy);
     if (ci >= 0) {
       var seed = SEEDS[ci];
       if (seedCooldown[seed.key] > 0) return;
       if (sun < seed.cost) { banner('token 不够', 700); return; }
-      if (selected === seed.key) { selected = null; }
-      else { selected = seed.key; }
+      selected = (selected === seed.key) ? null : seed.key;
       return;
     }
 
-    /* 3. 点格子种 */
+    /* 4. 点格子 */
     var cell = cellAt(wx, wy);
     if (cell) {
+      /* 铲子模式：移除植物 */
+      if (selected === 'shovel') {
+        var old = grid[cell.row][cell.col];
+        if (old) {
+          burst(old.x, old.y, '#c8a060', 12);
+          grid[cell.row][cell.col] = null;
+        }
+        selected = null;
+        return;
+      }
       if (!selected) { return; }
-      if (grid[cell.row][cell.col]) { return; }
       var selSeed = null;
       for (var k = 0; k < SEEDS.length; k++) {
         if (SEEDS[k].key === selected) { selSeed = SEEDS[k]; break; }
@@ -256,6 +277,16 @@
       if (!selSeed) { selected = null; return; }
       if (sun < selSeed.cost) { banner('token 不够', 700); selected = null; return; }
       if (seedCooldown[selSeed.key] > 0) { return; }
+      /* 双头向日葵：必须依附在普通向日葵上（升级替换，不算占格） */
+      var existing = grid[cell.row][cell.col];
+      if (selSeed.key === 'twinsunflower') {
+        if (!existing || existing.type !== 'sunflower') {
+          banner('双头向日葵要种在向日葵上', 1000);
+          return;
+        }
+      } else {
+        if (existing) { return; }
+      }
       sun -= selSeed.cost;
       elSun.textContent = '' + sun;
       seedCooldown[selSeed.key] = selSeed.cd;
@@ -266,7 +297,8 @@
         y: GRID_Y + cell.row * CH + CH / 2,
         hp: selSeed.hp, maxHp: selSeed.hp,
         timer: 0,
-        armed: false
+        armed: false,
+        stunTimer: 0
       };
       burst(GRID_X + cell.col * CW + CW / 2, GRID_Y + cell.row * CH + CH / 2, '#a8e063', 10);
       selected = null;
@@ -317,10 +349,33 @@
     var row = Math.floor(Math.random() * ROWS);
     var roll = Math.random();
     var typeKey = 'normal';
-    var bucketChance = Math.min(0.30, 0.04 + elapsed * 0.0012);
-    var coneChance = Math.min(0.40, 0.16 + elapsed * 0.0008);
-    if (roll < bucketChance) typeKey = 'bucket';
-    else if (roll < bucketChance + coneChance) typeKey = 'cone';
+    /* 开局 30 秒：所有特殊僵尸概率大幅压低 */
+    var earlyFactor = elapsed < 30 ? 0.25 : 1.0;
+    var bucketChance = Math.min(0.22, 0.03 + elapsed * 0.0008) * earlyFactor;
+    var coneChance = Math.min(0.32, 0.14 + elapsed * 0.0006) * earlyFactor;
+    /* 前 3 分钟奶龙少量出现；3 分钟后概率大幅提升 */
+    var naidragonChance;
+    if (elapsed < 180) {
+      naidragonChance = Math.min(0.10, 0.02 + elapsed * 0.0004) * earlyFactor;
+    } else {
+      naidragonChance = Math.min(0.40, 0.20 + (elapsed - 180) * 0.0015);
+    }
+    /* 巨人：3 分 30 秒（210 秒）后开始出现，4 分钟（240 秒）后提高概率 */
+    var giantChance = 0;
+    if (elapsed >= 210) {
+      giantChance = elapsed < 240 ? 0.08 : Math.min(0.25, 0.10 + (elapsed - 240) * 0.003);
+    }
+    if (roll < giantChance) {
+      /* 同一行最多同时存在 2 个巨人，超限降级为普通 */
+      var giantsOnRow = 0;
+      for (var gi = 0; gi < zombies.length; gi++) {
+        if (zombies[gi].type === 'giant' && zombies[gi].row === row) giantsOnRow++;
+      }
+      typeKey = (giantsOnRow >= 2) ? 'normal' : 'giant';
+    }
+    else if (roll < giantChance + naidragonChance) typeKey = 'naidragon';
+    else if (roll < giantChance + naidragonChance + bucketChance) typeKey = 'bucket';
+    else if (roll < giantChance + naidragonChance + bucketChance + coneChance) typeKey = 'cone';
     var cfg = ZOMBIE_TYPES[typeKey];
     zombies.push({
       type: typeKey,
@@ -330,6 +385,10 @@
       hp: cfg.hp, maxHp: cfg.hp,
       speed: cfg.speed * (0.9 + Math.random() * 0.2),
       slowTimer: 0,
+      poisonTimer: 0,
+      poisonTick: 0,
+      laughTimer: 5 + Math.random() * 3,
+      laughing: 0,
       eating: false,
       eatTimer: 0
     });
@@ -392,6 +451,7 @@
       for (var c = 0; c < COLS; c++) {
         var p = grid[r][c];
         if (!p) continue;
+        if (p.stunTimer > 0) { p.stunTimer -= dt; continue; }
         p.timer += dt;
 
         if (p.type === 'sunflower') {
@@ -399,7 +459,14 @@
             p.timer = 0;
             suns.push({ x: p.x + 10, y: p.y - 10, vy: 0, targetY: p.y - 10, value: 25, life: 9 });
           }
-        } else if (p.type === 'peashooter' || p.type === 'repeater') {
+        } else if (p.type === 'twinsunflower') {
+          /* 双头：每 15 秒产两个 50 */
+          if (p.timer >= 15) {
+            p.timer = 0;
+            suns.push({ x: p.x - 8, y: p.y - 14, vy: 0, targetY: p.y - 14, value: 50, life: 9 });
+            suns.push({ x: p.x + 12, y: p.y - 8, vy: 0, targetY: p.y - 8, value: 50, life: 9 });
+          }
+        } else if (p.type === 'peashooter' || p.type === 'repeater' || p.type === 'greenplum') {
           var hasTarget = false;
           for (var zi = 0; zi < zombies.length; zi++) {
             if (zombies[zi].row === r && zombies[zi].x > p.x - 10 && zombies[zi].x < W + 20) { hasTarget = true; break; }
@@ -408,10 +475,12 @@
             p.timer = 0;
             if (p.type === 'peashooter') {
               bullets.push({ x: p.x + 18, y: p.y - 6, row: r, vx: 340, type: 'pea', dmg: 20 });
-            } else {
-              /* 双发：火焰弹在前，寒冰弹在后 */
+            } else if (p.type === 'repeater') {
               bullets.push({ x: p.x + 22, y: p.y - 8, row: r, vx: 360, type: 'fire', dmg: 30 });
               bullets.push({ x: p.x + 12, y: p.y - 4, row: r, vx: 360, type: 'ice', dmg: 20 });
+            } else {
+              /* 青梅绿茶：果汁弹，中毒 */
+              bullets.push({ x: p.x + 18, y: p.y - 6, row: r, vx: 300, type: 'juice', dmg: 15 });
             }
           }
         } else if (p.type === 'potatomine') {
@@ -429,6 +498,7 @@
             }
           }
         }
+        /* wallnut / sleepshroom：纯防御，无行为 */
       }
     }
 
@@ -442,9 +512,9 @@
         if (zz2.row !== b.row) continue;
         if (Math.abs(b.x - zz2.x) < 16 && Math.abs(b.y - zz2.y) < 30) {
           zz2.hp -= b.dmg;
-          burst(b.x, b.y, b.type === 'fire' ? '#ff8030' : (b.type === 'ice' ? '#a0e0ff' : '#9fe06a'), 5);
-          /* 寒冰弹：减速 5 秒 */
+          burst(b.x, b.y, b.type === 'fire' ? '#ff8030' : (b.type === 'ice' ? '#a0e0ff' : (b.type === 'juice' ? '#b8ff60' : '#9fe06a')), 5);
           if (b.type === 'ice') { zz2.slowTimer = 5; }
+          if (b.type === 'juice') { zz2.poisonTimer = 2; zz2.poisonTick = 0; }
           bullets.splice(bi, 1);
           if (zz2.hp <= 0) {
             zombies.splice(zi3, 1);
@@ -456,10 +526,51 @@
       }
     }
 
-    /* 僵尸移动 / 吃植物 */
+    /* 僵尸移动 / 吃植物 / 状态 */
     for (var zi4 = zombies.length - 1; zi4 >= 0; zi4--) {
       var zz = zombies[zi4];
       if (zz.slowTimer > 0) { zz.slowTimer -= dt; }
+      /* 中毒持续伤害 */
+      if (zz.poisonTimer > 0) {
+        zz.poisonTimer -= dt;
+        zz.poisonTick += dt;
+        if (zz.poisonTick >= 0.5) {
+          zz.poisonTick = 0;
+          zz.hp -= 8;
+          burst(zz.x, zz.y - 10, '#b8ff60', 3);
+          if (zz.hp <= 0) {
+            burst(zz.x, zz.y, '#c0c8c0', 14);
+            zombies.splice(zi4, 1);
+            kills++;
+            continue;
+          }
+        }
+      }
+      /* 奶龙大笑 */
+      if (zz.type === 'naidragon') {
+        if (zz.laughing > 0) {
+          zz.laughing -= dt;
+          if (zz.laughing <= 0) {
+            /* 笑完：眩晕同行 ±1 格内所有植物 */
+            for (var cr = Math.max(0, zz.row - 1); cr <= Math.min(ROWS - 1, zz.row + 1); cr++) {
+              for (var cc2 = 0; cc2 < COLS; cc2++) {
+                var pp = grid[cr][cc2];
+                if (pp && Math.abs(pp.x - zz.x) < 130) {
+                  pp.stunTimer = 3;
+                }
+              }
+            }
+            burst(zz.x, zz.y - 30, '#ffd166', 10);
+          }
+        } else {
+          zz.laughTimer -= dt;
+          if (zz.laughTimer <= 0) {
+            zz.laughTimer = 7 + Math.random() * 3;
+            zz.laughing = 1.2;
+          }
+        }
+      }
+
       var curSpeed = zz.speed * (zz.slowTimer > 0 ? 0.75 : 1);
 
       var zc = Math.floor((zz.x - GRID_X) / CW);
@@ -467,15 +578,21 @@
       if (zc >= 0 && zc < COLS) {
         var plantHere = grid[zz.row][zc];
         if (plantHere && zz.x < plantHere.x + 22) {
-          canEat = true;
-          zz.eating = true;
-          zz.eatTimer += dt;
-          if (zz.eatTimer >= 0.6) {
-            zz.eatTimer = 0;
-            plantHere.hp -= 25;
-            if (plantHere.hp <= 0) {
-              burst(plantHere.x, plantHere.y, '#8a5a30', 12);
-              grid[zz.row][zc] = null;
+          if (zz.type === 'giant') {
+            /* 巨人：直接踩碎，无视血量 */
+            burst(plantHere.x, plantHere.y, '#8a8a8a', 18, 1.5);
+            grid[zz.row][zc] = null;
+          } else {
+            canEat = true;
+            zz.eating = true;
+            zz.eatTimer += dt;
+            if (zz.eatTimer >= 0.6) {
+              zz.eatTimer = 0;
+              plantHere.hp -= 25;
+              if (plantHere.hp <= 0) {
+                burst(plantHere.x, plantHere.y, '#8a5a30', 12);
+                grid[zz.row][zc] = null;
+              }
             }
           }
         }
@@ -514,42 +631,52 @@
   }
 
   /* ================= 绘制 ================= */
-  function drawShadow(x, y, w) {
-    ctx.fillStyle = 'rgba(0,0,0,.35)';
+  /* 伪 3D 阴影：接触阴影 + 投影 */
+  function drawShadow(x, y, w, h) {
+    ctx.fillStyle = 'rgba(0,0,0,.4)';
     ctx.beginPath();
-    ctx.ellipse(x, y, w, w * 0.28, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y, w, (h || w * 0.28), 0, 0, Math.PI * 2);
     ctx.fill();
   }
 
   function drawLawn() {
-    /* 顶部泥土条 */
+    /* 顶部泥土条（伪 3D：明暗分层） */
     var dirtG = ctx.createLinearGradient(0, 0, 0, 72);
-    dirtG.addColorStop(0, '#4a3520');
-    dirtG.addColorStop(1, '#2a1e10');
+    dirtG.addColorStop(0, '#5a4326');
+    dirtG.addColorStop(0.7, '#3a2c18');
+    dirtG.addColorStop(1, '#1a1208');
     ctx.fillStyle = dirtG;
     ctx.fillRect(0, 0, W, 72);
-    ctx.fillStyle = 'rgba(0,0,0,.3)';
-    for (var i = 0; i < 40; i++) {
-      ctx.fillRect((i * 97) % W, 6 + ((i * 53) % 60), 2, 2);
+    /* 泥土颗粒 + 高光 */
+    for (var i = 0; i < 50; i++) {
+      var px = (i * 97) % W;
+      var py = 6 + ((i * 53) % 60);
+      ctx.fillStyle = (i % 3 === 0) ? 'rgba(255,220,160,.15)' : 'rgba(0,0,0,.3)';
+      ctx.fillRect(px, py, 2, 2);
     }
 
-    /* 草坪行渐变 */
+    /* 草坪：每行伪 3D 渐变（顶亮底暗，模拟俯视光影） */
     for (var r = 0; r < ROWS; r++) {
       var y0 = GRID_Y + r * CH;
       var rowG = ctx.createLinearGradient(0, y0, 0, y0 + CH);
       if (r % 2 === 0) {
-        rowG.addColorStop(0, '#5a8a3a');
-        rowG.addColorStop(1, '#3a6a24');
-      } else {
-        rowG.addColorStop(0, '#4e8030');
+        rowG.addColorStop(0, '#6ea848');
+        rowG.addColorStop(0.5, '#558834');
         rowG.addColorStop(1, '#2f5c1c');
+      } else {
+        rowG.addColorStop(0, '#639a3e');
+        rowG.addColorStop(0.5, '#4a7c2a');
+        rowG.addColorStop(1, '#275018');
       }
       ctx.fillStyle = rowG;
       ctx.fillRect(GRID_X, y0, COLS * CW, CH);
+      /* 行底部暗影（伪 3D 行间缝隙） */
+      ctx.fillStyle = 'rgba(0,0,0,.25)';
+      ctx.fillRect(GRID_X, y0 + CH - 3, COLS * CW, 3);
     }
 
     /* 草叶纹理 */
-    ctx.strokeStyle = 'rgba(0,40,0,.18)';
+    ctx.strokeStyle = 'rgba(0,40,0,.2)';
     ctx.lineWidth = 1;
     for (var gx = GRID_X + 10; gx < GRID_X2; gx += 14) {
       for (var gy = GRID_Y + 12; gy < GRID_Y2; gy += 18) {
@@ -560,23 +687,17 @@
       }
     }
 
-    /* 网格线 */
-    ctx.strokeStyle = 'rgba(0,0,0,.15)';
-    for (var c = 0; c <= COLS; c++) {
+    /* 竖列分隔（淡） */
+    ctx.strokeStyle = 'rgba(0,0,0,.12)';
+    for (var c = 1; c < COLS; c++) {
       ctx.beginPath();
       ctx.moveTo(GRID_X + c * CW, GRID_Y);
       ctx.lineTo(GRID_X + c * CW, GRID_Y2);
       ctx.stroke();
     }
-    for (var rr = 0; rr <= ROWS; rr++) {
-      ctx.beginPath();
-      ctx.moveTo(GRID_X, GRID_Y + rr * CH);
-      ctx.lineTo(GRID_X2, GRID_Y + rr * CH);
-      ctx.stroke();
-    }
 
     /* 左边红线 */
-    ctx.strokeStyle = 'rgba(255,60,60,.8)';
+    ctx.strokeStyle = 'rgba(255,60,60,.85)';
     ctx.lineWidth = 3;
     ctx.setLineDash([8, 6]);
     ctx.beginPath();
@@ -585,7 +706,8 @@
     ctx.stroke();
     ctx.setLineDash([]);
 
-    ctx.fillStyle = 'rgba(0,0,0,.4)';
+    /* 顶部阴影边 */
+    ctx.fillStyle = 'rgba(0,0,0,.5)';
     ctx.fillRect(0, 72, W, 4);
   }
 
@@ -596,28 +718,60 @@
     var selectedThis = (selected === seed.key);
 
     ctx.save();
+    /* 伪 3D 卡片：顶部高光、底部阴影 */
     var bgG = ctx.createLinearGradient(x, y, x, y + CARD_H);
-    bgG.addColorStop(0, selectedThis ? '#3a5a2a' : '#1f2e18');
+    bgG.addColorStop(0, selectedThis ? '#4a6a3a' : '#2a3a20');
+    bgG.addColorStop(0.5, selectedThis ? '#3a5a2a' : '#1f2e18');
     bgG.addColorStop(1, '#0e180a');
     ctx.fillStyle = bgG;
-    ctx.strokeStyle = selectedThis ? '#ffd166' : 'rgba(255,255,255,.28)';
+    ctx.strokeStyle = selectedThis ? '#ffd166' : 'rgba(255,255,255,.3)';
     ctx.lineWidth = selectedThis ? 2.5 : 1.5;
     roundRect(x, y, CARD_W, CARD_H, 8);
     ctx.fill(); ctx.stroke();
+    /* 顶部高光条 */
+    ctx.fillStyle = 'rgba(255,255,255,.15)';
+    roundRect(x + 2, y + 2, CARD_W - 4, 8, 5);
+    ctx.fill();
 
-    drawPlantIcon(seed.key, x + CARD_W / 2, y + 20, 0.62, false);
+    drawPlantIcon(seed.key, x + CARD_W / 2, y + 20, 0.6, false);
 
     ctx.fillStyle = affordable ? '#7ad0ff' : '#ff8080';
-    ctx.font = '700 11px "PingFang SC", "Microsoft YaHei", sans-serif';
+    ctx.font = '700 10px "PingFang SC", "Microsoft YaHei", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
-    ctx.fillText('◆' + seed.cost, x + CARD_W / 2, y + CARD_H - 6);
+    ctx.fillText('◆' + seed.cost, x + CARD_W / 2, y + CARD_H - 5);
 
     if (onCd) {
       var ratio = seedCooldown[seed.key] / seed.cd;
       ctx.fillStyle = 'rgba(0,0,0,.6)';
       ctx.fillRect(x, y, CARD_W, CARD_H * ratio);
     }
+    ctx.restore();
+  }
+
+  function drawShovelButton() {
+    var selectedThis = (selected === 'shovel');
+    ctx.save();
+    var bgG = ctx.createLinearGradient(shovelX, CARD_Y, shovelX, CARD_Y + CARD_H);
+    bgG.addColorStop(0, selectedThis ? '#6a4a2a' : '#3a2e20');
+    bgG.addColorStop(1, '#1a1408');
+    ctx.fillStyle = bgG;
+    ctx.strokeStyle = selectedThis ? '#ffd166' : 'rgba(255,255,255,.3)';
+    ctx.lineWidth = selectedThis ? 2.5 : 1.5;
+    roundRect(shovelX, CARD_Y, SHOVEL_W, CARD_H, 8);
+    ctx.fill(); ctx.stroke();
+    /* 画铲子 */
+    ctx.translate(shovelX + SHOVEL_W / 2, CARD_Y + CARD_H / 2);
+    ctx.rotate(-0.5);
+    /* 柄 */
+    ctx.strokeStyle = '#c8a060';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(0, -14); ctx.lineTo(0, 4); ctx.stroke();
+    /* 头 */
+    ctx.fillStyle = '#b0b8c0';
+    ctx.beginPath();
+    ctx.moveTo(-6, 4); ctx.lineTo(6, 4); ctx.lineTo(4, 14); ctx.lineTo(-4, 14);
+    ctx.closePath(); ctx.fill();
     ctx.restore();
   }
 
@@ -635,6 +789,11 @@
     ctx.save();
     ctx.translate(cx, cy);
     ctx.scale(scale, scale);
+
+    /* 公共：底部投影椭圆（伪 3D） */
+    ctx.fillStyle = 'rgba(0,0,0,.3)';
+    ctx.beginPath(); ctx.ellipse(0, 14, 12, 4, 0, 0, Math.PI * 2); ctx.fill();
+
     if (key === 'sunflower') {
       ctx.fillStyle = '#2f6a2f';
       ctx.fillRect(-2, 4, 4, 14);
@@ -648,8 +807,8 @@
         ctx.beginPath(); ctx.ellipse(12, 0, 7, 3.5, 0, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
       }
-      var faceG = ctx.createRadialGradient(-2, -2, 1, 0, 0, 10);
-      faceG.addColorStop(0, '#ffd860');
+      var faceG = ctx.createRadialGradient(-3, -3, 1, 0, 0, 10);
+      faceG.addColorStop(0, '#fff0a0');
       faceG.addColorStop(1, '#8a5a10');
       ctx.fillStyle = faceG;
       ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
@@ -658,48 +817,131 @@
       ctx.beginPath(); ctx.arc(3, -2, 1.4, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = '#2a1a08'; ctx.lineWidth = 1.2;
       ctx.beginPath(); ctx.arc(0, 1, 4, 0.1, Math.PI - 0.1); ctx.stroke();
+    } else if (key === 'twinsunflower') {
+      /* 双头向日葵：左右两朵花 */
+      ctx.fillStyle = '#2f6a2f';
+      ctx.fillRect(-2, 4, 4, 14);
+      function drawOneFlower(fx, fy, sc) {
+        ctx.save();
+        ctx.translate(fx, fy);
+        ctx.scale(sc, sc);
+        for (var i = 0; i < 10; i++) {
+          var a = (i / 10) * Math.PI * 2;
+          ctx.save(); ctx.rotate(a);
+          ctx.fillStyle = '#ffe86a';
+          ctx.beginPath(); ctx.ellipse(10, 0, 6, 3, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.restore();
+        }
+        var fg = ctx.createRadialGradient(-1, -1, 1, 0, 0, 8);
+        fg.addColorStop(0, '#fff0a0'); fg.addColorStop(1, '#a06818');
+        ctx.fillStyle = fg;
+        ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#2a1a08';
+        ctx.beginPath(); ctx.arc(-2, -1, 1.2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(2, -1, 1.2, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+      drawOneFlower(-7, -8, 0.9);
+      drawOneFlower(7, -8, 0.9);
     } else if (key === 'peashooter' || key === 'repeater') {
       ctx.fillStyle = '#2f6a2f';
       ctx.fillRect(-2, 4, 4, 14);
-      var headG = ctx.createRadialGradient(-3, -5, 2, 0, -2, 12);
-      headG.addColorStop(0, '#8ee06a');
-      headG.addColorStop(1, '#2a6a20');
-      ctx.fillStyle = headG;
-      ctx.beginPath(); ctx.arc(0, -2, 10, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#1a4a1a';
-      ctx.beginPath(); ctx.arc(9, -2, 4.5, -Math.PI / 2, Math.PI / 2); ctx.fill();
-      ctx.fillStyle = '#0a2a0a';
-      ctx.beginPath(); ctx.arc(11, -2, 2.5, -Math.PI / 2, Math.PI / 2); ctx.fill();
-      ctx.fillStyle = '#1a3a1a';
-      ctx.beginPath(); ctx.arc(-2, -6, 1.8, 0, Math.PI * 2); ctx.fill();
-      /* 双发：两个嘴 */
       if (key === 'repeater') {
-        ctx.fillStyle = '#1a4a1a';
-        ctx.beginPath(); ctx.arc(8, 4, 3.5, -Math.PI / 2, Math.PI / 2); ctx.fill();
-        ctx.fillStyle = '#0a2a0a';
-        ctx.beginPath(); ctx.arc(10, 4, 2, -Math.PI / 2, Math.PI / 2); ctx.fill();
-        /* 小闪光区分 */
+        /* 双发：红蓝相间 */
+        var headG2 = ctx.createLinearGradient(-10, 0, 10, 0);
+        headG2.addColorStop(0, '#ff5050');
+        headG2.addColorStop(0.5, '#ffb0b0');
+        headG2.addColorStop(0.5, '#b0d0ff');
+        headG2.addColorStop(1, '#2060d0');
+        ctx.fillStyle = headG2;
+        ctx.beginPath(); ctx.arc(0, -2, 10, 0, Math.PI * 2); ctx.fill();
+        /* 上嘴红、下嘴蓝 */
+        ctx.fillStyle = '#a02020';
+        ctx.beginPath(); ctx.arc(9, -4, 4.5, -Math.PI / 2, Math.PI / 2); ctx.fill();
+        ctx.fillStyle = '#103a80';
+        ctx.beginPath(); ctx.arc(9, 2, 4, -Math.PI / 2, Math.PI / 2); ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.arc(-2, -6, 1.8, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#ffd166';
-        ctx.beginPath(); ctx.arc(-6, -8, 1.2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(-6, -8, 1.5, 0, Math.PI * 2); ctx.fill();
+      } else {
+        var headG = ctx.createRadialGradient(-4, -6, 2, 0, -2, 13);
+        headG.addColorStop(0, '#b8f89a');
+        headG.addColorStop(0.6, '#4a9a3a');
+        headG.addColorStop(1, '#1a4a10');
+        ctx.fillStyle = headG;
+        ctx.beginPath(); ctx.arc(0, -2, 10, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#1a4a1a';
+        ctx.beginPath(); ctx.arc(9, -2, 4.5, -Math.PI / 2, Math.PI / 2); ctx.fill();
+        ctx.fillStyle = '#0a2a0a';
+        ctx.beginPath(); ctx.arc(11, -2, 2.5, -Math.PI / 2, Math.PI / 2); ctx.fill();
+        ctx.fillStyle = '#1a3a1a';
+        ctx.beginPath(); ctx.arc(-2, -6, 1.8, 0, Math.PI * 2); ctx.fill();
       }
+    } else if (key === 'greenplum') {
+      /* 青梅绿茶：墨绿与黄色相间 */
+      ctx.fillStyle = '#2f4a1a';
+      ctx.fillRect(-2, 6, 4, 12);
+      var cupG = ctx.createRadialGradient(-3, -6, 2, 0, -2, 12);
+      cupG.addColorStop(0, '#f8e860');
+      cupG.addColorStop(0.4, '#c0b020');
+      cupG.addColorStop(0.6, '#1a4a1a');
+      cupG.addColorStop(1, '#0a2a0a');
+      ctx.fillStyle = cupG;
+      ctx.beginPath(); ctx.arc(0, -2, 10, 0, Math.PI * 2); ctx.fill();
+      /* 黄色高光 */
+      ctx.fillStyle = 'rgba(255,240,120,.6)';
+      ctx.beginPath(); ctx.ellipse(-3, -6, 4, 2, -0.5, 0, Math.PI * 2); ctx.fill();
+      /* 杯口 */
+      ctx.fillStyle = '#0a2a0a';
+      ctx.beginPath(); ctx.arc(9, -2, 3.5, -Math.PI / 2, Math.PI / 2); ctx.fill();
+      ctx.fillStyle = '#f8e860';
+      ctx.beginPath(); ctx.arc(-2, -6, 1.5, 0, Math.PI * 2); ctx.fill();
     } else if (key === 'wallnut') {
-      var nutG = ctx.createRadialGradient(-4, -5, 2, 0, 0, 14);
-      nutG.addColorStop(0, '#e0b878');
-      nutG.addColorStop(1, '#6a4018');
+      var nutG = ctx.createRadialGradient(-5, -6, 2, 0, 0, 15);
+      nutG.addColorStop(0, '#f0d090');
+      nutG.addColorStop(0.6, '#a07030');
+      nutG.addColorStop(1, '#4a2a08');
       ctx.fillStyle = nutG;
       ctx.beginPath(); ctx.ellipse(0, 0, 11, 13, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = '#3a2408'; ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#2a1804'; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.ellipse(0, 0, 11, 13, 0, 0, Math.PI * 2); ctx.stroke();
       ctx.fillStyle = '#1a0e04';
       ctx.beginPath(); ctx.arc(-4, -3, 1.6, 0, Math.PI * 2); ctx.fill();
       ctx.beginPath(); ctx.arc(4, -3, 1.6, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = '#1a0e04'; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(0, 3, 4, 0.2, Math.PI - 0.2); ctx.stroke();
+    } else if (key === 'sleepshroom') {
+      /* 睡觉蘑菇：紫色菌盖，闭眼睛 */
+      /* 菌柄 */
+      ctx.fillStyle = '#e8d8f0';
+      ctx.fillRect(-4, 0, 8, 12);
+      /* 菌盖（紫色渐变） */
+      var capG = ctx.createRadialGradient(-4, -8, 2, 0, -4, 14);
+      capG.addColorStop(0, '#d8b8ff');
+      capG.addColorStop(0.6, '#8a5ac0');
+      capG.addColorStop(1, '#3a1a6a');
+      ctx.fillStyle = capG;
+      ctx.beginPath(); ctx.arc(0, -4, 13, Math.PI, 0); ctx.fill();
+      /* 斑点 */
+      ctx.fillStyle = 'rgba(255,255,255,.7)';
+      ctx.beginPath(); ctx.arc(-6, -8, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(5, -10, 1.5, 0, Math.PI * 2); ctx.fill();
+      /* 闭眼 */
+      ctx.strokeStyle = '#2a1a4a'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(-6, 0); ctx.lineTo(-2, 0); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(2, 0); ctx.lineTo(6, 0); ctx.stroke();
+      /* Zzz */
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '700 8px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('z', 10, -14);
+      ctx.fillText('z', 14, -18);
     } else if (key === 'potatomine') {
       ctx.fillStyle = '#4a3218';
       ctx.beginPath(); ctx.ellipse(0, 8, 14, 5, 0, 0, Math.PI * 2); ctx.fill();
-      var potG = ctx.createRadialGradient(-2, -3, 1, 0, 0, 9);
-      potG.addColorStop(0, '#d8b060');
+      var potG = ctx.createRadialGradient(-3, -4, 1, 0, 0, 10);
+      potG.addColorStop(0, '#f0d890');
       potG.addColorStop(1, '#6a4a20');
       ctx.fillStyle = potG;
       ctx.beginPath(); ctx.ellipse(0, 0, 8, 6.5, 0, 0, Math.PI * 2); ctx.fill();
@@ -718,8 +960,25 @@
   }
 
   function drawPlant(p) {
-    drawShadow(p.x, p.y + 18, 18);
+    /* 伪 3D 投影 */
+    drawShadow(p.x + 2, p.y + 20, 18);
     drawPlantIcon(p.type, p.x, p.y, 1.4, p.armed);
+
+    /* 眩晕：头顶旋转星星 */
+    if (p.stunTimer > 0) {
+      ctx.save();
+      ctx.fillStyle = '#ffd166';
+      ctx.font = '900 12px sans-serif';
+      ctx.textAlign = 'center';
+      for (var i = 0; i < 3; i++) {
+        var ang = elapsed * 4 + i * (Math.PI * 2 / 3);
+        var sx = p.x + Math.cos(ang) * 14;
+        var sy = p.y - 28 + Math.sin(ang) * 4;
+        ctx.fillText('★', sx, sy);
+      }
+      ctx.restore();
+    }
+
     if (p.type === 'potatomine' && !p.armed) {
       var ratio = Math.min(1, p.timer / 15);
       ctx.fillStyle = 'rgba(0,0,0,.55)';
@@ -729,108 +988,256 @@
     }
     if (p.hp < p.maxHp) {
       var w = 40, r = p.hp / p.maxHp;
-      ctx.fillStyle = 'rgba(0,0,0,.55)';
-      ctx.fillRect(p.x - w / 2, p.y - 34, w, 4);
+      ctx.fillStyle = 'rgba(0,0,0,.6)';
+      ctx.fillRect(p.x - w / 2, p.y - 36, w, 4);
       ctx.fillStyle = r > 0.5 ? '#7ad06a' : '#ff8080';
-      ctx.fillRect(p.x - w / 2, p.y - 34, w * r, 4);
+      ctx.fillRect(p.x - w / 2, p.y - 36, w * r, 4);
     }
   }
 
-  /* 写实电影风僵尸 */
   function drawZombie(z) {
-    drawShadow(z.x, z.y + 34, 17);
+    /* 伪 3D 投影（偏移右下） */
+    drawShadow(z.x + 2, z.y + 36, z.type === 'giant' ? 28 : 17);
+
     ctx.save();
 
+    /* 巨人僵尸：参照图重画——绿皮、棕发、灰绿卷袖 T 恤、深灰裤、赤脚 */
+    if (z.type === 'giant') {
+      var gscale = 1.55;
+      ctx.translate(z.x, z.y + 6);
+      ctx.scale(gscale, gscale);
+
+      /* 赤脚（两只大脚） */
+      ctx.fillStyle = '#7a9078';
+      ctx.beginPath(); ctx.ellipse(-8, 30, 7, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(8, 30, 7, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+      /* 脚趾 */
+      ctx.fillStyle = '#5a7058';
+      ctx.beginPath(); ctx.arc(-11, 29, 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(-8, 30, 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(11, 29, 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(8, 30, 1.5, 0, Math.PI * 2); ctx.fill();
+
+      /* 深灰裤子 */
+      var pantsG = ctx.createLinearGradient(0, 10, 0, 30);
+      pantsG.addColorStop(0, '#4a4a52');
+      pantsG.addColorStop(1, '#2a2a32');
+      ctx.fillStyle = pantsG;
+      ctx.fillRect(-13, 8, 26, 22);
+
+      /* 灰绿长袖 T 恤（壮硕身体） */
+      var shirtG = ctx.createLinearGradient(0, -22, 0, 12);
+      shirtG.addColorStop(0, '#a8a898');
+      shirtG.addColorStop(0.6, '#8a8a7c');
+      shirtG.addColorStop(1, '#5a5a50');
+      ctx.fillStyle = shirtG;
+      /* 身体（倒梯形壮硕） */
+      ctx.beginPath();
+      ctx.moveTo(-18, -20);
+      ctx.lineTo(18, -20);
+      ctx.lineTo(15, 10);
+      ctx.lineTo(-15, 10);
+      ctx.closePath();
+      ctx.fill();
+      /* 领口 */
+      ctx.strokeStyle = '#4a4a40'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(0, -20, 6, 0.1, Math.PI - 0.1); ctx.stroke();
+      /* 卷起的袖口 */
+      ctx.fillStyle = '#6a6a5e';
+      ctx.fillRect(-22, -2, 5, 10);
+      ctx.fillRect(17, -2, 5, 10);
+
+      /* 绿皮手臂（从袖口伸出） */
+      var armG = ctx.createLinearGradient(-22, 0, -15, 0);
+      armG.addColorStop(0, '#8aa088');
+      armG.addColorStop(1, '#6a8068');
+      ctx.fillStyle = armG;
+      ctx.beginPath(); ctx.ellipse(-19, 8, 3.5, 8, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(19, 8, 3.5, 8, 0, 0, Math.PI * 2); ctx.fill();
+      /* 大手 */
+      ctx.fillStyle = '#7a9078';
+      ctx.beginPath(); ctx.ellipse(-19, 17, 4.5, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(19, 17, 4.5, 4, 0, 0, Math.PI * 2); ctx.fill();
+
+      /* 头（绿皮，壮硕方脸） */
+      var headG = ctx.createRadialGradient(-4, -32, 2, 0, -28, 14);
+      headG.addColorStop(0, '#c0d4bc');
+      headG.addColorStop(0.7, '#8aa088');
+      headG.addColorStop(1, '#5a7058');
+      ctx.fillStyle = headG;
+      ctx.beginPath();
+      ctx.moveTo(-11, -22);
+      ctx.lineTo(-12, -34);
+      ctx.quadraticCurveTo(-12, -42, 0, -42);
+      ctx.quadraticCurveTo(12, -42, 12, -34);
+      ctx.lineTo(11, -22);
+      ctx.closePath();
+      ctx.fill();
+      /* 耳朵 */
+      ctx.fillStyle = '#8aa088';
+      ctx.beginPath(); ctx.arc(-12, -30, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(12, -30, 2.5, 0, Math.PI * 2); ctx.fill();
+
+      /* 棕色碎短发（顶部锯齿） */
+      ctx.fillStyle = '#4a3020';
+      ctx.beginPath();
+      ctx.moveTo(-11, -38);
+      ctx.lineTo(-9, -43); ctx.lineTo(-7, -39);
+      ctx.lineTo(-5, -44); ctx.lineTo(-3, -40);
+      ctx.lineTo(0, -45); ctx.lineTo(2, -40);
+      ctx.lineTo(5, -44); ctx.lineTo(7, -39);
+      ctx.lineTo(9, -43); ctx.lineTo(11, -38);
+      ctx.lineTo(10, -42); ctx.lineTo(-10, -42);
+      ctx.closePath();
+      ctx.fill();
+
+      /* 粗黑浓眉 */
+      ctx.strokeStyle = '#2a1a10'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(-8, -33); ctx.lineTo(-3, -34); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(3, -34); ctx.lineTo(8, -33); ctx.stroke();
+      /* 棕色眼睛 */
+      ctx.fillStyle = '#6a3a10';
+      ctx.beginPath(); ctx.arc(-5, -30, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(5, -30, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(-5.5, -30.5, 0.7, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(4.5, -30.5, 0.7, 0, Math.PI * 2); ctx.fill();
+      /* 鼻子 */
+      ctx.fillStyle = '#7a9078';
+      ctx.beginPath(); ctx.arc(0, -27, 1.8, 0, Math.PI * 2); ctx.fill();
+      /* 抿嘴（严肃下弯） */
+      ctx.strokeStyle = '#3a2a20'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(-5, -23); ctx.lineTo(5, -23); ctx.stroke();
+
+      /* 血条 */
+      if (z.hp < z.maxHp) {
+        ctx.fillStyle = 'rgba(0,0,0,.6)';
+        ctx.fillRect(-20, -52, 40, 5);
+        ctx.fillStyle = '#ff2020';
+        ctx.fillRect(-20, -52, 40 * Math.max(0, z.hp / z.maxHp), 5);
+      }
+      ctx.restore();
+      return;
+    }
+
     var slowed = z.slowTimer > 0;
+    var poisoned = z.poisonTimer > 0;
+    var laughing = z.laughing > 0;
 
     /* 腿 */
     var step = Math.sin(elapsed * (slowed ? 3 : 6) + z.row) * (z.eating ? 0 : 4);
-    ctx.strokeStyle = '#2a2a2a';
+    ctx.strokeStyle = '#1a1a1a';
     ctx.lineWidth = 5;
     ctx.beginPath(); ctx.moveTo(z.x - 4, z.y + 16); ctx.lineTo(z.x - 4 + step, z.y + 32); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(z.x + 4, z.y + 16); ctx.lineTo(z.x + 4 - step, z.y + 32); ctx.stroke();
 
-    /* 破烂衣服（暗色渐变） */
-    var clothG = ctx.createLinearGradient(0, z.y - 12, 0, z.y + 18);
-    clothG.addColorStop(0, '#4a4038');
-    clothG.addColorStop(1, '#1a1815');
-    ctx.fillStyle = clothG;
+    /* 身体 */
+    var bodyG;
+    if (z.type === 'naidragon') {
+      /* 奶龙：黄色胖胖身体 */
+      bodyG = ctx.createLinearGradient(0, z.y - 14, 0, z.y + 18);
+      bodyG.addColorStop(0, '#ffe870');
+      bodyG.addColorStop(1, '#b88820');
+    } else {
+      bodyG = ctx.createLinearGradient(0, z.y - 12, 0, z.y + 18);
+      bodyG.addColorStop(0, '#4a4038');
+      bodyG.addColorStop(1, '#1a1815');
+    }
+    ctx.fillStyle = bodyG;
     ctx.fillRect(z.x - 9, z.y - 12, 18, 30);
-    /* 衣服破洞/血渍 */
-    ctx.fillStyle = 'rgba(60,10,10,.7)';
-    ctx.fillRect(z.x - 6, z.y - 6, 5, 4);
-    ctx.fillRect(z.x + 2, z.y + 2, 6, 3);
 
-    /* 前伸的手臂（灰绿皮肤） */
-    var armG = ctx.createLinearGradient(z.x - 22, 0, z.x, 0);
-    armG.addColorStop(0, '#5a6a55');
-    armG.addColorStop(1, '#3a4a38');
-    ctx.strokeStyle = armG;
+    if (z.type !== 'naidragon') {
+      /* 血渍 */
+      ctx.fillStyle = 'rgba(60,10,10,.7)';
+      ctx.fillRect(z.x - 6, z.y - 6, 5, 4);
+      ctx.fillRect(z.x + 2, z.y + 2, 6, 3);
+    }
+
+    /* 手臂 */
+    var armColor = (z.type === 'naidragon') ? '#e8c040' : '#5a6a55';
+    ctx.strokeStyle = armColor;
     ctx.lineWidth = 5.5;
     ctx.beginPath(); ctx.moveTo(z.x - 6, z.y - 4); ctx.lineTo(z.x - 24, z.y + (z.eating ? -3 : 2)); ctx.stroke();
-    /* 爪子 */
-    ctx.strokeStyle = '#2a3a28'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(z.x - 24, z.y + (z.eating ? -3 : 2)); ctx.lineTo(z.x - 28, z.y - 1); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(z.x - 24, z.y + (z.eating ? -3 : 2)); ctx.lineTo(z.x - 28, z.y + 4); ctx.stroke();
 
-    /* 头（灰绿腐烂皮肤，带渐变） */
-    var skinG = ctx.createRadialGradient(z.x - 3, z.y - 24, 2, z.x, z.y - 20, 13);
-    skinG.addColorStop(0, '#8aa080');
-    skinG.addColorStop(0.6, '#5a6a50');
-    skinG.addColorStop(1, '#2a3525');
-    ctx.fillStyle = skinG;
-    ctx.beginPath(); ctx.arc(z.x, z.y - 20, 12, 0, Math.PI * 2); ctx.fill();
-    /* 下颚阴影 */
-    ctx.fillStyle = 'rgba(0,0,0,.4)';
-    ctx.beginPath(); ctx.ellipse(z.x, z.y - 14, 8, 3, 0, 0, Math.PI); ctx.fill();
-
-    /* 空洞眼窝 */
-    ctx.fillStyle = '#0a0a0a';
-    ctx.beginPath(); ctx.arc(z.x - 5, z.y - 22, 2.6, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(z.x + 3, z.y - 22, 2.6, 0, Math.PI * 2); ctx.fill();
-    /* 红眼亮点 */
-    ctx.fillStyle = slowed ? '#a0e0ff' : '#ff3030';
-    ctx.beginPath(); ctx.arc(z.x - 5, z.y - 22, 1.2, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(z.x + 3, z.y - 22, 1.2, 0, Math.PI * 2); ctx.fill();
-
-    /* 嘴（龇牙） */
-    ctx.strokeStyle = '#0a0a0a'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(z.x - 6, z.y - 14); ctx.lineTo(z.x + 5, z.y - 13); ctx.stroke();
-    ctx.fillStyle = '#e0e0c0';
-    ctx.fillRect(z.x - 4, z.y - 14, 2, 2);
-    ctx.fillRect(z.x + 1, z.y - 13, 2, 2);
+    /* 头 */
+    if (z.type === 'naidragon') {
+      /* 奶龙头：黄色、胖、大笑 */
+      var headG = ctx.createRadialGradient(z.x - 3, z.y - 24, 2, z.x, z.y - 20, 14);
+      headG.addColorStop(0, '#fff0a0');
+      headG.addColorStop(1, '#c89820');
+      ctx.fillStyle = headG;
+      ctx.beginPath(); ctx.arc(z.x, z.y - 20, 13, 0, Math.PI * 2); ctx.fill();
+      /* 小角 */
+      ctx.fillStyle = '#fff8d0';
+      ctx.beginPath(); ctx.moveTo(z.x - 6, z.y - 32); ctx.lineTo(z.x - 4, z.y - 38); ctx.lineTo(z.x - 2, z.y - 32); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(z.x + 2, z.y - 32); ctx.lineTo(z.x + 4, z.y - 38); ctx.lineTo(z.x + 6, z.y - 32); ctx.closePath(); ctx.fill();
+      /* 眼睛：笑成弯月 */
+      ctx.strokeStyle = '#2a1a08'; ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.arc(z.x - 5, z.y - 22, 2.5, Math.PI, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(z.x + 4, z.y - 22, 2.5, Math.PI, Math.PI * 2); ctx.stroke();
+      /* 嘴：大笑（或闭嘴） */
+      ctx.fillStyle = '#5a2010';
+      if (laughing) {
+        ctx.beginPath(); ctx.arc(z.x, z.y - 14, 5, 0, Math.PI); ctx.fill();
+      } else {
+        ctx.beginPath(); ctx.arc(z.x, z.y - 15, 4, 0.1, Math.PI - 0.1); ctx.stroke();
+      }
+      /* 笑时飘音符 */
+      if (laughing) {
+        ctx.fillStyle = '#ff60a0';
+        ctx.font = '900 14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('哈哈', z.x + 10, z.y - 44 - Math.sin(elapsed * 6) * 4);
+      }
+    } else {
+      /* 普通僵尸头 */
+      var skinG = ctx.createRadialGradient(z.x - 3, z.y - 24, 2, z.x, z.y - 20, 13);
+      skinG.addColorStop(0, '#8aa080');
+      skinG.addColorStop(0.6, '#5a6a50');
+      skinG.addColorStop(1, '#2a3525');
+      ctx.fillStyle = skinG;
+      ctx.beginPath(); ctx.arc(z.x, z.y - 20, 12, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,.4)';
+      ctx.beginPath(); ctx.ellipse(z.x, z.y - 14, 8, 3, 0, 0, Math.PI); ctx.fill();
+      ctx.fillStyle = '#0a0a0a';
+      ctx.beginPath(); ctx.arc(z.x - 5, z.y - 22, 2.6, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(z.x + 3, z.y - 22, 2.6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = slowed ? '#a0e0ff' : '#ff3030';
+      ctx.beginPath(); ctx.arc(z.x - 5, z.y - 22, 1.2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(z.x + 3, z.y - 22, 1.2, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#0a0a0a'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(z.x - 6, z.y - 14); ctx.lineTo(z.x + 5, z.y - 13); ctx.stroke();
+    }
 
     /* 头上装备 */
     if (z.type === 'cone') {
       var coneG = ctx.createLinearGradient(z.x - 10, z.y - 46, z.x + 10, z.y - 26);
-      coneG.addColorStop(0, '#c07830');
+      coneG.addColorStop(0, '#f0a050');
       coneG.addColorStop(1, '#5a2a08');
       ctx.fillStyle = coneG;
       ctx.beginPath();
-      ctx.moveTo(z.x - 11, z.y - 26);
-      ctx.lineTo(z.x + 11, z.y - 26);
-      ctx.lineTo(z.x, z.y - 46);
+      ctx.moveTo(z.x - 11, z.y - 26); ctx.lineTo(z.x + 11, z.y - 26); ctx.lineTo(z.x, z.y - 46);
       ctx.closePath(); ctx.fill();
       ctx.strokeStyle = '#2a1404'; ctx.lineWidth = 1.5; ctx.stroke();
-      /* 路障血污 */
-      ctx.fillStyle = 'rgba(80,10,10,.6)';
-      ctx.fillRect(z.x - 6, z.y - 38, 5, 4);
     } else if (z.type === 'bucket') {
       var buckG = ctx.createLinearGradient(z.x - 10, z.y - 42, z.x + 10, z.y - 24);
-      buckG.addColorStop(0, '#8a9aa8');
+      buckG.addColorStop(0, '#c0d0e0');
       buckG.addColorStop(1, '#2a3440');
       ctx.fillStyle = buckG;
       ctx.fillRect(z.x - 10, z.y - 42, 20, 18);
       ctx.strokeStyle = '#1a222c'; ctx.lineWidth = 1.5;
       ctx.strokeRect(z.x - 10, z.y - 42, 20, 18);
-      /* 凹痕 */
-      ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(z.x - 6, z.y - 38); ctx.lineTo(z.x - 2, z.y - 30); ctx.stroke();
     }
 
-    /* 寒冰减速：覆蓝霜 */
+    /* 中毒：冒绿泡 */
+    if (poisoned) {
+      ctx.fillStyle = 'rgba(160,255,80,.6)';
+      ctx.beginPath(); ctx.arc(z.x - 4, z.y - 8, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(z.x + 5, z.y - 4, 1.5, 0, Math.PI * 2); ctx.fill();
+    }
+    /* 寒冰 */
     if (slowed) {
-      ctx.fillStyle = 'rgba(140,200,255,.35)';
+      ctx.fillStyle = 'rgba(140,200,255,.3)';
       ctx.beginPath(); ctx.arc(z.x, z.y - 16, 16, 0, Math.PI * 2); ctx.fill();
     }
 
@@ -851,22 +1258,19 @@
     var pulse = 1 + Math.sin(elapsed * 5) * 0.06;
     ctx.translate(s.x, s.y);
     ctx.scale(pulse, pulse);
-    /* 蓝色光晕 */
     var halo = ctx.createRadialGradient(0, 0, 4, 0, 0, 22);
     halo.addColorStop(0, 'rgba(80,180,255,.6)');
     halo.addColorStop(1, 'rgba(80,180,255,0)');
     ctx.fillStyle = halo;
     ctx.beginPath(); ctx.arc(0, 0, 22, 0, Math.PI * 2); ctx.fill();
-    /* 蓝色 token 本体 */
     var core = ctx.createRadialGradient(-3, -3, 2, 0, 0, 14);
-    core.addColorStop(0, '#d0f4ff');
+    core.addColorStop(0, '#e0f8ff');
     core.addColorStop(0.5, '#40b8ff');
     core.addColorStop(1, '#0a5ab0');
     ctx.fillStyle = core;
     ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = '#0a3a70'; ctx.lineWidth = 1.5;
     ctx.stroke();
-    /* 写 token 字样 */
     ctx.fillStyle = '#ffffff';
     ctx.font = '700 8px "PingFang SC", "Microsoft YaHei", sans-serif';
     ctx.textAlign = 'center';
@@ -875,7 +1279,6 @@
     ctx.restore();
   }
 
-  /* 右下角标语 */
   function drawSlogan() {
     var text = '可以用token购买强力武器！！！';
     ctx.save();
@@ -896,7 +1299,6 @@
     ctx.restore();
   }
 
-  /* 成就弹窗 */
   function drawAchievement() {
     if (achievementT <= 0) return;
     var alpha = Math.min(1, achievementT / 0.4) * Math.min(1, (3 - achievementT) / 0.2);
@@ -904,8 +1306,7 @@
     ctx.globalAlpha = Math.max(0, alpha);
     var bw = 260, bh = 64;
     var bx = W - bw - 10;
-    var by = H - 10 - bh - 30;   /* 标语上方 */
-    /* 底板 */
+    var by = H - 10 - bh - 30;
     var g = ctx.createLinearGradient(bx, by, bx, by + bh);
     g.addColorStop(0, 'rgba(40,30,10,.95)');
     g.addColorStop(1, 'rgba(20,15,5,.95)');
@@ -914,14 +1315,12 @@
     ctx.lineWidth = 2;
     roundRect(bx, by, bw, bh, 10);
     ctx.fill(); ctx.stroke();
-    /* 奖杯图标 */
     ctx.fillStyle = '#ffd166';
     ctx.beginPath(); ctx.arc(bx + 28, by + bh / 2, 14, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#8a5a10';
     ctx.font = '900 16px sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('★', bx + 28, by + bh / 2 + 1);
-    /* 文字 */
     ctx.textAlign = 'left';
     ctx.fillStyle = '#ffd166';
     ctx.font = '700 13px "PingFang SC", "Microsoft YaHei", sans-serif';
@@ -932,7 +1331,6 @@
     ctx.restore();
   }
 
-  /* 电影感暗角 */
   function drawVignette() {
     var g = ctx.createRadialGradient(W / 2, H / 2, H * 0.4, W / 2, H / 2, H * 0.95);
     g.addColorStop(0, 'rgba(0,0,0,0)');
@@ -964,18 +1362,16 @@
       var pea;
       if (b.type === 'fire') {
         pea = ctx.createRadialGradient(b.x - 1, b.y - 1, 1, b.x, b.y, 6);
-        pea.addColorStop(0, '#fff0a0');
-        pea.addColorStop(0.5, '#ff8020');
-        pea.addColorStop(1, '#a02010');
+        pea.addColorStop(0, '#fff0a0'); pea.addColorStop(0.5, '#ff8020'); pea.addColorStop(1, '#a02010');
       } else if (b.type === 'ice') {
         pea = ctx.createRadialGradient(b.x - 1, b.y - 1, 1, b.x, b.y, 6);
-        pea.addColorStop(0, '#ffffff');
-        pea.addColorStop(0.5, '#90e0ff');
-        pea.addColorStop(1, '#2060c0');
+        pea.addColorStop(0, '#ffffff'); pea.addColorStop(0.5, '#90e0ff'); pea.addColorStop(1, '#2060c0');
+      } else if (b.type === 'juice') {
+        pea = ctx.createRadialGradient(b.x - 1, b.y - 1, 1, b.x, b.y, 6);
+        pea.addColorStop(0, '#f8ffb0'); pea.addColorStop(0.5, '#b8ff60'); pea.addColorStop(1, '#4a8a10');
       } else {
         pea = ctx.createRadialGradient(b.x - 1, b.y - 1, 1, b.x, b.y, 5);
-        pea.addColorStop(0, '#c8f89a');
-        pea.addColorStop(1, '#3a8a20');
+        pea.addColorStop(0, '#c8f89a'); pea.addColorStop(1, '#3a8a20');
       }
       ctx.fillStyle = pea;
       ctx.beginPath(); ctx.arc(b.x, b.y, b.type === 'pea' ? 5 : 6, 0, Math.PI * 2); ctx.fill();
@@ -996,6 +1392,7 @@
       var cx = CARD_X0 + i * (CARD_W + CARD_GAP);
       drawCard(i, cx, CARD_Y);
     }
+    drawShovelButton();
 
     if (selected && state === 'playing') {
       ctx.strokeStyle = 'rgba(255,209,102,.6)';
