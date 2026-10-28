@@ -26,7 +26,7 @@
     </div>
 
     <div id="banner"></div>
-    <div id="hint">点卡片选植物种草坪；点 token 收集；铲子能铲走植物；奶龙僵尸会笑晕植物</div>
+    <div id="hint">点卡片种植物 · 点 token 收集 · 铲子铲除</div>
 
     <div class="overlay" id="intro">
       <div class="panel">
@@ -1285,7 +1285,7 @@
     ctx.font = '900 14px "PingFang SC", "Microsoft YaHei", sans-serif';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'bottom';
-    var tx = W - 10, ty = H - 6;
+    var tx = W - 40, ty = H - 6;          /* 往中间收一点，手机上不会被右边缘切掉 */
     ctx.lineWidth = 4;
     ctx.strokeStyle = 'rgba(0,0,0,.85)';
     ctx.strokeText(text, tx, ty);
