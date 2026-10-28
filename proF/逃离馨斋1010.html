@@ -38,7 +38,7 @@
         <div class="chip" id="stChip">体力<span class="bar"><i id="stBar"></i></span></div>
       </div>
       <div>
-        <div class="chip">钥匙 <b id="keyNum">0</b>/3</div>
+        <div class="chip">钥匙 <b id="keyNum">0</b></div>
         <div class="chip" id="floorChip">10F</div>
       </div>
     </div>
@@ -50,7 +50,8 @@
       <div class="panel">
         <h1>逃离馨斋1010</h1>
         <p>你在 1010 宿舍醒来，楼里断电了。</p>
-        <p>楼梯每下一层花 1 把钥匙，电梯直达一楼门禁。</p>
+        <p>下楼梯会把手里所有钥匙一次用掉：有多少把就一口气下多少层，最多到 1 楼。</p>
+        <p>电梯会收走 1 把钥匙，直接送到一楼门禁。</p>
         <button class="btn" id="startBtn" type="button">开始游戏</button>
       </div>
     </div>
@@ -99,6 +100,8 @@
   var NEED_KEY = 3;                /* 成功逃离所需钥匙（设计文档：至少 3 把） */
   var NEED_ELEV = 4;               /* 电梯会收走一把钥匙，所以手里要有 4 把 */
   var HOLD_ELEV = 3, HOLD_GATE = 5;
+  var HOLD_STAIRS = 1;             /* 下楼梯长按读条（秒） */
+  var DOOR_TIME = 0.5;             /* 进/出宿舍推门读条（秒） */
   var MAX_KEY = 10;                /* 设计文档：钥匙总数不超过 10 把 */
 
   /* 宿舍内部：统一的六人寝竖长方形模板 */
@@ -165,6 +168,12 @@
   function pxRect(g) { return { x0: gx(g[0]), y0: gy(g[3]), x1: gx(g[2]), y1: gy(g[1]) }; }
 
   function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  /* 各处长按读条要按多久（秒） */
+  function holdNeedOf(t) {
+    if (t === 'gate') { return HOLD_GATE; }
+    if (t === 'stairs') { return HOLD_STAIRS; }
+    return HOLD_ELEV;
+  }
   function dist2(ax, ay, bx, by) { var dx = ax - bx, dy = ay - by; return dx * dx + dy * dy; }
   function rnd(a, b) { return a + Math.random() * (b - a); }
   function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
@@ -431,6 +440,8 @@
   var traps = [], sups = [], parts = [];
   var roomSc = null, lobbySc = null;
   var curTarget = null, holdT = 0, holdId = '', fEdge = false;
+  var doorT = 0, doorBusy = false, doorRoom = null;   /* 进/出门读条：按住 F，松开归零 */
+  var fLock = false;                               /* 任何 F 交互切场景后都要先松手，免得一直按着连发 */
   var heartAcc = 0;
   var blockFn = null;            /* 场景内的额外碰撞（宿舍里的床） */
 
@@ -596,7 +607,7 @@
      ============================================================ */
   function reset() {
     playTime = 0; shake = 0; flash = 0; bannerT = 0;
-    holdT = 0; holdId = ''; curTarget = null; heartAcc = 0;
+    holdT = 0; holdId = ''; doorT = 0; doorBusy = false; doorRoom = null; fLock = false; curTarget = null; heartAcc = 0;
     player.hp = player.hpMax; player.st = player.stMax; player.keys = 0;
     player.speedMul = 1; player.defMul = 1; player.noiseMul = 1; player.shield = 0;
     player.inv = 0; player.stun = 0; player.fx = 0; player.fy = 1; player.stepAcc = 0;
@@ -643,7 +654,7 @@
 
   function die() {
     state = 'over';
-    holdT = 0; holdId = '';
+    holdT = 0; holdId = ''; doorT = 0; doorBusy = false; doorRoom = null; fLock = false;
     var where = scene === 'room' ? '宿舍里' : (scene === 'lobby' ? '一楼门禁前' : '走廊上');
     elOver.classList.add('blood');
     elOverStats.textContent = '在' + where + '被逮住 · 钥匙 ' + player.keys + ' 把 · 用时 ' + fmtTime(playTime);
@@ -654,7 +665,7 @@
 
   function win() {
     state = 'win';
-    holdT = 0; holdId = '';
+    holdT = 0; holdId = ''; doorT = 0; doorBusy = false; doorRoom = null; fLock = false;
     elWinStats.textContent = '用时 ' + fmtTime(playTime) + ' · 剩余体力 ' + Math.round(player.st) + ' · 钥匙 ' + player.keys + ' 把';
     elWin.classList.remove('hidden');
     tone(660, 0.16, 0.16, 'triangle', 990);
@@ -680,7 +691,7 @@
   });
   window.addEventListener('blur', function () {
     keys = Object.create(null);
-    holdT = 0; holdId = '';
+    holdT = 0; holdId = ''; doorT = 0; doorBusy = false; doorRoom = null; fLock = false;
   });
   document.addEventListener('visibilitychange', function () { last = 0; });
   window.addEventListener('contextmenu', function (e) { e.preventDefault(); });
@@ -832,7 +843,7 @@
         d = 0;
         if (d < bd) {
           bd = d;
-          var label = 'F 走楼梯下楼';
+          var label = 'F 长按 1 秒 · 下楼';
           if (f.t === 'elev') { label = 'F 长按 3 秒 · 电梯'; }
           if (f.t === 'exit') { label = 'F 安全出口'; }
           best = { type: f.t, x: f.cx, y: f.cy, id: 'fac' + i, label: label };
@@ -856,7 +867,7 @@
     blockFn = roomBlocked;
     player.x = ROOM_DOOR.x; player.y = ROOM_DOOR.y - 34;
     player.stun = 0;
-    holdT = 0; holdId = ''; curTarget = null;
+    holdT = 0; holdId = ''; doorT = 0; doorBusy = false; doorRoom = null; fLock = false; curTarget = null;
     banner(roomLabel(rm) + ' 室', 1000);
   }
 
@@ -908,7 +919,7 @@
     player.x = 450; player.y = 440;
     player.stun = 0;
     player.inv = Math.max(player.inv, 0.8);
-    holdT = 0; holdId = '';
+    holdT = 0; holdId = ''; doorT = 0; doorBusy = false; doorRoom = null; fLock = false;
     elFloor.textContent = '1F';
     banner(viaStairs ? '摸黑下楼，左下角有楼梯口' : '电梯直达一楼 · 值班室里有宿管', 1700);
   }
@@ -921,9 +932,9 @@
   }
 
   function useStairs() {
-    /* 楼梯：一层一层往下，每下一层花一把钥匙，走楼梯还要消耗体力 */
+    /* 楼梯：手里所有钥匙一次性换成楼层 —— 有几把就下几层，最多下到 1 楼 */
     if (floor <= 1) {
-      /* 已经在一楼：楼梯口直接通门禁大厅 */
+      /* 已经在一楼：楼梯口直接通门禁大厅（不再扣钥匙） */
       tone(300, 0.2, 0.1, 'sine', 180);
       var bx = player.x, by = player.y;
       enterLobby(true);
@@ -931,17 +942,23 @@
       return;
     }
     if (player.keys < 1) {
-      banner('下一层要一把钥匙', 1500);
+      banner('下楼梯要一把钥匙', 1500);
       sfxDeny();
       return;
     }
-    player.keys--;
+    /* 边界：最多一次下到 1 楼。钥匙比楼层多时，多出来的留着，不会白扣 */
+    var n = Math.min(player.keys, floor - 1);
+    player.keys -= n;
     updateHUD();
-    descend();
+    for (var i = 0; i < n; i++) { descend(true); }
+    tone(300, 0.22, 0.1, 'sine', 180);
+    banner(n > 1 ? ('一口气下了 ' + n + ' 层 · ' + (floor === 1 ? '到一楼了' : '到 ' + floor + ' 层'))
+                 : (floor === 1 ? '到一楼了 · 从楼梯口出去就是门禁' : floor + ' 层 · 楼梯口'), 1700);
   }
 
-  /* 下一层：房间号换前缀、道具换一套、楼梯消耗体力，落到新的一层楼梯口 */
-  function descend() {
+  /* 下一层：房间号换前缀、道具换一套、楼梯消耗体力，落到新的一层楼梯口
+     quiet = true 时不自己播音效/横幅（连续下多层时由 useStairs 统一播一次） */
+  function descend(quiet) {
     saveFloorItems(floor);
     floor--;
     loadFloorItems(floor);
@@ -953,7 +970,7 @@
     scene = 'corridor';
     roomSc = null; lobbySc = null; blockFn = null;
     releaseCheck();
-    holdT = 0; holdId = ''; curTarget = null;
+    holdT = 0; holdId = ''; doorT = 0; doorBusy = false; doorRoom = null; fLock = false; curTarget = null;
 
     elFloor.textContent = floor + 'F';
     /* 楼梯消耗体力，到新的一层后再慢慢恢复 */
@@ -963,8 +980,10 @@
     camX = player.x; camY = player.y;
     fade = 1;                       /* 下楼的闪黑特效 */
 
-    tone(300, 0.22, 0.1, 'sine', 180);
-    banner(floor === 1 ? '到一楼了 · 从楼梯口出去就是门禁' : floor + ' 层 · 楼梯口', 1700);
+    if (!quiet) {
+      tone(300, 0.22, 0.1, 'sine', 180);
+      banner(floor === 1 ? '到一楼了 · 从楼梯口出去就是门禁' : floor + ' 层 · 楼梯口', 1700);
+    }
   }
 
   /* 从一楼大厅的楼梯口回一楼走廊 */
@@ -975,7 +994,7 @@
     scene = 'corridor';
     lobbySc = null;
     blockFn = null;
-    holdT = 0; holdId = ''; curTarget = null;
+    holdT = 0; holdId = ''; doorT = 0; doorBusy = false; doorRoom = null; fLock = false; curTarget = null;
     elFloor.textContent = floor + 'F';
     player.inv = Math.max(player.inv, 1.2);
     tone(320, 0.18, 0.1, 'sine', 220);
@@ -984,7 +1003,7 @@
 
   function useElev() {
     if (player.keys < NEED_ELEV) {
-      holdT = 0; holdId = '';
+      holdT = 0; holdId = ''; doorT = 0; doorBusy = false; doorRoom = null; fLock = false;
       banner('电梯要收一把钥匙：需要 4 把', 1600);
       sfxDeny();
       return false;
@@ -1138,7 +1157,8 @@
   }
 
   function updateCorridor(dt) {
-    movePlayer(dt);
+    /* 推门读条期间锁住移动（计时在下面的交互块里，别在这儿重复累加） */
+    if (!doorBusy) { movePlayer(dt); }
     rescuePlayer();          /* 兜底：被挤进不可走区域就拉回来 */
     updateParts(dt);
 
@@ -1161,25 +1181,41 @@
       }
     }
 
-    /* 交互 */
+    /* 交互：进宿舍要按住 F 在原地推门 0.5 秒，一松开就归零重来 */
     curTarget = findTarget();
-    if (curTarget && fEdge) {
-      if (curTarget.type === 'room') { fEdge = false; enterRoom(curTarget.room); return; }
-      if (curTarget.type === 'stairs') { fEdge = false; useStairs(); return; }
-      if (curTarget.type === 'exit') {
+    if (!keys['f']) { fLock = false; }
+    if (curTarget && curTarget.type === 'room' && keys['f'] && !fLock) {
+      if (doorRoom !== curTarget.room) { doorT = 0; doorRoom = curTarget.room; }
+      doorBusy = true;
+      doorT += dt;
+      if (doorT >= DOOR_TIME) {
+        var intoRoom = doorRoom;
+        doorT = 0; doorBusy = false; doorRoom = null;
+        if (intoRoom) { enterRoom(intoRoom); fLock = true; return; }
+      }
+    } else {
+      doorT = 0; doorBusy = false; doorRoom = null;
+      if (curTarget && fEdge && curTarget.type === 'exit') {
         fEdge = false;
         banner('安全出口被链锁锁死了', 1400);
         sfxDeny();
       }
     }
 
-    /* 电梯长按读条：读条期间全图噪音，宿管全部扑过来 */
-    if (curTarget && curTarget.type === 'elev') {
+    /* 长按读条：电梯 3 秒（读条期间全图噪音）、楼梯 1 秒。松开或走开都归零 */
+    if (doorBusy) {
+      /* 推门读条期间不碰长按那条逻辑 */
+    } else if (!fLock && curTarget && (curTarget.type === 'elev' || curTarget.type === 'stairs')) {
       if (keys['f']) {
         if (holdId !== curTarget.id) { holdId = curTarget.id; holdT = 0; }
         holdT += dt;
-        noise(player.x, player.y, 99999);
-        if (holdT >= HOLD_ELEV) { holdT = 0; holdId = ''; useElev(); return; }
+        if (curTarget.type === 'elev') { noise(player.x, player.y, 99999); }
+        if (holdT >= holdNeedOf(curTarget.type)) {
+          holdT = 0; holdId = '';
+          if (curTarget.type === 'stairs') { useStairs(); } else { useElev(); }
+          fLock = true;
+          return;
+        }
       } else { holdT = 0; holdId = ''; }
     } else {
       holdT = 0; holdId = '';
@@ -1196,7 +1232,7 @@
      ============================================================ */
   function updateRoom(dt) {
     var box = roomSc.box;
-    movePlayer(dt, box.x0, box.y0, box.x1, box.y1);
+    if (!doorBusy) { movePlayer(dt, box.x0, box.y0, box.x1, box.y1); }
     updateParts(dt);
 
     roomSc.dwell += dt;
@@ -1290,12 +1326,21 @@
       curTarget = { type: 'leave', label: 'F 返回走廊' };
     }
 
-    if (fEdge && curTarget) {
-      fEdge = false;
-      if (curTarget.type === 'leave') { leaveRoom(); return; }
-      if (curTarget.type === 'item') { takeItem(it); }
+    /* 出门同样要按住 F 推门 0.5 秒，松开就归零 */
+    if (!keys['f']) { fLock = false; }
+    if (curTarget && curTarget.type === 'leave' && keys['f'] && !fLock) {
+      doorBusy = true;
+      doorT += dt;
+      if (doorT >= DOOR_TIME) {
+        doorT = 0; doorBusy = false; doorRoom = null;
+        leaveRoom();
+        fLock = true;
+        return;
+      }
+    } else {
+      doorT = 0; doorBusy = false; doorRoom = null;
+      if (fEdge && curTarget && curTarget.type === 'item') { fEdge = false; takeItem(it); }
     }
-
     fEdge = false;
   }
 
@@ -1316,7 +1361,7 @@
 
     if (t === 'key') {
       player.keys++;
-      banner('拿到钥匙 · ' + player.keys + '/3', 1200);
+      banner('拿到钥匙 · 手里 ' + player.keys + ' 把', 1200);
     } else if (t === 'laptop') {
       player.speedMul *= 0.6;
       player.shield++;
@@ -1993,13 +2038,16 @@
     ctx.fillStyle = '#ffd166';
     ctx.fillText(curTarget.label, psx, psy - 41);
 
-    if (holdT > 0 && holdId) {
-      var need = (curTarget.type === 'gate') ? HOLD_GATE : HOLD_ELEV;
-      var p = clamp(holdT / need, 0, 1);
+    /* 读条：推门 0.5s、下楼梯 1s、电梯 3s、门禁 5s，统一用这一条小进度条 */
+    var barP = -1;
+    if (doorBusy) { barP = doorT / DOOR_TIME; }
+    else if (holdT > 0 && holdId && curTarget) { barP = holdT / holdNeedOf(curTarget.type); }
+    if (barP >= 0) {
+      barP = clamp(barP, 0, 1);
       ctx.fillStyle = 'rgba(255,255,255,.2)';
-      ctx.fillRect(psx - 40, psy - 26, 80, 6);
+      ctx.fillRect(psx - 24, psy - 22, 48, 4);
       ctx.fillStyle = '#ffd166';
-      ctx.fillRect(psx - 40, psy - 26, 80 * p, 6);
+      ctx.fillRect(psx - 24, psy - 22, 48 * barP, 4);
     }
   }
 
