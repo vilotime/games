@@ -6,7 +6,7 @@
  * 其余（file、url、mobile、tags、pageTitle、glow、count）全部现算。
  *
  * 页面用法：
- *     <script src="./ui/games.js"></script>
+ *     <script src="./core/games.js"></script>
  *     YCGames.load('./games.json').then(function (ds) {
  *       YCGames.renderHome(document.getElementById('gamesRoot'), ds); // 主页卡片
  *       YCGames.renderNav(document.getElementById('nav'), ds);        // 侧栏入口

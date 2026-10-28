@@ -3,7 +3,7 @@
 通过Vibe Coding，按照一定范式构建的纯 Canvas 小游戏，外壳是一个侧栏 + iframe 的静态页，没有构建步骤、没有后端、没有依赖，
 直接 GitHub Pages 托管：<https://vilotime.github.io/>
 
-> **想邀请别人用 AI 帮忙做游戏？** [`AI辅助编程说明.md`](HelpWithAI.md) 是给**制作方**看的说明书，
+> **想邀请别人用 AI 帮忙做游戏？** [`docs/AI辅助编程说明.md`](docs/AI辅助编程说明.md) 是给**制作方**看的说明书，
 > 可以直接连同压缩包一起转给对方：怎么装 DSH、怎么打开游戏包、两种提示词写法（**方式一**在对话框里
 > 描述游戏；**方式二**先写 `游戏设计文档.md`，再用一段固定提示词原样复制粘贴）、发现偏差怎么纠、
 > 提交前自检、常见问题。配套的制作者工具包就是仓库里的 `pack/`（`AGENTS.md` + `GAME-INFO.txt` +
@@ -14,13 +14,15 @@
 .
 ├─ index.html      外壳：侧栏导航 + iframe
 ├─ games.json      ★ 游戏清单（唯一数据源，加游戏只改这里）
-├─ games.js        清单渲染器：读 json → 主页卡片 / 侧栏入口 / 数量
+├─ README.md       本文件
+├─ LICENSE         许可证
+├─ core/           站点自己的前台代码（清单渲染器 games.js）
 ├─ tools/          维护脚本（清单同步、本地预览）
 ├─ ui/             ★ UI 库（可整包复制给别的项目）
 ├─ proF/           游戏页面 + 主页游戏墙
 ├─ pack/           ★ 对外制作包（压成 zip 发给合作者）
-├─ assets/         站点图标与分享图
-└─ *.md            文档（本文件、AI辅助编程说明.md）
+├─ docs/           说明文档（AI 辅助编程说明）
+└─ assets/         站点图标与分享图
 ```
 
 > 这里只列**顶层结构**，不列具体文件和数量 —— 加游戏、换图标、加脚本都不会让这段过期。
@@ -51,7 +53,7 @@
 | `pcOnly` | `true` = 只能电脑玩（卡片角标「仅电脑」、侧栏「电脑」标签、手机上隐藏 HUD） |
 | `c1` / `c2` | 卡片封面渐变的亮色 / 暗色，hex；悬停发光 `--glow-c` 由 `c1` 自动生成 |
 
-派生字段不落盘，由 `games.js` 现算：
+派生字段不落盘，由 `core/games.js` 现算：
 
 | 派生字段 | 规则 |
 |---|---|
@@ -66,9 +68,9 @@
 
 旧写法 `{"id":"文件名"}` 仍然认，会按 `site.dir + id + '.html'` 推断。
 
-## `games.js`（清单渲染器）
+## `core/games.js`（清单渲染器）
 
-`#gamesRoot` / `#nav` / `data-game-*` 这些是本站约定，所以它放在根目录而不是 `ui/`。
+`#gamesRoot` / `#nav` / `data-game-*` 这些是本站约定，所以它属于站点自己的 `core/`，而不是通用的 `ui/`。
 
 ```js
 YCGames.load('./games.json').then(function (ds) {
@@ -93,7 +95,7 @@ YCGames.load('./games.json').then(function (ds) {
 
 | 路径 | 什么时候生效 | 数据来自 |
 |---|---|---|
-| **运行时渲染** | 用 `http(s)` 打开时（线上、或本地 `tools/dev.js`） | `fetch('games.json')` → `games.js` 现场生成卡片 / 侧栏 / 数量 |
+| **运行时渲染** | 用 `http(s)` 打开时（线上、或本地 `tools/dev.js`） | `fetch('games.json')` → `core/games.js` 现场生成卡片 / 侧栏 / 数量 |
 | **静态兜底** | 无 JS、断网，或**双击 `file://` 打开**（`fetch` 被 CORS 拦） | HTML 里由脚本预先写好的副本 |
 
 ### 会被同步的 4 个位置

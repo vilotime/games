@@ -5,14 +5,14 @@
  *   node tools/export-games.js --check  只校验，不写文件
  *
  * 数据流（games.json 是唯一数据源）：
- *   games.json  ──►  浏览器：根目录的 games.js 现渲染卡片和侧栏（无需跑本脚本）
+ *   games.json  ──►  浏览器：core/games.js 现渲染卡片和侧栏（无需跑本脚本）
  *               └──►  静态兜底：本脚本把 proF/主页.html 的 <div id="gamesRoot"> 和
  *                    index.html 的 <nav id="nav"> 里标记区间的 HTML 重写成同样内容，
  *                    这样没有 JS / 没有网络时页面也不会空。
  *
  * 每款游戏只写 7 个字段：
  *     file（真实位置，可带子目录）  name  icon  desc  pcOnly  c1  c2
- * id / rel / url / mobile / tags / pageTitle / glow / count 全部由 games.js 现算。
+ * id / rel / url / mobile / tags / pageTitle / glow / count 全部由 core/games.js 现算。
  *
  * 加一款游戏：把游戏文件放好，在 games.json 对应分类里加一行即可。
  */
@@ -21,7 +21,7 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
-const G = require(path.join(root, 'games.js'));
+const G = require(path.join(root, 'core', 'games.js'));
 
 const DATA = path.join(root, 'games.json');
 const HOME = path.join(root, 'proF', '主页.html');

@@ -12,7 +12,7 @@ ui/
 └─ README.md      本文件
 ```
 
-> 游戏清单 `games.json`、清单渲染器 `games.js`、校验脚本 `tools/export-games.js` 属于本站的
+> 游戏清单 `games.json`、清单渲染器 `core/games.js`、校验脚本 `tools/export-games.js` 属于本站的
 > 主页逻辑，不在这个包里 —— 见仓库根 `README.md`。
 
 ## 快速开始
