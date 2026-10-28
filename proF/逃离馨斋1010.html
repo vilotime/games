@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -172,11 +172,11 @@
   /* ============================================================
      4. 地图数据（网格坐标）
         · 顶部横向走廊 (13,65)-(93,75)
-        · 右侧纵向走廊 (86,29)-(93,65)
-        · 底部大面积空白区域 (50,10)-(93,29)
+        · 右侧纵向走廊 (86,19)-(93,65)，南端是墙
         宿舍沿走廊两侧紧挨着排、不留缝，正对面的两间房号相邻
         （1010 对面是 1009，1008 对面是 1007 …）；
-        楼梯 / 电梯 / 出口都做成走廊里的地面区域，不占宿舍位置。
+        楼梯 / 电梯 / 出口 / 厕所都做成走廊里的地面区域，不占宿舍位置。
+        1001 正对面就是厕所，其余空地一律是墙。
      ============================================================ */
   var AREA_G = [
     { g: [13, 65, 93, 75], kind: 'corridor',
@@ -191,27 +191,31 @@
     { g: [74.3333, 75, 82, 85], kind: 'stairs',
       open: [{ s: 'B', a: 74.3333, b: 82 }] },
     { g: [86, 19, 93, 65], kind: 'corridor',
-      open: [{ s: 'T', a: 86, b: 93 }, { s: 'B', a: 86, b: 93 },
-             { s: 'L', a: 19, b: 42 }] },
+      open: [{ s: 'T', a: 86, b: 93 },
+             { s: 'L', a: 19, b: 22.8333 }, { s: 'L', a: 29, b: 42 }] },
     /* 1008 正下方：先是楼梯门（安全出口），再往下是加大的电梯间 */
     { g: [82.1667, 39, 86, 42], kind: 'stairs',
       open: [{ s: 'R', a: 39, b: 42 }] },
     { g: [78, 29, 86, 39], kind: 'elev',
       open: [{ s: 'R', a: 29, b: 39 }] },
-    /* 1001 对面：厕所（能走进去、没有出口），和电梯间一样大 */
-    { g: [78, 19, 86, 29], kind: 'wc',
-      open: [{ s: 'R', a: 19, b: 29 }] },
-    { g: [50, 2, 93, 19], kind: 'open',
-      open: [{ s: 'T', a: 86, b: 93 }] }
+    /* 1001 正对面：厕所，和 1001 一样宽，门朝右侧走廊 */
+    { g: [78, 19, 86, 22.8333], kind: 'wc',
+      open: [{ s: 'R', a: 19, b: 22.8333 }] }
   ];
 
   /* 宿舍进深（网格单位）；沿走廊的长度由「跨度 ÷ 房间数」自动算，两者相等 → 正方形且不留缝 */
   var ROOM_D = 3.8333;
 
+  /* 实心墙体块（网格）：旧厕所搬走后留下的空档，直接填成墙，不给任何装饰 */
+  var WALL_FILL_G = [
+    [78, 22.8333, 86, 29]
+  ];
+  var WALL_FILL_COL = '#0d1521';   /* 比虚空亮、比地面/电梯间暗，看着是一整块实心墙 */
+
   /* 每一排宿舍：沿哪条轴排、排布跨度、贴走廊的那条边（门就开在这条边上）
      顶部走廊：北侧双数、南侧单数，正对的两间房号相邻（1054|1053 … 1020|1019）
      右侧走廊：北段也是左右成对（1018|1017 … 1008|1007，1010 正对 1009），
-     南段 1007–1001 单排全在东侧（走廊左侧就是一面空墙）。 */
+     南段 1007–1001 单排全在东侧（走廊左侧是墙，1001 正对面是厕所）。 */
   var ROWS = [
     { nums: ['1050', '1048', '1046', '1044', '1042', '1040', '1038', '1036',
              '1034', '1032', '1030', '1028', '1026', '1024'],
@@ -269,7 +273,7 @@
      5. 数据展开到世界像素
      ============================================================ */
   var areas = [], rooms = [], facs = [], worldRect = { x0: 0, y0: 0, x1: W, y1: H };
-  var wcRect = null, elevRects = [], stairRects = [];
+  var wcRect = null, elevRects = [], stairRects = [], wallFills = [];
 
   (function buildMap() {
     var i, a, o, r, xs = [], ys = [];
@@ -302,6 +306,10 @@
 
     /* 门牌号跟着楼层走：10 层 → 10xx，9 层 → 09xx，1 层 → 01xx（见 roomLabel） */
 
+    for (i = 0; i < WALL_FILL_G.length; i++) {
+      wallFills.push(pxRect(WALL_FILL_G[i]));
+    }
+
 
 
     for (i = 0; i < FAC_G.length; i++) {
@@ -320,7 +328,7 @@
     }
   })();
 
-  /* 走廊 / 空地都是可行走区域（宿舍内部走独立场景，走廊这边只认墙体） */
+  /* 走廊 / 设施区域都是可行走区域（宿舍内部走独立场景，走廊这边只认墙体） */
   function walkable(x, y) {
     for (var i = 0; i < areas.length; i++) {
       var r = areas[i].p;
@@ -546,12 +554,12 @@
   }
 
   function spawnSups() {
-    /* 一层一个宿管：沿着 顶部走廊 → 右侧走廊 → 底部空地 来回巡 */
+    /* 一层一个宿管：沿着 顶部走廊 → 右侧走廊（一直到南头） 来回巡 */
     var route = [
       { x: gx(20), y: gy(70) },
       { x: gx(90), y: gy(70) },
       { x: gx(90), y: gy(24) },
-      { x: gx(60), y: gy(10) },
+      { x: gx(90), y: gy(21.5) },
       { x: gx(90), y: gy(24) },
       { x: gx(90), y: gy(70) }
     ];
@@ -1564,7 +1572,6 @@
     if (a.kind === 'stairs') { col = '#151d2b'; }
     if (a.kind === 'elev') { col = '#1a2231'; }
     if (a.kind === 'wc') { col = '#0e1520'; }
-    if (a.kind === 'open') { col = '#0d141f'; }
 
     ctx.fillStyle = col;
     ctx.fillRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
@@ -1711,19 +1718,19 @@
     var r = wcRect;
     if (!r) { return; }
     var w = r.x1 - r.x0, h = r.y1 - r.y0;
-    var cx = (r.x0 + r.x1) / 2, cy = (r.y0 + r.y1) / 2;
+    var cy = (r.y0 + r.y1) / 2;
 
     /* 房间轮廓 */
     ctx.strokeStyle = 'rgba(120,150,190,.4)';
     ctx.lineWidth = 2;
     ctx.strokeRect(r.x0 + 3, r.y0 + 3, w - 6, h - 6);
 
-    /* 三个隔间（靠里侧） */
+    /* 两个隔间（靠里侧） */
     var sx = r.x0 + w * 0.46;
     ctx.strokeStyle = 'rgba(120,150,190,.4)';
     ctx.lineWidth = 1.5;
-    for (var i = 1; i <= 3; i++) {
-      var y = r.y0 + h * i / 4;
+    for (var i = 1; i <= 2; i++) {
+      var y = r.y0 + h * i / 3;
       ctx.beginPath();
       ctx.moveTo(r.x0 + 5, y);
       ctx.lineTo(sx, y);
@@ -1739,17 +1746,18 @@
     ctx.fillStyle = '#1b2536';
     ctx.fillRect(sx + 8, r.y0 + 10, Math.max(10, r.x1 - sx - 18), h - 20);
 
-    /* 「厕所」两个字 */
+    /* 「厕所」两个字：房间矮，招牌做小，正好卡在两个隔间之间 */
+    var lbx = (r.x0 + 5 + sx) / 2;
     ctx.fillStyle = 'rgba(6,11,20,.88)';
-    ctx.fillRect(cx - 30, cy - 16, 60, 32);
+    ctx.fillRect(lbx - 18, cy - 8, 36, 16);
     ctx.strokeStyle = 'rgba(120,190,255,.5)';
     ctx.lineWidth = 1;
-    ctx.strokeRect(cx - 30, cy - 16, 60, 32);
+    ctx.strokeRect(lbx - 18, cy - 8, 36, 16);
     ctx.fillStyle = '#dbeaff';
-    ctx.font = '700 17px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.font = '700 12px "PingFang SC","Microsoft YaHei",sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('厕所', cx, cy);
+    ctx.fillText('厕所', lbx, cy);
   }
 
   /* 房门：所有宿舍长得一模一样，不透露哪间有钥匙 */
@@ -1911,6 +1919,14 @@
       r = areas[i].p;
       if (r.x1 < camL - 60 || r.x0 > camR + 60 || r.y1 < camT - 60 || r.y0 > camB + 60) { continue; }
       drawArea(areas[i]);
+    }
+
+    /* 实心墙体块：先把墙填上，墙体线再压在上面 */
+    for (i = 0; i < wallFills.length; i++) {
+      r = wallFills[i];
+      if (r.x1 < camL - 60 || r.x0 > camR + 60 || r.y1 < camT - 60 || r.y0 > camB + 60) { continue; }
+      ctx.fillStyle = WALL_FILL_COL;
+      ctx.fillRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
     }
 
     /* 墙体 */
