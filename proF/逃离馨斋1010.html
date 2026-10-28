@@ -185,60 +185,78 @@
         宿舍沿走廊两侧紧挨着排、不留缝，正对面的两间房号相邻
         （1010 对面是 1009，1008 对面是 1007 …）；
         楼梯 / 电梯 / 出口 / 厕所都做成走廊里的地面区域，不占宿舍位置。
-        1001 正对面就是厕所，其余空地一律是墙。
+        顶部走廊：拐角第一间是 1019（上方）/ 1020（下方），往西 1021–1023
+        对面上方是厕所，1024–1031 两两相对，1032–1038（单侧，下方）
+        对面是四部电梯的电梯间，最西端只剩一间（1039/1040）。
+        右侧走廊：1001 正对面是厕所。
      ============================================================ */
   var AREA_G = [
-    { g: [13, 65, 93, 75], kind: 'corridor',
-      open: [{ s: 'B', a: 86, b: 93 }, { s: 'B', a: 13, b: 20.6667 },
-             { s: 'T', a: 13, b: 20.6667 }, { s: 'T', a: 74.3333, b: 82 }] },
-    /* 顶部走廊西南角的电梯间：同样两部电梯，不占走廊中间 */
-    { g: [13, 55, 20.6667, 65], kind: 'elev',
-      open: [{ s: 'T', a: 13, b: 20.6667 }] },
-    /* 顶部走廊北侧的另外两处安全出口（楼梯门），和电梯间同样大小 */
-    { g: [13, 75, 20.6667, 85], kind: 'stairs',
-      open: [{ s: 'B', a: 13, b: 20.6667 }] },
-    { g: [74.3333, 75, 82, 85], kind: 'stairs',
-      open: [{ s: 'B', a: 74.3333, b: 82 }] },
-    { g: [86, 19, 93, 65], kind: 'corridor',
-      open: [{ s: 'T', a: 86, b: 93 },
-             { s: 'L', a: 19, b: 22.8333 }, { s: 'L', a: 29, b: 42 }] },
-    /* 1008 正下方：先是楼梯门（安全出口），再往下是加大的电梯间 */
-    { g: [82.1667, 39, 86, 42], kind: 'stairs',
-      open: [{ s: 'R', a: 39, b: 42 }] },
-    { g: [78, 29, 86, 39], kind: 'elev',
-      open: [{ s: 'R', a: 29, b: 39 }] },
+    /* 顶部走廊：整体拉长，西端 x16.33、东端拐角 x123 */
+    { g: [16.3333, 65, 123, 75], kind: 'corridor',
+      open: [{ s: 'B', a: 116, b: 123 }, { s: 'B', a: 20.1667, b: 27.8333 },
+             { s: 'B', a: 96.8333, b: 108.3333 },
+             { s: 'T', a: 65.0833, b: 71.0833 }] },
+    /* 最左侧唯一的安全出口：正对上方 1050 / 1051，只挂安全出口牌 */
+    { g: [20.1667, 55, 27.8333, 65], kind: 'stairs',
+      open: [{ s: 'T', a: 20.1667, b: 27.8333 }] },
+    /* 四部电梯的电梯间：1032–1038 正对面，左右墙各两部电梯，门只开两个人宽 */
+    { g: [54.6667, 75, 81.5, 85], kind: 'elev', quad: 1, doorGlow: 1,
+      open: [{ s: 'B', a: 65.0833, b: 71.0833 }] },
+    /* 顶部走廊：1021–1023 对面的厕所 */
+    { g: [96.8333, 55, 108.3333, 65], kind: 'wc',
+      open: [{ s: 'T', a: 96.8333, b: 108.3333 }] },
+    { g: [116, 19, 123, 65], kind: 'corridor',
+      open: [{ s: 'T', a: 116, b: 123 },
+             { s: 'L', a: 19, b: 22.8333 }, { s: 'L', a: 31, b: 37 }] },
+    /* 电梯间：门开在右边（靠走廊），只留两个人宽 */
+    { g: [108, 29, 116, 39], kind: 'elev', doorGlow: 1,
+      open: [{ s: 'R', a: 31, b: 37 }] },
     /* 1001 正对面：厕所，和 1001 一样宽，门朝右侧走廊 */
-    { g: [78, 19, 86, 22.8333], kind: 'wc',
+    { g: [108, 19, 116, 22.8333], kind: 'wc',
       open: [{ s: 'R', a: 19, b: 22.8333 }] }
   ];
 
   /* 宿舍进深（网格单位）；沿走廊的长度由「跨度 ÷ 房间数」自动算，两者相等 → 正方形且不留缝 */
   var ROOM_D = 3.8333;
 
-  /* 实心墙体块（网格）：旧厕所搬走后留下的空档，直接填成墙，不给任何装饰 */
+  /* 实心墙体块（网格）：旧厕所搬走后留下的空档、旧楼梯挪走后的位置，直接填成墙 */
   var WALL_FILL_G = [
-    [78, 22.8333, 86, 29]
+    [108, 22.8333, 116, 29],
+    [112.1667, 39, 116, 42]
   ];
   var WALL_FILL_COL = '#0d1521';   /* 比虚空亮、比地面/电梯间暗，看着是一整块实心墙 */
 
   /* 每一排宿舍：沿哪条轴排、排布跨度、贴走廊的那条边（门就开在这条边上）
-     顶部走廊：北侧双数、南侧单数，正对的两间房号相邻（1054|1053 … 1020|1019）
+     顶部走廊（东→西）：1019（最东，挨着拐角）| 1021 1022 1023 | 1025 1027 1029 1031 |
+                       四部电梯的电梯间 | 1040
+     下方那排：1020 | 厕所（对 1021–1023） | 1024 1026 1028 1030 | 1032–1038 | 1039
      右侧走廊：北段也是左右成对（1018|1017 … 1008|1007，1010 正对 1009），
      南段 1007–1001 单排全在东侧（走廊左侧是墙，1001 正对面是厕所）。 */
   var ROWS = [
-    { nums: ['1050', '1048', '1046', '1044', '1042', '1040', '1038', '1036',
-             '1034', '1032', '1030', '1028', '1026', '1024'],
-      axis: 'x', span: [20.6667, 74.3333], edge: 'B', at: 75 },
-    { nums: ['1051', '1049', '1047', '1045', '1043', '1041', '1039', '1037',
-             '1035', '1033', '1031', '1029', '1027', '1025', '1023', '1021'],
-      axis: 'x', span: [20.6667, 82], edge: 'T', at: 65 },
+    /* 顶部走廊上方（北侧），西→东：西端单独一间 + 1050/1051 + 7 间 + 电梯间西侧 7 间 +
+       电梯间东侧 1031 1029 1027 1025 + 1023 1022 1021 + 拐角 1019 */
+    { nums: ['1055'], axis: 'x', span: [16.3333, 20.1667], edge: 'B', at: 75 },
+    { nums: ['1050', '1051'], axis: 'x', span: [20.1667, 27.8333], edge: 'B', at: 75 },
+    { nums: ['1039', '1041', '1043', '1045', '1047', '1049', '1052'],
+      axis: 'x', span: [27.8333, 54.6667], edge: 'B', at: 75 },
+    { nums: ['1031', '1029', '1027', '1025'], axis: 'x', span: [81.5, 96.8333], edge: 'B', at: 75 },
+    { nums: ['1023', '1022', '1021'], axis: 'x', span: [96.8333, 108.3333], edge: 'B', at: 75 },
+    { nums: ['1019'], axis: 'x', span: [108.3333, 112.1667], edge: 'B', at: 75 },
+    /* 顶部走廊下方（南侧），西→东：安全出口占西端 2 间的位置 + 7 间 + 1032–1038 +
+       1030 1028 1026 1024 + 厕所占 3 间 + 拐角 1020 */
+    { nums: ['1040', '1042', '1044', '1046', '1048', '1053', '1054'],
+      axis: 'x', span: [27.8333, 54.6667], edge: 'T', at: 65 },
+    { nums: ['1032', '1033', '1034', '1035', '1036', '1037', '1038'],
+      axis: 'x', span: [54.6667, 81.5], edge: 'T', at: 65 },
+    { nums: ['1030', '1028', '1026', '1024'], axis: 'x', span: [81.5, 96.8333], edge: 'T', at: 65 },
+    { nums: ['1020'], axis: 'x', span: [108.3333, 112.1667], edge: 'T', at: 65 },
     /* 右侧走廊西侧：只有北段 6 间（双数），从南往北 1008 → 1018 */
     { nums: ['1008', '1010', '1012', '1014', '1016', '1018'],
-      axis: 'y', span: [42, 65], edge: 'R', at: 86 },
+      axis: 'y', span: [42, 65], edge: 'R', at: 116 },
     /* 右侧走廊东侧：整排 12 间，从南往北 1001 → 1017（南段单排，北段与西侧成对） */
     { nums: ['1001', '1002', '1003', '1004', '1005', '1006', '1007',
              '1009', '1011', '1013', '1015', '1017'],
-      axis: 'y', span: [19, 65], edge: 'L', at: 93 }
+      axis: 'y', span: [19, 65], edge: 'L', at: 123 }
   ];
 
   /* 由每一排生成宿舍网格矩形：[房号, x0, y0, x1, y1]
@@ -270,19 +288,23 @@
 
   /* 设施（都放在走廊地面上，不占宿舍的位置） */
   var FAC_G = [
-    { t: 'stairs', g: [13.4, 75.6, 20.2667, 84.4], custom: 1 }, /* 安全出口 A（顶部走廊西北） */
-    { t: 'stairs', g: [74.7333, 75.6, 81.6, 84.4], custom: 1 }, /* 安全出口 B（顶部走廊东北） */
-    { t: 'stairs', g: [82.4, 39.2, 85.6, 41.8], custom: 1 }, /* 安全出口 C（电梯间上面） */
-    { t: 'elev',   g: [13.4, 55.6, 20.2667, 64.4], custom: 1 }, /* 电梯间 A（顶部走廊西南角，两部电梯） */
-    { t: 'elev',   g: [78.6, 30, 85.4, 38.4], custom: 1 }, /* 电梯间（里面两部电梯） */
-    { t: 'exit',   g: [88.6, 74.5, 91.4, 75], custom: 1 }  /* 安全出口牌：贴在走廊北墙上，不占路面 */
+    /* 最左侧那个安全出口（只有一块牌子） */
+    { t: 'stairs', g: [20.6, 55.6, 27.4, 64.4], custom: 1 },
+    /* 电梯间上方的安全出口：站在牌子下面按 F 下楼 */
+    { t: 'stairs', g: [66.6, 84, 69.6, 85], custom: 1 },     /* 四部电梯的电梯间（顶部） */
+    { t: 'stairs', g: [109, 37.3, 115, 38.6], custom: 1 },   /* 右侧走廊电梯间（顶部） */
+    /* 四部电梯：左右墙各两部，所以左右各一块触发区 */
+    { t: 'elev',   g: [55.2, 76, 59, 82.5], custom: 1 },
+    { t: 'elev',   g: [77, 76, 81, 82.5], custom: 1 },
+    { t: 'elev',   g: [108.6, 29.4, 115.4, 32], custom: 1 },  /* 右侧走廊电梯间：电梯门前那一块 */
+    { t: 'exit',   g: [118.6, 74.5, 121.4, 75], custom: 1 }   /* 安全出口牌：贴在走廊北墙上，不占路面 */
   ];
 
   /* ============================================================
      5. 数据展开到世界像素
      ============================================================ */
   var areas = [], rooms = [], facs = [], worldRect = { x0: 0, y0: 0, x1: W, y1: H };
-  var wcRect = null, elevRects = [], stairRects = [], wallFills = [];
+  var wcRects = [], elevRects = [], stairRects = [], wallFills = [];
 
   (function buildMap() {
     var i, a, o, r, xs = [], ys = [];
@@ -296,10 +318,10 @@
         if (o.s === 'T' || o.s === 'B') { opens.push({ s: o.s, p0: gx(o.a), p1: gx(o.b) }); }
         else { opens.push({ s: o.s, p0: gy(o.b), p1: gy(o.a) }); }
       }
-      areas.push({ p: r, kind: a.kind, opens: opens });
+      areas.push({ p: r, kind: a.kind, opens: opens, doorGlow: a.doorGlow ? 1 : 0 });
       xs.push(r.x0, r.x1); ys.push(r.y0, r.y1);
-      if (a.kind === 'elev') { elevRects.push(r); }
-      if (a.kind === 'wc') { wcRect = r; }
+      if (a.kind === 'elev') { r.quad = a.quad ? 1 : 0; elevRects.push(r); }
+      if (a.kind === 'wc') { wcRects.push(r); }
       if (a.kind === 'stairs') { stairRects.push(r); }
     }
 
@@ -346,9 +368,71 @@
     return false;
   }
 
-  /* 圆形实体是否能站在这里：中心 + 8 个采样点都在可行走区域内 */
+  /* 墙体碰撞：把每块区域真正画出来的墙段记下来，只留开口能过 —— 不然会从墙上直接走过去 */
+  var WALL_HALF = 3.5;            /* 墙线 7px 宽，半宽 3.5 */
+  var wallBands = [];
+  (function buildWallBands() {
+    var SIDES = ['T', 'B', 'L', 'R'], i, j, s, a, r, segs, sd;
+    for (i = 0; i < areas.length; i++) {
+      a = areas[i]; r = a.p;
+      for (j = 0; j < SIDES.length; j++) {
+        sd = SIDES[j];
+        segs = wallSegs(sd, r, a.opens);
+        for (s = 0; s < segs.length; s++) {
+          if (segs[s][1] - segs[s][0] < 2) { continue; }
+          if (sd === 'T') { wallBands.push({ x0: segs[s][0], y0: r.y0, x1: segs[s][1], y1: r.y0 }); }
+          else if (sd === 'B') { wallBands.push({ x0: segs[s][0], y0: r.y1, x1: segs[s][1], y1: r.y1 }); }
+          else if (sd === 'L') { wallBands.push({ x0: r.x0, y0: segs[s][0], x1: r.x0, y1: segs[s][1] }); }
+          else { wallBands.push({ x0: r.x1, y0: segs[s][0], x1: r.x1, y1: segs[s][1] }); }
+        }
+      }
+    }
+  })();
+
+  /* 点到墙段的距离小于「半径 + 墙半宽」就算撞墙 */
+  function hitsWall(x, y, rad) {
+    var lim = rad + WALL_HALF, lim2 = lim * lim, i, b, cx, cy, dx, dy;
+    for (i = 0; i < wallBands.length; i++) {
+      b = wallBands[i];
+      cx = x < b.x0 ? b.x0 : (x > b.x1 ? b.x1 : x);
+      cy = y < b.y0 ? b.y0 : (y > b.y1 ? b.y1 : y);
+      dx = x - cx; dy = y - cy;
+      if (dx * dx + dy * dy < lim2) { return true; }
+    }
+    return false;
+  }
+
+  /* 射线打墙：返回从 (ox,oy) 沿 (dx,dy) 走到第一堵墙的距离（没墙就是 maxT），手电光锥用它裁剪 */
+  function rayDist(ox, oy, dx, dy, maxT) {
+    var best = maxT, w = WALL_HALF, i, b, t1, t2, tmin, tmax, x0, x1, y0, y1;
+    for (i = 0; i < wallBands.length; i++) {
+      b = wallBands[i];
+      x0 = b.x0 - w; x1 = b.x1 + w; y0 = b.y0 - w; y1 = b.y1 + w;
+      if (dx === 0) {
+        if (ox < x0 || ox > x1) { continue; }
+        tmin = -Infinity; tmax = Infinity;
+      } else {
+        t1 = (x0 - ox) / dx; t2 = (x1 - ox) / dx;
+        tmin = Math.min(t1, t2); tmax = Math.max(t1, t2);
+      }
+      if (dy === 0) {
+        if (oy < y0 || oy > y1) { continue; }
+      } else {
+        t1 = (y0 - oy) / dy; t2 = (y1 - oy) / dy;
+        tmin = Math.max(tmin, Math.min(t1, t2));
+        tmax = Math.min(tmax, Math.max(t1, t2));
+      }
+      if (tmax < 0 || tmin > tmax) { continue; }
+      if (tmin > 0 && tmin < best) { best = tmin; }
+      else if (tmin <= 0 && tmax > 0) { best = 0; }
+    }
+    return best;
+  }
+
+  /* 圆形实体是否能站在这里：区域里 + 不压墙 + 中心和 8 个采样点都成立 */
   function circleOk(x, y, rad) {
     if (!walkable(x, y)) { return false; }
+    if (hitsWall(x, y, rad)) { return false; }
     for (var i = 0; i < 8; i++) {
       var a = i * Math.PI / 4;
       if (!walkable(x + Math.cos(a) * rad, y + Math.sin(a) * rad)) { return false; }
@@ -356,7 +440,7 @@
     return true;
   }
 
-  /* 视线检查：两点之间不能穿墙 */
+  /* 视线检查：两点之间不能穿墙（先看区域，再看真正的墙体） */
   function losClear(x0, y0, x1, y1) {
     var dx = x1 - x0, dy = y1 - y0;
     var d = Math.sqrt(dx * dx + dy * dy);
@@ -364,7 +448,9 @@
     var steps = Math.min(40, Math.ceil(d / 12));
     for (var i = 1; i < steps; i++) {
       var t = i / steps;
-      if (!walkable(x0 + dx * t, y0 + dy * t)) { return false; }
+      var px = x0 + dx * t, py = y0 + dy * t;
+      if (!walkable(px, py)) { return false; }
+      if (hitsWall(px, py, 4)) { return false; }   /* 隔墙看不见 */
     }
     return true;
   }
@@ -567,12 +653,12 @@
   function spawnSups() {
     /* 一层一个宿管：沿着 顶部走廊 → 右侧走廊（一直到南头） 来回巡 */
     var route = [
-      { x: gx(20), y: gy(70) },
-      { x: gx(90), y: gy(70) },
-      { x: gx(90), y: gy(24) },
-      { x: gx(90), y: gy(21.5) },
-      { x: gx(90), y: gy(24) },
-      { x: gx(90), y: gy(70) }
+      { x: gx(24), y: gy(70) },
+      { x: gx(112), y: gy(70) },
+      { x: gx(119.5), y: gy(24) },
+      { x: gx(119.5), y: gy(21.5) },
+      { x: gx(119.5), y: gy(24) },
+      { x: gx(119.5), y: gy(70) }
     ];
     /* 从离玩家最远的那段开始巡，避免刚下楼就撞脸（尤其是楼梯口就在巡逻线上） */
     var best = 0, bd = -1;
@@ -732,15 +818,18 @@
     if (player.hp <= 0) { player.hp = 0; die(); }
   }
 
-  function noise(x, y, radius) {
+  /* 噪音：脚步声 / 惨叫 / 开门声都会把宿管引过来
+     throughWall = true 只有电梯那种「全图噪音」用，普通声音隔着墙传不过去 */
+  function noise(x, y, radius, throughWall) {
     for (var i = 0; i < sups.length; i++) {
       var s = sups[i];
       if (s.stun > 0) { continue; }
-      if (dist2(s.x, s.y, x, y) <= radius * radius) {
-        s.tgt = { x: x, y: y };
-        if (s.mode === 'patrol') { s.mode = 'search'; s.searchT = 0; }
-        s.lost = 0;
-      }
+      if (dist2(s.x, s.y, x, y) > radius * radius) { continue; }
+      /* 隔着墙就听不见 —— 否则躲在墙后走路也会被一路跟过来（堵人） */
+      if (!throughWall && !losClear(s.x, s.y, x, y)) { continue; }
+      s.tgt = { x: x, y: y };
+      if (s.mode === 'patrol') { s.mode = 'search'; s.searchT = 0; }
+      s.lost = 0;
     }
   }
 
@@ -1107,7 +1196,9 @@
     if (s.mode === 'chase' && s.tgt) {
       sp = 162;
       stepToward(s, s.tgt.x, s.tgt.y, sp, dt);
-      if (dist2(s.x, s.y, player.x, player.y) < 26 * 26) {
+      /* 贴身抓人也要看得见：躲在墙后面就不会被抓（之前隔着墙也能打到） */
+      if (dist2(s.x, s.y, player.x, player.y) < 26 * 26 &&
+          losClear(s.x, s.y, player.x, player.y)) {
         hitPlayer(34);
         s.stun = 0.9;
         knockBack(s);
@@ -1209,7 +1300,7 @@
       if (keys['f']) {
         if (holdId !== curTarget.id) { holdId = curTarget.id; holdT = 0; }
         holdT += dt;
-        if (curTarget.type === 'elev') { noise(player.x, player.y, 99999); }
+        if (curTarget.type === 'elev') { noise(player.x, player.y, 99999, true); }
         if (holdT >= holdNeedOf(curTarget.type)) {
           holdT = 0; holdId = '';
           if (curTarget.type === 'stairs') { useStairs(); } else { useElev(); }
@@ -1661,9 +1752,63 @@
     }
   }
 
+  /* 明显一点的门：门口一条亮黄门槛 + 两侧门框柱 */
+  function drawDoorMarks(a) {
+    if (!a.doorGlow) { return; }
+    var r = a.p, i, o, x0, y0, x1, y1, horiz, t = 10;
+    for (i = 0; i < a.opens.length; i++) {
+      o = a.opens[i];
+      horiz = (o.s === 'T' || o.s === 'B');
+      if (o.s === 'T') { x0 = o.p0; x1 = o.p1; y0 = y1 = r.y0; }
+      else if (o.s === 'B') { x0 = o.p0; x1 = o.p1; y0 = y1 = r.y1; }
+      else if (o.s === 'L') { y0 = o.p0; y1 = o.p1; x0 = x1 = r.x0; }
+      else { y0 = o.p0; y1 = o.p1; x0 = x1 = r.x1; }
+
+      /* 门槛：一条暗一点的门线铺在门洞里 */
+      ctx.strokeStyle = 'rgba(255,209,102,.38)';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+
+      /* 门框：两端各一道短线，把门洞框出来 */
+      ctx.strokeStyle = 'rgba(255,236,179,.32)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      if (horiz) {
+        ctx.moveTo(x0, y0 - t); ctx.lineTo(x0, y0 + t);
+        ctx.moveTo(x1, y1 - t); ctx.lineTo(x1, y1 + t);
+      } else {
+        ctx.moveTo(x0 - t, y0); ctx.lineTo(x0 + t, y0);
+        ctx.moveTo(x1 - t, y1); ctx.lineTo(x1 + t, y1);
+      }
+      ctx.stroke();
+    }
+  }
+
   /* 电梯间：每个房间里靠下摆两部电梯 */
   function drawElevRoom() {
-    for (var ei = 0; ei < elevRects.length; ei++) { drawOneElev(elevRects[ei]); }
+    for (var ei = 0; ei < elevRects.length; ei++) {
+      drawOneElev(elevRects[ei]);
+      drawElevExitSign(elevRects[ei]);
+    }
+  }
+
+  /* 电梯间正上方挂一块「安全出口」牌子（楼梯就挂在这儿，不另外画楼梯格） */
+  function drawElevExitSign(r) {
+    var cx = (r.x0 + r.x1) / 2, w = 74, h = 15;
+    var x = cx - w / 2, y = r.y0 + 4;
+    ctx.fillStyle = 'rgba(32,120,80,.95)';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = 'rgba(216,255,233,.5)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    ctx.fillStyle = '#d8ffe9';
+    ctx.font = '700 10px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('安全出口', cx, y + h / 2 + 0.5);
   }
 
   function drawOneElev(r) {
@@ -1675,30 +1820,53 @@
     ctx.lineWidth = 2;
     ctx.strokeRect(r.x0 + 3, r.y0 + 3, w - 6, h - 6);
 
-    /* 两部电梯门，并排在房间下方 */
-    var gap = 8, pad = 10;
-    var dw = (w - pad * 2 - gap) / 2;
-    var dh = Math.min(46, h * 0.28);
-    var dy = r.y1 - dh - 10;
-    for (var i = 0; i < 2; i++) {
-      var dx = r.x0 + pad + i * (dw + gap);
-      ctx.fillStyle = '#202a3c';
-      ctx.fillRect(dx, dy, dw, dh);
-      ctx.strokeStyle = 'rgba(255,209,102,.7)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(dx + 1, dy + 1, dw - 2, dh - 2);
-      /* 电梯门缝 */
-      ctx.beginPath();
-      ctx.moveTo(dx + dw / 2, dy + 5);
-      ctx.lineTo(dx + dw / 2, dy + dh - 5);
-      ctx.stroke();
+    if (r.quad) {
+      /* 四部电梯：左右墙各两部（竖着装，门朝房间里面） */
+      var vgap = 10;
+      var vh = Math.min(44, (h - 30) / 2 - vgap / 2);
+      var vy = r.y0 + (h - (vh * 2 + vgap)) / 2;
+      for (var s = 0; s < 2; s++) {
+        var vx = (s === 0) ? r.x0 + 8 : r.x1 - 8 - 22;
+        for (var k = 0; k < 2; k++) {
+          var yy = vy + k * (vh + vgap);
+          ctx.fillStyle = '#202a3c';
+          ctx.fillRect(vx, yy, 22, vh);
+          ctx.strokeStyle = 'rgba(255,209,102,.7)';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(vx + 1, yy + 1, 20, vh - 2);
+          /* 电梯门缝 */
+          ctx.beginPath();
+          ctx.moveTo(vx + 6, yy + vh / 2);
+          ctx.lineTo(vx + 16, yy + vh / 2);
+          ctx.stroke();
+        }
+      }
+    } else {
+      /* 两部电梯门，并排在房间下方 */
+      var gap = 8, pad = 10;
+      var dw = (w - pad * 2 - gap) / 2;
+      var dh = Math.min(46, h * 0.28);
+      var dy = r.y1 - dh - 10;
+      for (var i = 0; i < 2; i++) {
+        var dx = r.x0 + pad + i * (dw + gap);
+        ctx.fillStyle = '#202a3c';
+        ctx.fillRect(dx, dy, dw, dh);
+        ctx.strokeStyle = 'rgba(255,209,102,.7)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(dx + 1, dy + 1, dw - 2, dh - 2);
+        /* 电梯门缝 */
+        ctx.beginPath();
+        ctx.moveTo(dx + dw / 2, dy + 5);
+        ctx.lineTo(dx + dw / 2, dy + dh - 5);
+        ctx.stroke();
+      }
     }
 
     ctx.fillStyle = 'rgba(190,215,245,.8)';
     ctx.font = '700 11px "PingFang SC","Microsoft YaHei",sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('电梯间', (r.x0 + r.x1) / 2, r.y0 + 20);
+    ctx.fillText('电梯间', (r.x0 + r.x1) / 2, r.y0 + 30);
   }
 
   /* 楼梯门（安全出口）：三处同样样式，和电梯间同等大小的凹间 */
@@ -1712,15 +1880,6 @@
 
     ctx.fillStyle = '#151d2b';
     ctx.fillRect(r.x0 + 2, r.y0 + 2, w - 4, h - 4);
-    ctx.strokeStyle = 'rgba(160,190,230,.5)';
-    ctx.lineWidth = 1.5;
-    for (var i = 0; i < 3; i++) {
-      var y = r.y0 + h * (i + 1) / 4;
-      ctx.beginPath();
-      ctx.moveTo(r.x0 + 5, y);
-      ctx.lineTo(r.x1 - 5, y);
-      ctx.stroke();
-    }
 
     /* 安全出口牌 */
     ctx.fillStyle = 'rgba(32,120,80,.95)';
@@ -1736,7 +1895,6 @@
     ctx.font = '700 11px "PingFang SC","Microsoft YaHei",sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('楼梯', (r.x0 + r.x1) / 2, r.y1 - 16);
   }
 
   /* 安全出口牌：贴在走廊北墙上的小牌子，不占走廊地面 */
@@ -1758,9 +1916,12 @@
     }
   }
 
-  /* 1001 对面的厕所：能走进去的区域，没有出口，「厕所」两个字标在房间里 */
+  /* 厕所：能走进去的区域，没有出口，「厕所」两个字标在房间里（顶部走廊、右侧走廊各一处） */
   function drawWc() {
-    var r = wcRect;
+    for (var wi = 0; wi < wcRects.length; wi++) { drawOneWc(wcRects[wi]); }
+  }
+
+  function drawOneWc(r) {
     if (!r) { return; }
     var w = r.x1 - r.x0, h = r.y1 - r.y0;
     var cy = (r.y0 + r.y1) / 2;
@@ -1890,15 +2051,21 @@
   }
 
   function drawSup(s) {
-    /* 手电筒 */
+    /* 手电筒：按墙裁剪，不穿墙（不然躲在墙后也会看到光扫过来） */
     var RANGE = 250, HALF = 0.58;
     var g = ctx.createRadialGradient(s.x, s.y, 8, s.x, s.y, RANGE);
     g.addColorStop(0, 'rgba(255,238,170,.26)');
     g.addColorStop(0.7, 'rgba(255,232,150,.10)');
     g.addColorStop(1, 'rgba(255,232,150,0)');
+    var N = 20, i, a, t, px, py;
     ctx.beginPath();
     ctx.moveTo(s.x, s.y);
-    ctx.arc(s.x, s.y, RANGE, s.ang - HALF, s.ang + HALF);
+    for (i = 0; i <= N; i++) {
+      a = s.ang - HALF + (2 * HALF) * i / N;
+      t = rayDist(s.x, s.y, Math.cos(a), Math.sin(a), RANGE);
+      px = s.x + Math.cos(a) * t; py = s.y + Math.sin(a) * t;
+      ctx.lineTo(px, py);
+    }
     ctx.closePath();
     ctx.fillStyle = g;
     ctx.fill();
@@ -1979,6 +2146,7 @@
       r = areas[i].p;
       if (r.x1 < camL - 60 || r.x0 > camR + 60 || r.y1 < camT - 60 || r.y0 > camB + 60) { continue; }
       drawWalls(areas[i]);
+      drawDoorMarks(areas[i]);
     }
 
     /* 房门 */
@@ -2424,15 +2592,20 @@
   }
 
   function drawLobbyGuard(g) {
-    /* 手电筒扇形 */
+    /* 手电筒扇形：同样按墙裁剪 */
     var RANGE = 190, HALF = 0.55;
     var grad = ctx.createRadialGradient(g.x, g.y, 8, g.x, g.y, RANGE);
     grad.addColorStop(0, 'rgba(255,238,170,.26)');
     grad.addColorStop(0.7, 'rgba(255,232,150,.10)');
     grad.addColorStop(1, 'rgba(255,232,150,0)');
+    var N = 20, i, a, t;
     ctx.beginPath();
     ctx.moveTo(g.x, g.y);
-    ctx.arc(g.x, g.y, RANGE, g.ang - HALF, g.ang + HALF);
+    for (i = 0; i <= N; i++) {
+      a = g.ang - HALF + (2 * HALF) * i / N;
+      t = rayDist(g.x, g.y, Math.cos(a), Math.sin(a), RANGE);
+      ctx.lineTo(g.x + Math.cos(a) * t, g.y + Math.sin(a) * t);
+    }
     ctx.closePath();
     ctx.fillStyle = grad;
     ctx.fill();
