@@ -97,14 +97,16 @@ var fieldImg = new Image();
 fieldImg.src = FIELD_SRC;
 
 function resize() {
-  var pad = 32;
+  var pad = 32;                                        /* 视口减去 #wrap 内边距（20px）再留点余量 */
   var availW = Math.max(200, window.innerWidth - pad);
   var availH = Math.max(150, window.innerHeight - pad);
-  var scale = Math.min(availW / 480, availH / 360);
+  var scale = Math.min(availW / 480, availH / 360);    /* 别加下限：加了画布会比容器宽，遮罩圆角会缺角 */
+  var cw = Math.min(availW, Math.round(480 * scale));
+  var ch = Math.min(availH, Math.round(360 * scale));
   cv.width = Math.round(480 * scale * (window.devicePixelRatio || 1));
   cv.height = Math.round(360 * scale * (window.devicePixelRatio || 1));
-  cv.style.width = Math.round(480 * scale) + 'px';
-  cv.style.height = Math.round(360 * scale) + 'px';
+  cv.style.width = cw + 'px';
+  cv.style.height = ch + 'px';
   UNIT = cv.width / 480;
 }
 window.addEventListener('resize', resize);

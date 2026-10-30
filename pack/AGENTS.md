@@ -171,13 +171,15 @@ var st = document.getElementById('stage');
 var UNIT = 1;                                       /* canvas 物理像素 / 世界像素 */
 
 function resize() {
-  var s = Math.min((window.innerWidth - 24) / W, (window.innerHeight - 24) / H);
-  s = Math.max(0.4, s);                             /* 小屏也不小于 0.4，避免糊成一团 */
+  /* 可用区域 = 视口减去 #wrap 的内边距（ui/yc-ui.css 里 padding:10px，两侧共 20px） */
+  var availW = Math.max(160, window.innerWidth - 20);
+  var availH = Math.max(160, window.innerHeight - 20);
+  var s = Math.min(availW / W, availH / H);         /* 放得下的最大缩放 */
   var dpr = window.devicePixelRatio || 1;
   cv.width = Math.round(W * s * dpr);               /* 物理像素 */
   cv.height = Math.round(H * s * dpr);
-  cv.style.width = Math.round(W * s) + 'px';        /* CSS 像素 */
-  cv.style.height = Math.round(H * s) + 'px';
+  cv.style.width = Math.min(availW, Math.round(W * s)) + 'px';   /* CSS 像素 */
+  cv.style.height = Math.min(availH, Math.round(H * s)) + 'px';
   st.style.width = cv.style.width;                  /* #stage 跟画布同尺寸，HUD 才对得齐 */
   st.style.height = cv.style.height;
   UNIT = s * dpr;
@@ -186,6 +188,10 @@ window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
 resize();
 ```
+
+> **别给缩放加下限**（`s = Math.max(0.4, s)` 这种）。窄屏上算出来的画布会比容器还宽，
+> `#stage` 是 flex item 会被压扁，画布右侧溢出、被 `overflow: hidden` 以**方角**裁掉 ——
+> 而 `.overlay` 是圆角的，于是开局遮罩的右上、右下两个角会露出没压暗的画面。宁可小一点，也不要溢出。
 
 **所有绘制与物理都用世界坐标（`W × H`）**，不要混用 CSS 像素。横版常用 `900×560`、`960×600`；
 竖版玩法自己选比例（如 `420×720`）。

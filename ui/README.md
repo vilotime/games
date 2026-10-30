@@ -105,18 +105,23 @@ ui/
 
 ```js
 function resize() {
-  var pad = 20;
-  var s = Math.min((window.innerWidth - pad) / W, (window.innerHeight - pad) / H);
+  var pad = 20;                                  /* #wrap 的内边距（yc-ui.css 里 padding:10px，两侧共 20px） */
+  var availW = Math.max(160, window.innerWidth - pad);
+  var availH = Math.max(160, window.innerHeight - pad);
+  var s = Math.min(availW / W, availH / H);      /* 别加 Math.max(0.4, s) 这种下限，加了画布会比容器宽 */
   var dpr = window.devicePixelRatio || 1;
   cv.width = Math.round(W * s * dpr);
   cv.height = Math.round(H * s * dpr);
-  cv.style.width = Math.round(W * s) + 'px';
-  cv.style.height = Math.round(H * s) + 'px';
+  cv.style.width = Math.min(availW, Math.round(W * s)) + 'px';
+  cv.style.height = Math.min(availH, Math.round(H * s)) + 'px';
   ctx.setTransform(s * dpr, 0, 0, s * dpr, 0, 0);
 }
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
 ```
+
+> 缩放下限会把窄屏上的画布顶得比容器宽：`#stage` 是 flex item 会被压扁，
+> 画布右侧被 `overflow: hidden` 以方角裁掉，`.overlay` 的圆角就盖不住右上 / 右下两个角。
 
 ## 许可
 

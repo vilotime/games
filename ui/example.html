@@ -61,15 +61,16 @@
   var scale = 1;
 
   function resize() {
-    var pad = 20;
-    var s = Math.min((window.innerWidth - pad) / W, (window.innerHeight - pad) / H);
-    s = Math.max(0.3, s);
+    var pad = 20;                       /* #wrap 的内边距：yc-ui.css 里 padding:10px，两侧共 20px */
+    var availW = Math.max(160, window.innerWidth - pad);
+    var availH = Math.max(160, window.innerHeight - pad);
+    var s = Math.min(availW / W, availH / H);   /* 别加下限：加了画布会比容器宽，遮罩圆角会缺角 */
     var dpr = window.devicePixelRatio || 1;
     scale = s;
     cv.width = Math.round(W * s * dpr);
     cv.height = Math.round(H * s * dpr);
-    cv.style.width = Math.round(W * s) + 'px';
-    cv.style.height = Math.round(H * s) + 'px';
+    cv.style.width = Math.min(availW, Math.round(W * s)) + 'px';
+    cv.style.height = Math.min(availH, Math.round(H * s)) + 'px';
     ctx.setTransform(s * dpr, 0, 0, s * dpr, 0, 0);
     stage.style.width = cv.style.width;
     stage.style.height = cv.style.height;

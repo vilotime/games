@@ -61,16 +61,21 @@ var ctx = cv.getContext('2d');
 var UNIT = 2;
 function resize() {
   var pad = 20;
-  var s = Math.min((window.innerWidth - pad) / W, (window.innerHeight - pad) / H);
-  s = Math.max(0.5, s);
+  /* 可用区域 = 视口减去 #wrap 的内边距（ui/yc-ui.css 里 padding:10px，两侧共 20px）。
+     缩放不能再加下限：下限会把画布顶得比容器还宽，#stage 是 flex item 会被压扁，
+     画布右侧被 overflow:hidden 以方角裁掉，开局遮罩的圆角就盖不住右上 / 右下两个角。 */
+  var availW = Math.max(160, window.innerWidth - pad);
+  var availH = Math.max(160, window.innerHeight - pad);
+  var s = Math.min(availW / W, availH / H);
   cv.width = Math.round(W * s * (window.devicePixelRatio || 1));
   cv.height = Math.round(H * s * (window.devicePixelRatio || 1));
-  cv.style.width = Math.round(W * s) + 'px';
-  cv.style.height = Math.round(H * s) + 'px';
+  var cw = Math.min(availW, Math.round(W * s)), ch = Math.min(availH, Math.round(H * s));
+  cv.style.width = cw + 'px';
+  cv.style.height = ch + 'px';
   UNIT = cv.width / W;
   var st = document.getElementById('stage');
-  st.style.width = Math.round(W * s) + 'px';
-  st.style.height = Math.round(H * s) + 'px';
+  st.style.width = cw + 'px';
+  st.style.height = ch + 'px';
 }
 window.addEventListener('resize', resize);
 resize();

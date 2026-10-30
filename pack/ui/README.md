@@ -63,13 +63,15 @@ ui/
 
 ```js
 function resize() {
-  var s = Math.min((window.innerWidth - 24) / W, (window.innerHeight - 24) / H);
-  s = Math.max(0.4, s);
+  /* 可用区域 = 视口减去 #wrap 的内边距（本文件里 padding:10px，两侧共 20px） */
+  var availW = Math.max(160, window.innerWidth - 20);
+  var availH = Math.max(160, window.innerHeight - 20);
+  var s = Math.min(availW / W, availH / H);
   var dpr = window.devicePixelRatio || 1;
   cv.width = Math.round(W * s * dpr);
   cv.height = Math.round(H * s * dpr);
-  cv.style.width = Math.round(W * s) + 'px';
-  cv.style.height = Math.round(H * s) + 'px';
+  cv.style.width = Math.min(availW, Math.round(W * s)) + 'px';
+  cv.style.height = Math.min(availH, Math.round(H * s)) + 'px';
   st.style.width = cv.style.width;
   st.style.height = cv.style.height;
   UNIT = s * dpr;
@@ -77,6 +79,10 @@ function resize() {
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
 ```
+
+> 别给缩放加下限（`s = Math.max(0.4, s)`）。窄屏上会把画布顶得比容器宽，
+> `#stage` 是 flex item 会被压扁，画布右侧被 `overflow: hidden` 以方角裁掉，
+> `.overlay` 的圆角就盖不住右上 / 右下两个角。
 
 ## 许可
 

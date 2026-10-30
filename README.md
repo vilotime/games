@@ -214,6 +214,10 @@ powershell -File tools/make-icons.ps1   # 重新生成站点图标（ICO + 多�
 - 仅电脑游戏用 `<body data-pc-only="1">`，并自带「只能在电脑上玩」的拦截画面；
 - 不要加全屏按钮 / 横竖屏切换（本项目已移除全屏逻辑）；
 - 页面专属样式写在页面内 `<style>`，不改 `ui/yc-ui.css`。
+- **`resize()` 里的缩放别加下限**（`s = Math.max(0.4, s)` 这种）：窄屏上画布会比容器宽，
+  `#stage` 是 flex item 会被压扁，画布右侧溢出、被 `overflow: hidden` 以**方角**裁掉，
+  `.overlay` 是圆角的，开局遮罩的右上 / 右下两个角就会露出没压暗的画面。
+  正确写法见 `ui/README.md`「画布自适应」和 `pack/AGENTS.md` 第 5.1 节。
 
 ## 本地调试
 

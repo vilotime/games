@@ -10,7 +10,9 @@ html, body {
   color: #e9f1fb; user-select: none; -webkit-user-select: none;
 }
 #wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 10px; }
-#stage { position: relative; overflow: hidden; }
+/* flex: 0 0 auto —— 画布万一一比容器宽（视口极窄 / 缩放算错），也别让舞台被 flex 压扁：
+   压扁之后画布只能往右溢出，被 overflow:hidden 以方角裁掉，遮罩的圆角就盖不住右上 / 右下两个角。 */
+#stage { position: relative; overflow: hidden; flex: 0 0 auto; }
 canvas {
   display: block; border-radius: 14px;
   box-shadow: 0 20px 60px rgba(0,0,0,.65), 0 0 0 1px rgba(120,180,255,.12) inset;
@@ -23,14 +25,17 @@ canvas {
 .chip {
   padding: 6px 12px; border-radius: 999px;
   background: rgba(8,14,24,.55); border: 1px solid rgba(120,180,255,.18);
-  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
 }
 .chip b { color: #9fe0ff; font-variant-numeric: tabular-nums; }
 .chip .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
 .overlay {
   position: absolute; inset: 0; border-radius: 14px;
   display: flex; align-items: center; justify-content: center; text-align: center;
-  background: rgba(6,10,18,.78); backdrop-filter: blur(3px); z-index: 10; padding: 16px;
+  background: rgba(6,10,18,.78);
+  /* iOS Safari 18 之前只认带前缀的写法，没有这一行手机上就没有毛玻璃 */
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  z-index: 10; padding: 16px;
 }
 .overlay.hidden { display: none; }
 .panel { padding: 20px 26px; max-width: 92%; }

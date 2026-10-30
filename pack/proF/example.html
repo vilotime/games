@@ -59,13 +59,15 @@
   var UNIT = 1;                          /* canvas 物理像素 / 世界像素 */
 
   function resize() {
-    var s = Math.min((window.innerWidth - 24) / W, (window.innerHeight - 24) / H);
-    s = Math.max(0.4, s);
+    /* 可用区域 = 视口减去 #wrap 的内边距（ui/yc-ui.css 里 padding:10px，两侧共 20px） */
+    var availW = Math.max(160, window.innerWidth - 20);
+    var availH = Math.max(160, window.innerHeight - 20);
+    var s = Math.min(availW / W, availH / H);   /* 放得下的最大缩放，别加下限，加了画布会比容器宽 */
     var dpr = window.devicePixelRatio || 1;
     cv.width = Math.round(W * s * dpr);
     cv.height = Math.round(H * s * dpr);
-    cv.style.width = Math.round(W * s) + 'px';
-    cv.style.height = Math.round(H * s) + 'px';
+    cv.style.width = Math.min(availW, Math.round(W * s)) + 'px';
+    cv.style.height = Math.min(availH, Math.round(H * s)) + 'px';
     st.style.width = cv.style.width;
     st.style.height = cv.style.height;
     UNIT = s * dpr;
