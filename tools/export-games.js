@@ -308,8 +308,26 @@ if (!meta.description) { warn('meta.description 缺失，分享卡片没有描�
 const baseUrl = String(rawMeta.url || ds.site.pagesUrl || '');
 if (!isAbsUrl(baseUrl)) {
   warn('meta.url / site.pagesUrl 不是完整地址（要 http(s):// 开头），og:url、og:image 这类需要绝对地址的标签会被跳过：' + JSON.stringify(baseUrl));
-} else if (meta.title) {
-  meta.url = baseUrl;
+} else {
+  if (meta.title) { meta.url = baseUrl; }
+
+  /* 站点地址和 GitHub 仓库对不对得上：项目站点必须带 /仓库名/，
+     写成域名根会指向另一个仓库（分享封面直接 404）。自定义域名这里只提醒，不拦。 */
+  const mRepo = /^https?:\/\/github\.com\/([^\/]+)\/([^\/]+?)(?:\.git)?\/?$/i.exec(String(ds.site.repo || ''));
+  if (mRepo) {
+    const user = mRepo[1].toLowerCase();
+    const name = mRepo[2].toLowerCase();
+    const isUserSite = name === (user + '.github.io');
+    const want = isUserSite
+      ? 'https://' + user + '.github.io/'
+      : 'https://' + user + '.github.io/' + name + '/';
+    const got = baseUrl.replace(/\/+$/, '') + '/';
+    if (got.toLowerCase() !== want) {
+      warn('site.pagesUrl 和仓库对不上：仓库 ' + ds.site.repo + ' 的线上地址是 ' + want +
+        '，现在配的是 ' + JSON.stringify(baseUrl) +
+        '（项目站点漏掉 /' + name + '/ 这段，分享封面和站点图标就会指向别的仓库）');
+    }
+  }
 }
 
 const rawImage = String(rawMeta.image || '');

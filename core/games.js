@@ -36,6 +36,15 @@
     return String(p || '').replace(/^.*\//, '').replace(/\.html$/i, '');
   }
 
+  /* 站点地址 → 路径前缀：'https://vilotime.github.io/games/' → '/games'。
+     这个仓库是 GitHub Pages 的**项目站点**，站点根是 /games/ 而不是域名根；
+     站点直接挂在域名根目录时这里返回 ''。 */
+  function basePathOf(u) {
+    var s = String(u || '');
+    if (!/^https?:\/\//i.test(s)) { return ''; }
+    return s.replace(/^https?:\/\/[^\/]+/i, '').replace(/\/+$/, '');
+  }
+
   function indentHTML(html, n) {
     var pad = '';
     for (var i = 0; i < n; i++) { pad += ' '; }
@@ -44,8 +53,9 @@
 
   /* 单款游戏：补全所有派生字段
    * file 是真实位置（可带子目录）；没写 file 时退回 dir + id + '.html'。
-   * 由此派生：id（文件名去掉 .html）、rel（相对 dir 的路径，主页卡片用）、url（站点根路径）。 */
-  function expand(g, dir) {
+   * 由此派生：id（文件名去掉 .html）、rel（相对 dir 的路径，主页卡片用）、
+   * url（站点根路径；base 是站点路径前缀，项目站点形如 '/games'）。 */
+  function expand(g, dir, base) {
     var raw = String(g.file || '').trim().replace(/^\.?\//, '');
     if (!raw) { raw = String(g.id || '').trim().replace(/^\.?\//, ''); }
     if (!raw) { raw = 'untitled'; }
@@ -53,6 +63,7 @@
     if (!/\.html?$/i.test(file)) { file += '.html'; }
     var id = g.id || basename(file);
     var rel = file.indexOf(dir) === 0 ? file.slice(dir.length) : file;
+    var root = (base || '') + '/';
     var pcOnly = !!g.pcOnly;
     var c1 = g.c1 || ((g.colors && g.colors.c1) || '');
     var c2 = g.c2 || ((g.colors && g.colors.c2) || '');
@@ -61,7 +72,7 @@
       name: g.name || id,
       file: file,
       rel: rel,
-      url: '/' + file,
+      url: root + file,
       icon: g.icon || '🎮',
       desc: g.desc || '',
       pcOnly: pcOnly,
@@ -77,16 +88,19 @@
     raw = raw || {};
     var site = raw.site || {};
     var dir = site.dir || 'proF/';
+    var base = basePathOf(site.pagesUrl);
+    var home = site.homepage || (dir + '主页.html');
     var src = raw.categories || [];
     var ds = {
       schema: raw.schema || SCHEMA,
       site: {
         name: site.name || '',
         dir: dir,
-        homepage: site.homepage || (dir + '主页.html'),
-        homepageUrl: '/' + (site.homepage || (dir + '主页.html')).replace(/^\//, ''),
+        homepage: home,
+        homepageUrl: base + '/' + home.replace(/^\//, ''),
         repo: site.repo || '',
-        pagesUrl: site.pagesUrl || ''
+        pagesUrl: site.pagesUrl || '',
+        basePath: base
       },
       categories: [],
       games: [],
@@ -98,7 +112,7 @@
       var games = [];
       var list = cat.games || [];
       for (var j = 0; j < list.length; j++) {
-        var g = expand(list[j], dir);
+        var g = expand(list[j], dir, base);
         g.category = cat.key || '';
         g.categoryName = cat.name || '';
         games.push(g);

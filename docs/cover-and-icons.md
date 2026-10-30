@@ -1,5 +1,10 @@
 # 封面与图标说明
 
+> **先记住站点地址**：这个仓库是 GitHub Pages 的**项目站点**，线上地址是
+> `https://vilotime.github.io/games/`（仓库 `VILOTIME/games`）。
+> 域名根 `https://vilotime.github.io/` 是**另一个仓库**（个人主页），两边的 `favicon.ico`、`assets/`
+> 互不相干 —— 分享卡片和搜索引擎检查里千万别漏掉 `/games/` 这一段。
+
 这个站上一共有**三种长得像「图」**的东西（外加页面标题），用途完全不同，别混在一起改。
 全部配置都在 `games.json` 里：`icons`（图标）、`meta`（标题 / 描述 / 分享封面）。
 `tools\sync.cmd` 一次写进 `index.html` 的 head 标记区，**生成出来的那段 HTML 不要手改**。
@@ -32,7 +37,7 @@
 
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
-| `ico` | **强烈建议** | `.ico` 文件，放在**仓库根目录**，即 `/favicon.ico`。搜索引擎和老浏览器只认这个 |
+| `ico` | **强烈建议** | `.ico` 文件，放在**仓库根目录**，部署后就是 `https://vilotime.github.io/games/favicon.ico`。搜索引擎和老浏览器只认这个 |
 | `svg` | 可选 | 现代浏览器首选，矢量最清晰；但**搜索引擎不认** |
 | `png` | **强烈建议** | 多尺寸 PNG。Google/Bing 抓缩略图时按 `sizes` 挑合适的 |
 | `appleTouch` | 可选 | iOS「添加到主屏幕」的图标，一般 180×180 |
@@ -55,11 +60,15 @@
 
 因为站点原本只给了**一张 64×64 的 PNG**（`assets/favicon.png`）：
 
-- 根目录**没有** `favicon.ico`，而 Bing 和很多爬虫不会老实解析 `<link rel="icon">`，
-  它们直接请求 `https://你的域名/favicon.ico`；
-- 根目录没有这个文件 → 抓不到 → 退回**托管域名**的图标，在 GitHub Pages 上就是 GitHub 的小图标。
+- 站点根目录**没有** `favicon.ico`，而 Bing 和很多爬虫不会老实解析 `<link rel="icon">`，
+  它们直接请求站点根下的 `favicon.ico`（本站是 `https://vilotime.github.io/games/favicon.ico`）；
+- 那里没有文件 → 抓不到 → 退回**托管域名**的图标，在 GitHub Pages 上就是 GitHub 的小图标。
 
 补上根目录的 `favicon.ico` + 多尺寸 PNG 之后这个问题就没了。
+
+> 本站的 `<link rel="icon">` 里的路径都是**相对路径**（`href="favicon.ico"`、`assets/icon-32.png`），
+> 所以挂在 `/games/` 子路径下也能正确解析成 `/games/favicon.ico`、`/games/assets/icon-32.png`。
+> 只有分享卡片（og / twitter）必须写绝对地址，那个由脚本按 `site.pagesUrl` 拼。
 
 ### 文件都是哪来的
 
@@ -94,7 +103,8 @@
 }
 ```
 
-站点地址取 `site.pagesUrl`（`meta.url` 也可以，写了就用它）。脚本会自动：
+站点地址取 `site.pagesUrl`（当前是 `https://vilotime.github.io/games/`，末尾带不带 `/` 都行；
+也可以写 `meta.url` 覆盖它）。脚本会自动：
 
 1. 用站点地址把 `meta.image` 拼成**绝对地址**（微信不认相对路径）；
 2. 读 PNG 文件头拿到真实宽高，写进 `og:image:width/height`（换图不用改数字）；
@@ -136,7 +146,9 @@ node tools/export-games.js --check   # 只检查，不写文件
 - PNG 的 `sizes` 和图片**实际尺寸**是否一致（不一致会按实际值输出并提醒）；不是正方形会提醒；
 - 有没有漏掉 `.ico`（会直接提醒「Bing 会退回托管域名图标」）、漏掉 `appleTouch`；
 - 是否还在用旧的 `favicon` / `appleTouchIcon` 顶层字段（已合并进 `icons`，会报错提示迁移）；
-- `icons` / `meta` 里有没有拼错的字段名（多出来的字段会提醒）。
+- `icons` / `meta` 里有没有拼错的字段名（多出来的字段会提醒）；
+- **站点地址和仓库对不对得上**：仓库 `VILOTIME/games` 的线上地址是 `https://vilotime.github.io/games/`，
+  写成域名根会提醒「漏掉 `/games/` 这段」——否则 `og:image` 会指向另一个仓库，微信抓不到图。
 
 `index.html` 里被重写的就是这一段：
 
@@ -152,14 +164,15 @@ node tools/export-games.js --check   # 只检查，不写文件
 
 改完、推上去之后，Bing/Google 还不会立刻变，它们有自己的缓存。
 
-1. **确认线上文件真的存在**：直接访问 `https://vilotime.github.io/favicon.ico`，
+1. **确认线上文件真的存在**：直接访问 `https://vilotime.github.io/games/favicon.ico`，
    应该能看到图标（不是 404）。这是最关键的一步。
-2. **Bing Webmaster Tools** → 添加站点 → 「URL 提交」把首页重新提交一遍，
+   （顺手也可以确认封面：`https://vilotime.github.io/games/assets/share-square.png`）
+2. **Bing Webmaster Tools** → 添加站点（填 `https://vilotime.github.io/games/`）→ 「URL 提交」把首页重新提交一遍，
    或用「站点资源管理器」里的抓取工具看它拿到的 `<link rel="icon">`。
 3. **Google Search Console** → 「网址检查」→ 请求重新编入索引。
 4. 搜索引擎的图标缓存可能要**几天到几周**才刷新，这点急不来。
 
-另外，如果你在 Bing 里搜 `site:vilotime.github.io` 只看到很少的结果，
+另外，如果你在 Bing 里搜 `site:vilotime.github.io/games` 只看到很少的结果，
 说明站点收录本身还不全，可以在 Webmaster Tools 里提交一个 `sitemap.xml`（目前还没有，需要的话可以生成）。
 
 ---
@@ -168,7 +181,7 @@ node tools/export-games.js --check   # 只检查，不写文件
 
 改完图标后挨个确认：
 
-- [ ] `https://vilotime.github.io/favicon.ico` 能直接下载，且是图标（不是 404、不是 HTML）
+- [ ] `https://vilotime.github.io/games/favicon.ico` 能直接下载，且是图标（不是 404、不是 HTML）
 - [ ] 浏览器标签页图标正常（`Ctrl + Shift + R` 强刷后再看）
 - [ ] `node tools/export-games.js --check` 输出 `✓ 卡片 / 侧栏 / 数量 / 图标都已和 games.json 一致`
 - [ ] `index.html` 的 head 里有 `.ico`、`.svg`、多个 `.png` 的 `<link rel="icon">`
@@ -182,9 +195,12 @@ node tools/export-games.js --check   # 只检查，不写文件
 **Q：只给 SVG 不够吗？**
 对浏览器够，对搜索引擎不够。Bing 明确不支持 SVG favicon，且很多爬虫只请求根目录的 `/favicon.ico`。
 
-**Q：`favicon.ico` 为什么放根目录，不放到 `assets/`？**
-放根目录是 `https://域名/favicon.ico` 能直接命中，这是爬虫和浏览器默认会尝试的路径，
-最省事也最保险。放子目录就必须依赖 `<link>` 被正确解析。
+**Q：`favicon.ico` 为什么放仓库根目录，不放到 `assets/`？**
+放仓库根目录，部署后就是站点根下的 `https://vilotime.github.io/games/favicon.ico`，
+这是浏览器和爬虫默认会尝试的路径，最省事也最保险。放子目录就必须依赖 `<link>` 被正确解析。
+
+注意别和**域名根**的 `https://vilotime.github.io/favicon.ico` 搞混：那个属于个人主页那个仓库，
+搜站点图标时看的是带 `/games/` 的这个。
 
 **Q：图标和分享封面可以共用一张图吗？**
 技术上可以，但不建议：封面是给人看的方图，缩到 16px 会糊成一团；图标应该是简洁的符号（现在是渐变底 + 播放三角）。

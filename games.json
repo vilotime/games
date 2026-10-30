@@ -1,6 +1,6 @@
 {
   "schema": "yc-games/2",
-  "site": {"name":"叶初小游戏","dir":"proF/","homepage":"proF/主页.html","repo":"https://github.com/vilotime/vilotime.github.io","pagesUrl":"https://vilotime.github.io/"},
+  "site": {"name":"叶初小游戏","dir":"proF/","homepage":"proF/主页.html","repo":"https://github.com/VILOTIME/games","pagesUrl":"https://vilotime.github.io/games/"},
 
   "icons": {
     "ico": "favicon.ico",

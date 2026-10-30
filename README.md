@@ -1,7 +1,8 @@
 # 叶初小游戏
 
 通过Vibe Coding，按照一定范式构建的纯 Canvas 小游戏，外壳是一个侧栏 + iframe 的静态页，没有构建步骤、没有后端、没有依赖，
-直接 GitHub Pages 托管：<https://vilotime.github.io/>
+直接 GitHub Pages 托管（仓库 `VILOTIME/games`，**项目站点**，所以带 `/games/` 路径）：
+<https://vilotime.github.io/games/>
 
 > **想邀请别人用 AI 帮忙做游戏？** [`docs/AI辅助编程说明.md`](docs/AI辅助编程说明.md) 是给**制作方**看的说明书，
 > 可以直接连同压缩包一起转给对方：怎么装 DSH、怎么打开游戏包、两种提示词写法（**方式一**在对话框里
@@ -60,7 +61,7 @@
 |---|---|
 | `id` | `file` 的文件名去掉 `.html`（稳定 key） |
 | `rel` | `file` 相对 `site.dir` 的路径（主页卡片 `href`） |
-| `url` | `/` + `file`（站点根路径） |
+| `url` | 站点路径前缀（取自 `site.pagesUrl`，本站是 `/games`）+ `/` + `file`；没配 `pagesUrl` 时退回 `file` |
 | `mobile` | `!pcOnly` |
 | `tags` | `pcOnly ? ['pc-only'] : []` |
 | `pageTitle` | 同 `name` |
@@ -76,7 +77,7 @@
 
 | 段 | 管什么 |
 |---|---|
-| `site` | 站点名、游戏目录 `dir`、主页 `homepage`、仓库地址，以及拼分享卡片绝对地址用的 `pagesUrl` |
+| `site` | 站点名、游戏目录 `dir`、主页 `homepage`、仓库地址，以及 `pagesUrl` —— 分享卡片拼绝对地址、`url` / `homepageUrl` 算路径前缀都用它。本站是项目站点，值是 `https://vilotime.github.io/games/`（**别写成域名根**，那是另一个仓库） |
 | `icons` | 站点图标：`ico` / `svg` / `png[]` / `appleTouch`。`.ico` 必须在**仓库根目录**，否则 Bing 会退回 GitHub 图标 |
 | `meta` | `<title>`、`<meta name="description">`、分享封面 `image`（方图自动配 `twitter:card=summary`，宽图自动切 `summary_large_image`） |
 
@@ -171,7 +172,8 @@ powershell -File tools/make-icons.ps1   # 重新生成站点图标（ICO + 多�
 `tools/export-games.js` 除了同步，还会校验 json：`id` 重复、`file` 指向的文件不存在、
 颜色不是 hex、`pcOnly` 类型不对、字段名拼错、`file` 用了反斜杠等，有问题会逐条打印；
 图标 / 封面那两段还会查：`.ico` 是不是真 ICO、PNG 的 `sizes` 和实际宽高是否一致、
-分享封面有没有被拼成绝对地址、有没有忘了配 `icons.ico`（Bing 会退回 GitHub 图标）。
+分享封面有没有被拼成绝对地址、有没有忘了配 `icons.ico`（Bing 会退回 GitHub 图标）、
+`site.pagesUrl` 和仓库对不对得上（项目站点漏掉 `/games/` 会指向另一个仓库）。
 
 ### Windows 一键：双击 `tools\sync.cmd`
 
