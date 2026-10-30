@@ -14,15 +14,16 @@
 .
 ├─ index.html      外壳：侧栏导航 + iframe
 ├─ games.json      ★ 游戏清单（唯一数据源，加游戏只改这里）
+├─ favicon.ico     站点图标兜底（搜索引擎只认根目录这个，tools/make-icons.ps1 生成）
 ├─ README.md       本文件
 ├─ LICENSE         许可证
 ├─ core/           站点自己的前台代码（清单渲染器 games.js）
-├─ tools/          维护脚本（清单同步、本地预览）
+├─ tools/          维护脚本（清单同步、图标生成、本地预览）
 ├─ ui/             ★ UI 库（可整包复制给别的项目）
 ├─ proF/           游戏页面 + 主页游戏墙
 ├─ pack/           ★ 对外制作包（压成 zip 发给合作者）
-├─ docs/           说明文档（AI 辅助编程说明）
-└─ assets/         站点图标与分享图
+├─ docs/           说明文档（AI 辅助编程说明、封面与图标说明）
+└─ assets/         站点图标与分享图（icon-16/32/192/512.png、favicon.svg、share-square.png）
 ```
 
 > 这里只列**顶层结构**，不列具体文件和数量 —— 加游戏、换图标、加脚本都不会让这段过期。
@@ -68,6 +69,38 @@
 
 旧写法 `{"id":"文件名"}` 仍然认，会按 `site.dir + id + '.html'` 推断。
 
+## 站点信息：标题 / 图标 / 分享封面
+
+`games.json` 里除了游戏清单，还有三段站点级配置，全部由 `tools/export-games.js` 写进
+`index.html` 的 head 标记区（`<!-- head:start -->` … `<!-- head:end -->`），**生成出来的那段别手改**：
+
+| 段 | 管什么 |
+|---|---|
+| `site` | 站点名、游戏目录 `dir`、主页 `homepage`、仓库地址，以及拼分享卡片绝对地址用的 `pagesUrl` |
+| `icons` | 站点图标：`ico` / `svg` / `png[]` / `appleTouch`。`.ico` 必须在**仓库根目录**，否则 Bing 会退回 GitHub 图标 |
+| `meta` | `<title>`、`<meta name="description">`、分享封面 `image`（方图自动配 `twitter:card=summary`，宽图自动切 `summary_large_image`） |
+
+```json
+"icons": {
+  "ico": "favicon.ico",
+  "svg": "assets/favicon.svg",
+  "png": [{"src":"assets/icon-32.png","sizes":"32x32"}],
+  "appleTouch": {"src":"assets/apple-touch-icon.png","sizes":"180x180"}
+},
+"meta": {
+  "title": "叶初小游戏",
+  "description": "……",
+  "siteName": "叶初小游戏",
+  "image": "assets/share-square.png",
+  "imageAlt": "叶初小游戏 · 封面"
+}
+```
+
+- 换图标：`.\tools\make-icons.ps1`（渐变底 + 白色播放三角，或 `-Design photo -Source 图.png`），
+  它会写出根目录 `favicon.ico`（16/32/48）+ `assets/icon-16/32/192/512.png` + `apple-touch-icon.png` 并回读校验；
+- 换封面：直接替换 `assets/share-square.png`（保持方图），JSON 不用改 —— 宽高是脚本读 PNG 文件头现算的；
+- 细节和踩坑记录见 [`docs/cover-and-icons.md`](docs/cover-and-icons.md)。
+
 ## `core/games.js`（清单渲染器）
 
 `#gamesRoot` / `#nav` / `data-game-*` 这些是本站约定，所以它属于站点自己的 `core/`，而不是通用的 `ui/`。
@@ -88,6 +121,9 @@ YCGames.load('./games.json').then(function (ds) {
 });
 ```
 
+`YCGames.headHTML({icons, meta})` 生成 head 里的图标 / 分享卡片标记，只给构建脚本用：
+`tools/export-games.js` 先把 PNG 宽高、ICO 尺寸、绝对地址算好再传进来，浏览器运行时不用它。
+
 ## `games.json` 的同步策略
 
 **`games.json` 是唯一数据源**，主页卡片、侧栏入口、分类数量、游戏总数全部由它派生，HTML 里不再手动维护。
@@ -98,12 +134,13 @@ YCGames.load('./games.json').then(function (ds) {
 | **运行时渲染** | 用 `http(s)` 打开时（线上、或本地 `tools/dev.js`） | `fetch('games.json')` → `core/games.js` 现场生成卡片 / 侧栏 / 数量 |
 | **静态兜底** | 无 JS、断网，或**双击 `file://` 打开**（`fetch` 被 CORS 拦） | HTML 里由脚本预先写好的副本 |
 
-### 会被同步的 4 个位置
+### 会被同步的 5 个位置
 
 | 位置 | 由谁维护 |
 |---|---|
 | `proF/主页.html` 的 `<!-- games:start -->` … `<!-- games:end -->`（全部卡片） | `tools/export-games.js` 整段重写 |
 | `index.html` 的 `<!-- nav:start -->` … `<!-- nav:end -->`（侧栏入口） | 同上 |
+| `index.html` 的 `<!-- head:start -->` … `<!-- head:end -->`（标题 / 图标 / 分享卡片） | 同上，按 `icons`、`meta` 生成 |
 | `proF/主页.html` 顶部「共 `data-game-total` 款」 | 同上，单独重写数字 |
 | `index.html` 侧栏「`data-game-count` 款」 | 同上，单独重写数字 |
 
@@ -124,14 +161,17 @@ YCGames.load('./games.json').then(function (ds) {
 ### 命令
 
 ```bash
-node tools/export-games.js           # 校验 json + 重写静态兜底和数量
+node tools/export-games.js           # 校验 json + 重写静态兜底、数量和 head
 node tools/export-games.js --check   # 只检查，不写文件（CI / 提交前用）
 node tools/dev.js                    # 本地 http 预览（启动前自动同步 + 监听 json 自动同步）
 powershell -File tools/sync.ps1      # 上面第一条的 PowerShell 包装，跑完停住看结果
+powershell -File tools/make-icons.ps1   # 重新生成站点图标（ICO + 多尺寸 PNG + 主屏图标）
 ```
 
 `tools/export-games.js` 除了同步，还会校验 json：`id` 重复、`file` 指向的文件不存在、
-颜色不是 hex、`pcOnly` 类型不对、字段名拼错、`file` 用了反斜杠等，有问题会逐条打印。
+颜色不是 hex、`pcOnly` 类型不对、字段名拼错、`file` 用了反斜杠等，有问题会逐条打印；
+图标 / 封面那两段还会查：`.ico` 是不是真 ICO、PNG 的 `sizes` 和实际宽高是否一致、
+分享封面有没有被拼成绝对地址、有没有忘了配 `icons.ico`（Bing 会退回 GitHub 图标）。
 
 ### Windows 一键：双击 `tools\sync.cmd`
 

@@ -9,6 +9,8 @@
  *               └──►  静态兜底：本脚本把 proF/主页.html 的 <div id="gamesRoot"> 和
  *                    index.html 的 <nav id="nav"> 里标记区间的 HTML 重写成同样内容，
  *                    这样没有 JS / 没有网络时页面也不会空。
+ *               另外 index.html 的 head（<title> / favicon / 分享卡片）也由本脚本按
+ *               games.json 的 icons、meta 两段生成（规范见 docs/cover-and-icons.md）。
  *
  * 每款游戏只写 7 个字段：
  *     file（真实位置，可带子目录）  name  icon  desc  pcOnly  c1  c2
@@ -108,15 +110,16 @@ function indent(html, n) {
   return html.split('\n').map(line => (line ? pad + line : line)).join('\n');
 }
 
+/* 重写一段标记区间；结束标记前面的缩进单独抓出来，重写后原样贴回，标签不会被顶到行首 */
 function replaceRegion(file, startMark, endMark, body) {
   const abs = path.join(root, file);
   if (!fs.existsSync(abs)) { return { ok: false, why: '文件不存在' }; }
   const src = fs.readFileSync(abs, 'utf8');
-  const re = new RegExp('(<!--\\s*' + startMark + '[^>]*-->)([\\s\\S]*?)(<!--\\s*' + endMark + '\\s*-->)');
+  const re = new RegExp('(<!--\\s*' + startMark + '[^>]*-->)([\\s\\S]*?)\\n?([ \\t]*)(<!--\\s*' + endMark + '\\s*-->)');
   const m = src.match(re);
   if (!m) { return { ok: false, why: '缺少 ' + startMark + ' / ' + endMark + ' 标记' }; }
   if (m[2].trim() === body.trim()) { return { ok: true, changed: false }; }
-  const next = src.replace(re, (all, a, _mid, c) => a + '\n' + body + '\n' + c);
+  const next = src.replace(re, (all, a, _mid, pad, c) => a + '\n' + body + '\n' + pad + c);
   if (!CHECK_ONLY) { fs.writeFileSync(abs, next, 'utf8'); }
   return { ok: true, changed: true };
 }
@@ -154,22 +157,214 @@ const rNumIndex = syncNumbers('index.html', [
 if (!rNumHome.ok) { fail('proF/主页.html：' + rNumHome.why); }
 if (!rNumIndex.ok) { fail('index.html：' + rNumIndex.why); }
 
+/* ---------------- 图标 / 分享封面（index.html 的 head 区块） ----------------
+ * 配置在 games.json 的 icons / meta 两段，规范见 docs/cover-and-icons.md。
+ * 本段负责：读真实尺寸（PNG 宽高 / ICO 里内置的尺寸）、把相对路径拼成绝对地址、
+ * 按方图还是宽图自动选 twitter:card，然后把 index.html 的 head 标记区间整段重写。 */
+const ICON_KEYS = ['ico', 'svg', 'png', 'appleTouch'];
+const META_KEYS = ['title', 'description', 'siteName', 'url', 'image', 'imageAlt'];
+
+function readPng(abs) {
+  try {
+    const b = fs.readFileSync(abs);
+    if (b.length < 24 || b.readUInt32BE(0) !== 0x89504e47) { return null; }   /* PNG 签名 */
+    return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) };                 /* IHDR 里的宽高 */
+  } catch (e) { return null; }
+}
+
+/* 不是真 ICO（比如只是把 PNG 改了扩展名）就返回 null */
+function readIcoSizes(abs) {
+  try {
+    const b = fs.readFileSync(abs);
+    if (b.length < 22 || b.readUInt16LE(0) !== 0 || b.readUInt16LE(2) !== 1) { return null; }
+    const count = b.readUInt16LE(4);
+    const sizes = [];
+    for (let i = 0; i < count; i++) {
+      const at = 6 + i * 16;
+      if (at + 16 > b.length) { return null; }
+      sizes.push(b[at] === 0 ? 256 : b[at]);   /* 0 表示 256 */
+    }
+    return sizes.length ? sizes : null;
+  } catch (e) { return null; }
+}
+
+function isAbsUrl(u) { return /^https?:\/\//i.test(String(u || '')); }
+function joinUrl(base, rel) { return String(base).replace(/\/+$/, '') + '/' + String(rel).replace(/^\/+/, ''); }
+function fileExists(rel) { return !!rel && fs.existsSync(path.join(root, String(rel))); }
+
+const rawIcons = raw.icons || {};
+const rawMeta = raw.meta || {};
+const icons = {};
+const meta = {};
+
+if (raw.favicon || raw.appleTouchIcon) {
+  fail('games.json 里还有旧的 favicon / appleTouchIcon 顶层字段（已合并进 icons，见 docs/cover-and-icons.md）');
+}
+Object.keys(rawIcons).forEach(k => {
+  if (ICON_KEYS.indexOf(k) < 0) { warn('icons 里多了个没用到的字段 "' + k + '"（只认 ' + ICON_KEYS.join(' / ') + '）'); }
+});
+Object.keys(rawMeta).forEach(k => {
+  if (META_KEYS.indexOf(k) < 0) { warn('meta 里多了个没用到的字段 "' + k + '"（只认 ' + META_KEYS.join(' / ') + '）'); }
+});
+
+/* 1. 站点图标：.ico（搜索引擎兜底）+ svg（现代浏览器）+ 多尺寸 png（爬虫缩略图） */
+if (rawIcons.ico) {
+  const p = String(rawIcons.ico);
+  if (/[\\]/.test(p)) { warn('icons.ico 要用正斜杠：' + p); }
+  if (p.charAt(0) === '/') { warn('icons.ico 写相对仓库根的路径就行（"favicon.ico"），不要以 / 开头'); }
+  else if (p.indexOf('/') >= 0) { warn('icons.ico 建议直接放仓库根目录，/favicon.ico 是爬虫默认会请求的路径：' + p); }
+  if (!fileExists(p)) {
+    fail('icons.ico 指向的 ' + p + ' 不存在（先跑 tools\\make-icons.ps1）');
+  } else {
+    const sizes = readIcoSizes(path.join(root, p));
+    if (!sizes) {
+      fail(p + ' 不是真正的 ICO（文件头不对；只把 PNG 改扩展名不算）');
+    } else {
+      const miss = [16, 32, 48].filter(s => sizes.indexOf(s) < 0);
+      if (miss.length) { warn(p + ' 里没有 ' + miss.join(' / ') + ' 这几个尺寸（现在有 ' + sizes.join(' / ') + '）'); }
+      icons.ico = p;
+    }
+  }
+} else {
+  warn('没配 icons.ico —— Bing 等爬虫只请求根目录的 /favicon.ico，缺了会退回托管域名的图标（GitHub 小图标）');
+}
+
+if (rawIcons.svg) {
+  const p = String(rawIcons.svg);
+  if (!fileExists(p)) {
+    fail('icons.svg 指向的 ' + p + ' 不存在');
+  } else {
+    let head = '';
+    try { head = fs.readFileSync(path.join(root, p), 'utf8').slice(0, 400); } catch (e) {}
+    if (head.indexOf('<svg') < 0) { warn(p + ' 里没找到 <svg，确认它是 SVG 文件'); }
+    icons.svg = p;
+  }
+}
+
+if (rawIcons.png) {
+  if (!Array.isArray(rawIcons.png)) {
+    fail('icons.png 应该是数组：[{ "src": "assets/icon-32.png", "sizes": "32x32" }]');
+  } else {
+    const list = [];
+    rawIcons.png.forEach((item, i) => {
+      const at = 'icons.png[' + i + ']';
+      if (!item || !item.src) { fail(at + ' 缺少 src'); return; }
+      const src = String(item.src);
+      if (!fileExists(src)) { fail(at + '：' + src + ' 不存在（先跑 tools\\make-icons.ps1）'); return; }
+      const real = readPng(path.join(root, src));
+      if (!real) { fail(at + '：' + src + ' 不是 PNG（爬虫只按 PNG 认 sizes）'); return; }
+      const want = real.w + 'x' + real.h;
+      let sizes = String(item.sizes || '').toLowerCase();
+      if (!sizes) {
+        warn(at + ' 没写 sizes，按实际尺寸输出 ' + want);
+        sizes = want;
+      } else if (sizes !== want) {
+        warn(at + '：sizes 写的是 ' + sizes + '，图片实际是 ' + want + '（已按实际值输出）');
+        sizes = want;
+      }
+      if (real.w !== real.h) { warn(at + '：' + src + ' 不是正方形（' + want + '），favicon 建议用正方形'); }
+      list.push({ src: src, sizes: sizes });
+    });
+    if (list.length) { icons.png = list; }
+  }
+} else {
+  warn('没配 icons.png —— 只有 SVG / ICO 时抓缩略图的爬虫没得挑，多尺寸 PNG 一定要给');
+}
+
+if (rawIcons.appleTouch) {
+  const at = 'icons.appleTouch';
+  const src = String((rawIcons.appleTouch.src) || '');
+  if (!src) {
+    fail(at + ' 缺少 src');
+  } else if (!fileExists(src)) {
+    fail(at + '：' + src + ' 不存在（先跑 tools\\make-icons.ps1）');
+  } else {
+    const real = readPng(path.join(root, src));
+    if (!real) {
+      fail(at + '：' + src + ' 不是 PNG');
+    } else {
+      const want = real.w + 'x' + real.h;
+      let sizes = String(rawIcons.appleTouch.sizes || '');
+      if (!sizes) { sizes = want; }
+      else if (sizes !== want) {
+        warn(at + '：sizes 写的是 ' + sizes + '，图片实际是 ' + want + '（已按实际值输出）');
+        sizes = want;
+      }
+      if (real.w !== 180 || real.h !== 180) { warn(at + '：iOS「添加到主屏幕」一般用 180x180，现在是 ' + want); }
+      icons.appleTouch = { src: src, sizes: sizes };
+    }
+  }
+} else {
+  warn('没配 icons.appleTouch —— iOS 添加到主屏幕会退回截图');
+}
+
+/* 2. 分享封面：标题 / 描述 / 方图，绝对地址由 meta.url 或 site.pagesUrl 拼出来 */
+meta.title = String(rawMeta.title || ds.site.name || '');
+meta.siteName = String(rawMeta.siteName || ds.site.name || '');
+meta.description = String(rawMeta.description || '');
+if (!meta.title) { fail('meta.title 缺失（页面 <title> 和分享卡片标题都从这里取）'); }
+if (!meta.description) { warn('meta.description 缺失，分享卡片没有描述'); }
+
+const baseUrl = String(rawMeta.url || ds.site.pagesUrl || '');
+if (!isAbsUrl(baseUrl)) {
+  warn('meta.url / site.pagesUrl 不是完整地址（要 http(s):// 开头），og:url、og:image 这类需要绝对地址的标签会被跳过：' + JSON.stringify(baseUrl));
+} else if (meta.title) {
+  meta.url = baseUrl;
+}
+
+const rawImage = String(rawMeta.image || '');
+if (rawImage) {
+  if (/\\/.test(rawImage)) { warn('meta.image 要用正斜杠：' + rawImage); }
+  if (!fileExists(rawImage)) {
+    fail('meta.image 指向的 ' + rawImage + ' 不存在');
+  } else if (!isAbsUrl(baseUrl)) {
+    warn('没有可用的完整站点地址，og:image 拼不出绝对地址（微信不认相对路径）——本次不输出分享封面');
+  } else {
+    const real = readPng(path.join(root, rawImage));
+    meta.image = joinUrl(baseUrl, rawImage);
+    meta.imageAlt = String(rawMeta.imageAlt || meta.title);
+    if (real) {
+      meta.imageWidth = real.w;
+      meta.imageHeight = real.h;
+      meta.imageType = 'image/png';
+      /* 方图配 summary（微信 / QQ 收藏按正方形裁），宽图才配 summary_large_image */
+      const square = Math.abs(real.w - real.h) <= Math.max(2, Math.round(real.w * 0.02));
+      meta.twitterCard = square ? 'summary' : 'summary_large_image';
+    } else {
+      warn('meta.image 读不到宽高（不是 PNG），og:image:width/height 不输出，卡片可能被裁得不好：' + rawImage);
+      meta.twitterCard = 'summary';
+    }
+  }
+} else {
+  warn('没配 meta.image —— 微信 / QQ / 飞书分享链接时没有封面图');
+}
+
+const headBody = indent(G.headHTML({ icons: icons, meta: meta }), 4);
+const rHead = replaceRegion('index.html', 'head:start', 'head:end', headBody);
+if (!rHead.ok) { fail('index.html：' + rHead.why); }
+
 /* ---------------- 输出 ---------------- */
 console.log('games.json：' + ds.total + ' 款游戏，' + ds.categories.length + ' 个分类');
 ds.categories.forEach(c => console.log('  · ' + c.name + '（' + c.key + '）：' + c.count + ' 款'));
+
+const iconLinks = [icons.ico, icons.svg].filter(Boolean).length +
+  (icons.png ? icons.png.length : 0) + (icons.appleTouch ? 1 : 0);
+console.log('\n图标 / 分享卡片：' + iconLinks + ' 个 <link>' +
+  (meta.image ? '，封面 ' + meta.image : '，没有分享封面'));
 
 const touched = [];
 if (rHome.changed) { touched.push('proF/主页.html（卡片）'); }
 if (rNav.changed) { touched.push('index.html（侧栏入口）'); }
 if (rNumHome.changed) { touched.push('proF/主页.html（顶部总数）'); }
 if (rNumIndex.changed) { touched.push('index.html（侧栏总数）'); }
+if (rHead.changed) { touched.push('index.html（图标 / 分享卡片）'); }
 if (CHECK_ONLY) {
   if (touched.length) { console.log('\n需要同步：' + touched.join('、') + '（去掉 --check 可写入）'); }
-  else { console.log('\n✓ 静态兜底与数量已和 games.json 一致'); }
+  else { console.log('\n✓ 卡片 / 侧栏 / 数量 / 图标都已和 games.json 一致'); }
 } else if (touched.length) {
   console.log('\n已同步：' + touched.join('、'));
 } else {
-  console.log('\n✓ 静态兜底与数量已和 games.json 一致，无需改动');
+  console.log('\n✓ 卡片 / 侧栏 / 数量 / 图标都已和 games.json 一致，无需改动');
 }
 
 if (warnings.length) {

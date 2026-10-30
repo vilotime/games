@@ -1,6 +1,27 @@
 {
   "schema": "yc-games/2",
   "site": {"name":"叶初小游戏","dir":"proF/","homepage":"proF/主页.html","repo":"https://github.com/vilotime/vilotime.github.io","pagesUrl":"https://vilotime.github.io/"},
+
+  "icons": {
+    "ico": "favicon.ico",
+    "svg": "assets/favicon.svg",
+    "png": [
+      {"src":"assets/icon-16.png","sizes":"16x16"},
+      {"src":"assets/icon-32.png","sizes":"32x32"},
+      {"src":"assets/icon-192.png","sizes":"192x192"},
+      {"src":"assets/icon-512.png","sizes":"512x512"}
+    ],
+    "appleTouch": {"src":"assets/apple-touch-icon.png","sizes":"180x180"}
+  },
+
+  "meta": {
+    "title": "叶初小游戏",
+    "description": "叶初小游戏 —— 绿茵足球、桌上足球、点球大师、CS 平面战场、星海突击、方块风暴、叶初的鱼塘、CS 观战等小游戏合集",
+    "siteName": "叶初小游戏",
+    "image": "assets/share-square.png",
+    "imageAlt": "叶初小游戏 · 封面"
+  },
+
   "categories": [
     {
       "key": "adventure",

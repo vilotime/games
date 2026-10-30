@@ -193,6 +193,62 @@
     return out.join('\n');
   }
 
+  /* ---------------- head 里的图标 / 分享卡片标记 ----------------
+   * 配置在 games.json 的 icons / meta 两段（见 docs/cover-and-icons.md）。
+   * 这里只负责拼字符串：真实尺寸、绝对地址、twitter:card 由 tools/export-games.js 先算好再传进来。
+   *
+   *   icons: { ico, svg, png: [{src, sizes}], appleTouch: {src, sizes} }
+   *   meta:  { title, description, siteName, url, image, imageWidth, imageHeight, imageType, imageAlt, twitterCard }
+   */
+  function headHTML(opts) {
+    var o = opts || {};
+    var icons = o.icons || {};
+    var meta = o.meta || {};
+    var out = [];
+
+    /* 文本信息：<title> / description 也由 json 生成，省得两处各写一遍 */
+    if (meta.title) { out.push('<title>' + esc(meta.title) + '</title>'); }
+    if (meta.description) { out.push('<meta name="description" content="' + esc(meta.description) + '">'); }
+
+    /* 站点图标：.ico 排在最前面是故意的 —— 它是兜底，谁都能读；后面依次是更清晰的选择 */
+    if (icons.ico) { out.push('<link rel="icon" href="' + esc(icons.ico) + '" sizes="any">'); }
+    if (icons.svg) { out.push('<link rel="icon" type="image/svg+xml" href="' + esc(icons.svg) + '">'); }
+    var pngs = icons.png || [];
+    for (var i = 0; i < pngs.length; i++) {
+      out.push('<link rel="icon" type="image/png" sizes="' + esc(pngs[i].sizes) + '" href="' + esc(pngs[i].src) + '">');
+    }
+    if (icons.appleTouch && icons.appleTouch.src) {
+      out.push('<link rel="apple-touch-icon" sizes="' + esc(icons.appleTouch.sizes || '180x180') +
+        '" href="' + esc(icons.appleTouch.src) + '">');
+    }
+
+    /* 分享卡片：微信 / QQ 认正方形，Twitter 认 summary 系列；宽高都按图片实际值写 */
+    if (meta.title) {
+      out.push('<meta property="og:type" content="website">');
+      if (meta.siteName) { out.push('<meta property="og:site_name" content="' + esc(meta.siteName) + '">'); }
+      out.push('<meta property="og:title" content="' + esc(meta.title) + '">');
+      if (meta.description) { out.push('<meta property="og:description" content="' + esc(meta.description) + '">'); }
+      if (meta.url) { out.push('<meta property="og:url" content="' + esc(meta.url) + '">'); }
+      if (meta.image) {
+        out.push('<meta property="og:image" content="' + esc(meta.image) + '">');
+        if (meta.imageWidth) { out.push('<meta property="og:image:width" content="' + esc(meta.imageWidth) + '">'); }
+        if (meta.imageHeight) { out.push('<meta property="og:image:height" content="' + esc(meta.imageHeight) + '">'); }
+        if (meta.imageType) { out.push('<meta property="og:image:type" content="' + esc(meta.imageType) + '">'); }
+        if (meta.imageAlt) { out.push('<meta property="og:image:alt" content="' + esc(meta.imageAlt) + '">'); }
+        out.push('<meta itemprop="image" content="' + esc(meta.image) + '">');
+      }
+      if (meta.twitterCard) {
+        out.push('<meta name="twitter:card" content="' + esc(meta.twitterCard) + '">');
+        out.push('<meta name="twitter:title" content="' + esc(meta.title) + '">');
+        if (meta.description) { out.push('<meta name="twitter:description" content="' + esc(meta.description) + '">'); }
+        if (meta.image) { out.push('<meta name="twitter:image" content="' + esc(meta.image) + '">'); }
+        if (meta.image && meta.imageAlt) { out.push('<meta name="twitter:image:alt" content="' + esc(meta.imageAlt) + '">'); }
+      }
+    }
+
+    return out.join('\n');
+  }
+
   function setHTML(el, html) {
     if (!el) { return; }
     if (el.innerHTML !== html) { el.innerHTML = html; }
@@ -270,6 +326,7 @@
     sectionHTML: sectionHTML,
     homeHTML: homeHTML,
     navHTML: navHTML,
+    headHTML: headHTML,
     renderHome: renderHome,
     renderNav: renderNav
   };

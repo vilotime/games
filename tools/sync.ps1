@@ -1,10 +1,11 @@
 ﻿<#
 .SYNOPSIS
-    一键同步「叶初小游戏」的游戏清单（games.json → 主页卡片 / 侧栏入口 / 各处数量）
+    一键同步「叶初小游戏」的游戏清单与站点信息（games.json → 主页卡片 / 侧栏入口 / 各处数量 / head 里的图标与分享卡片）
 
 .DESCRIPTION
-    改了 games.json 之后跑一次，把 HTML 里的静态兜底（没网 / 禁用 JS 时用的副本）对齐 json。
-    底层就是 node tools/export-games.js，这里负责：找 node、先校验 json、跑完把结果留住、报错看得懂。
+    改了 games.json 之后跑一次，把 HTML 里的静态兜底（没网 / 禁用 JS 时用的副本）和 head 里的
+    图标、标题、分享卡片对齐 json。底层就是 node tools/export-games.js，这里负责：找 node、
+    先校验 json、跑完把结果留住、报错看得懂。
 
 .PARAMETER Check
     只检查有没有不一致，不写文件。
