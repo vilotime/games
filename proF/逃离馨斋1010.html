@@ -1252,7 +1252,12 @@
   }
 
   function updateCorridor(dt) {
-    /* 推门读条期间锁住移动（计时在下面的交互块里，别在这儿重复累加） */
+    /* 推门读条期间锁住移动（计时在下面的交互块里，别在这儿重复累加）。
+       但眩晕时必须放行 movePlayer：眩晕计时就是在它里面递减的，
+       否则"踩着袜子还能稳站门口"时眩晕会被冻住，读条走完人也照样站着。 */
+    if (player.stun > 0) {
+      doorT = 0; doorBusy = false; doorRoom = null;
+    }
     if (!doorBusy) { movePlayer(dt); }
     rescuePlayer();          /* 兜底：被挤进不可走区域就拉回来 */
     updateParts(dt);
@@ -1276,8 +1281,10 @@
       }
     }
 
-    /* 交互：进宿舍要按住 F 在原地推门 0.5 秒，一松开就归零重来 */
-    curTarget = findTarget();
+    /* 交互：进宿舍要按住 F 在原地推门 0.5 秒，一松开就归零重来。
+       眩晕期间（踩到臭袜子）不给提示、也不许读条：curTarget 直接置空，
+       下面的推门 / 长按整段被挡掉，doorT、holdT 同时归零。 */
+    curTarget = player.stun > 0 ? null : findTarget();
     if (!keys['f']) { fLock = false; }
     if (curTarget && curTarget.type === 'room' && keys['f'] && !fLock) {
       if (doorRoom !== curTarget.room) { doorT = 0; doorRoom = curTarget.room; }

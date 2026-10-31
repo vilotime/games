@@ -15,7 +15,7 @@
   .chip .bar i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #ff5d5d, #ffb347); }
   #stChip .bar i { background: linear-gradient(90deg, #2f7bf6, #9fe0ff); }
   #bpChip .bar i { background: linear-gradient(90deg, #b3243a, #ff5d5d); }
-  #battChip b { color: #7ef0c0; }
+  #epicChip b { color: #7ef0c0; }
 
   /* 失败 / 送医结算：整屏血红 */
   #over.blood { background: rgba(96,0,10,.88); }
@@ -45,20 +45,22 @@
       </div>
       <div>
         <div class="chip" id="bpChip">血压<span class="bar"><i id="bpBar"></i></span></div>
-        <div class="chip" id="battChip">手电 <b id="battNum">100</b>%</div>
+        <div class="chip" id="epicChip">电竞 <b id="epicNum">0/1</b></div>
         <div class="chip" id="clock">03:00</div>
       </div>
     </div>
 
     <div id="banner"></div>
-    <div id="hint">WASD 走 · Shift 冲刺 · J 手电 · F 推门查寝 · K 抓人 · L 咆哮 · 按住 E 喝水</div>
+    <div id="hint">WASD 走 · Shift 冲刺 · F 推门查寝 · K 抓人 · L 咆哮 · 按住 E 喝水</div>
 
     <div class="overlay" id="intro">
       <div class="panel">
         <h1>宿舍之夜：宿管风云</h1>
         <p>天亮前巡逻馨斋走廊，抓住违纪学生，纪律值 ≥ <span id="introGoal">150</span> 就拿全勤奖。</p>
+        <p>注意：那个<b>电竞狂人</b>必须揪到一次，否则纪律值再高也不算全勤。</p>
+        <p>走廊里的<b>老六</b>会主动贴到你跟前扔臭袜子，被扔中要眩晕 3 秒 —— 看它冲过来就按 <kbd>K</kbd> 抓住，或者按住 <kbd>Shift</kbd> 冲开。</p>
         <p>门口按 <kbd>F</kbd> 推门进屋查寝，走到桌边按 <kbd>K</kbd> 把人揪起来；屋里的怪东西走进去就会撞见，门口的 <kbd>F</kbd> 是出门。</p>
-        <p><kbd>WASD</kbd> 走 <kbd>Shift</kbd> 冲刺 <kbd>J</kbd> 手电 <kbd>F</kbd> 推门查寝 <kbd>K</kbd> 抓人 <kbd>L</kbd> 死亡咆哮 按住 <kbd>E</kbd> 喝枸杞水</p>
+        <p><kbd>WASD</kbd> 走 <kbd>Shift</kbd> 冲刺 <kbd>F</kbd> 推门查寝 <kbd>K</kbd> 抓人 <kbd>L</kbd> 死亡咆哮 按住 <kbd>E</kbd> 喝枸杞水</p>
         <button class="btn" id="startBtn" type="button">开始游戏</button>
       </div>
     </div>
@@ -93,7 +95,7 @@
   var G = 16;                      /* 一个网格单位 = 16 世界像素 */
   var GX0 = 4, GYTOP = 85;         /* 网格 → 世界像素的翻转原点 */
   var W = 900, H = 560;            /* 逻辑视口尺寸 */
-  var FOG_R = 210;                 /* 视野半径：开不开手电都一样，只有光锥额外照亮 */
+  var FOG_R = 210;                 /* 视野半径：雾外全黑 · 屋里看不到走廊 */
 
   /* 一局 3 分钟，天亮收工 */
   var TIME_LIMIT = 180;
@@ -108,13 +110,10 @@
   var STAM_DRINK = 60;             /* 一杯枸杞水回的体力 */
   var DRINK_TIME = 1.5;
 
-  var BATT_DRAIN = 6;              /* 手电每秒耗电 */
-  var BATT_CHARGE = 3;             /* 关灯每秒回电（视野靠手电，回血要快一点） */
-  var LIGHT_RANGE = 280;           /* 光锥射程（极远） */
-  var LIGHT_HALF = 0.55;           /* 光锥半角 */
-
   var CATCH_RANGE = 48;            /* 抓捕判定半径 */
   var DOOR_RANGE = 44;             /* 查寝判定半径 */
+  var ENTER_LOCK = 0.5;            /* 刚进屋这段时间里，站在门口按 F 不出门 */
+  var REENTER_LOCK = 0.5;          /* 刚出门这段时间里，站在门口按 F 不再进门 */
 
   var FEAR_R = 205;                /* 高跟鞋威压半径 */
   var FEAR_R_RUN = 330;            /* 冲刺时脚步更响 */
@@ -125,6 +124,15 @@
   var RAGE_SLOW = 0.45;
 
   var STUN_TIME = 3;               /* 踩袜子眩晕 */
+
+  /* 老六（ghost）的「主动贴脸」设定：看到你就大概率冲过来，贴身把袜子放你脚下 */
+  var GHOST_CHARGE_R = 430;        /* 进入贴脸模式的距离 */
+  var GHOST_CHARGE_CHANCE = 0.85;  /* 满足条件时真的冲过来的几率（很大） */
+  var GHOST_CHARGE_TIME = 3.2;     /* 一次贴脸最多冲这么久，扑空就放弃 */
+  var GHOST_CHASE_MUL = 1.15;      /* 贴脸时比平时走路快一点：走路甩不掉，冲刺可以 */
+  var GHOST_SOCK_R = 38;           /* 贴到这么近就扔袜子 */
+  var GHOST_CD_MIN = 6;            /* 两次贴脸之间的冷却 */
+  var GHOST_CD_MAX = 10;
   var SOCK_DMG = 20;
   var SOCK_LIFE = 24;
 
@@ -137,7 +145,7 @@
     cat:    { name: '夜猫子',   pts: 10, color: '#5f86c9', speed: 95,  flee: 168, r: 11 },
     toilet: { name: '厕所战神', pts: 20, color: '#9b8fb8', speed: 0,   flee: 0,   r: 11 },
     epic:   { name: '电竞狂人', pts: 30, color: '#b06cf0', speed: 0,   flee: 0,   r: 11 },
-    ghost:  { name: '老六',     pts: 50, color: '#f0725d', speed: 150, flee: 236, r: 11 }
+    ghost:  { name: '老六',     pts: 15, color: '#f0725d', speed: 150, flee: 236, r: 11 }
   };
 
   /* ============================================================
@@ -179,7 +187,7 @@
   var elScoreNum = document.getElementById('scoreNum');
   var elStBar = document.getElementById('stBar');
   var elBpBar = document.getElementById('bpBar');
-  var elBattNum = document.getElementById('battNum');
+  var elEpicNum = document.getElementById('epicNum');
   var elClock = document.getElementById('clock');
 
   /* 达标线只写在一个地方：界面上的两个数字都跟着 TARGET_SCORE 走 */
@@ -442,7 +450,7 @@
     return false;
   }
 
-  /* 射线打墙：手电光锥与视线都用它裁剪 */
+  /* 射线打墙：视线遮挡用 */
   function rayDist(ox, oy, dx, dy, maxT) {
     var best = maxT, w = WALL_HALF, i, b, t1, t2, tmin, tmax, x0, x1, y0, y1;
     for (i = 0; i < wallBands.length; i++) {
@@ -548,7 +556,7 @@
   var roomSc = null;               /* 进了哪间宿舍 */
   var last = 0, tNow = 0, bannerT = 0;
   var timeLeft = TIME_LIMIT;
-  var score = 0, socksHit = 0, caught = 0;
+  var score = 0, socksHit = 0, caught = 0, epicCaught = 0;
 
   var shake = 0, flash = 0, flashCol = '255,60,60';
   var camX = 0, camY = 0;
@@ -558,15 +566,14 @@
     x: 0, y: 0, r: 10, fx: 0, fy: 1,
     st: 100, stMax: 100,        /* 体力 */
     bp: 0,                      /* 血压 */
-    batt: 100,                  /* 手电电量 */
     stun: 0,                    /* 踩袜子眩晕 */
     drink: 0,                   /* 喝水进度（>0 = 正在喝） */
     shout: 0,                   /* 破口大骂强制停顿 */
     rageCd: 0, slowT: 0,
     tired: false, stepAcc: 0
   };
-  var torch = false;
   var curTarget = null;           /* 当前站在哪扇门前 */
+  var exitLock = 0;               /* 出门后的再进门冷却（秒） */
 
   var students = [], socks = [], parts = [], pops = [];
   var spawnT = { cat: 0, ghost: 0, toilet: 0 };
@@ -576,7 +583,6 @@
   var plotUsed = [];              /* 本局已经用过的剧情（每条只出现一次） */
   var drinkLock = false;          /* 喝完一口 / 被打断后要先松手 */
   var popup = null;              /* 屏幕下方的剧情卡片 */
-  var battLow = false;
 
   /* ============================================================
      8. 通用小工具
@@ -595,16 +601,9 @@
     elScoreNum.textContent = String(score);
     elStBar.style.width = clamp(player.st / player.stMax * 100, 0, 100) + '%';
     elBpBar.style.width = clamp(player.bp, 0, 100) + '%';
-    var batt = Math.round(player.batt);
-    elBattNum.textContent = String(batt);
-    /* 电量低于 15% 才变暖橙、回到 25% 才恢复：不会在阈值上下闪来闪去 */
-    if (!battLow && batt <= 15) {
-      battLow = true;
-      elBattNum.style.color = '#ffb347';
-    } else if (battLow && batt >= 25) {
-      battLow = false;
-      elBattNum.style.color = '';
-    }
+    /* 硬性通关条件：电竞狂人抓到一次才算数 */
+    elEpicNum.textContent = epicCaught + '/1';
+    elEpicNum.style.color = epicCaught > 0 ? '#7ef0c0' : '';
     elClock.textContent = fmtTime(timeLeft);
   }
 
@@ -722,8 +721,9 @@
     students.push({
       type: type, x: spot.x, y: spot.y, r: T.r,
       tx: spot.x, ty: spot.y, wanderT: 0, stuck: 0,
-      stunT: 0, slowT: 0, panicT: 0, lightT: 0, lit: false,
+      stunT: 0, slowT: 0, panicT: 0,
       discoverT: 0, sockT: 2, fear: 0, smokeT: rnd(0, 0.4),
+      charge: 0, chargeCd: rnd(1.5, 4),      /* 老六专用：贴脸状态 / 冷却 */
       dead: false
     });
   }
@@ -808,6 +808,40 @@
         continue;
       }
 
+      /* 老六：主动贴脸 —— 看到你就大概率冲过来，贴身把臭袜子放你脚下（踩中就眩晕 3 秒）。
+         这一段要在逃跑判断之前，贴脸期间整段接管移动。 */
+      if (s.type === 'ghost' && !playerSeen && s.charge > 0) {
+        s.charge = 0;                     /* 你进屋了，它就放弃，出来大概率再来 */
+      }
+      if (s.type === 'ghost' && playerSeen) {
+        if (s.chargeCd > 0) { s.chargeCd -= dt; }
+
+        if (s.charge > 0) {
+          s.charge -= dt;
+          var gx = player.x - s.x, gy = player.y - s.y;
+          var gl = Math.sqrt(gx * gx + gy * gy);
+          if (gl < 1) { gl = 1; }
+          if (s.stunT <= 0) { stepStudent(s, gx / gl, gy / gl, T.speed * GHOST_CHASE_MUL, dt); }
+          if (gl < GHOST_SOCK_R) {
+            /* 贴到脸上了：袜子直接落在你脚下（tight），下一帧就会踩中。不给任何文字提示。 */
+            dropSock(player.x, player.y, true);
+            s.charge = 0;
+            s.chargeCd = rnd(GHOST_CD_MIN, GHOST_CD_MAX);
+            s.sockT = 2;                  /* 逃跑时那套 2 秒一个袜子也重置，免得连着两双 */
+            s.fear = 0.8;                 /* 扔完先退开，别一直黏在身上 */
+          }
+          continue;                       /* 贴脸期间不走散步 / 逃跑那两套 */
+        }
+
+        if (s.chargeCd <= 0 && s.stunT <= 0 &&
+            dist2(s.x, s.y, player.x, player.y) < GHOST_CHARGE_R * GHOST_CHARGE_R &&
+            Math.random() < GHOST_CHARGE_CHANCE) {
+          s.charge = GHOST_CHARGE_TIME;
+          s.chargeCd = rnd(GHOST_CD_MIN, GHOST_CD_MAX);
+          /* 不给文字提示：头顶的红叹号 + 脚下绿环就是提示 */
+        }
+      }
+
       var feared = playerSeen &&
         ((dist2(s.x, s.y, player.x, player.y) < fleeR * fleeR) || s.panicT > 0);
       if (feared) { s.fear = 0.4; }
@@ -851,9 +885,11 @@
   /* ============================================================
      10. 臭袜子
      ============================================================ */
-  function dropSock(x, y) {
-    /* 扔偏一点：追着老六跑的时候还能左右躲，不至于一脚一个 */
-    var sx = x + rnd(-26, 26), sy = y + rnd(-26, 26);
+  function dropSock(x, y, tight) {
+    /* 平时扔偏一点：追着老六跑的时候还能左右躲，不至于一脚一个；
+       tight = true 是老六贴脸放下的那种，不平移，直接落在玩家脚下 */
+    var sx = x, sy = y;
+    if (!tight) { sx = x + rnd(-26, 26); sy = y + rnd(-26, 26); }
     if (!circleOk(sx, sy, 8)) { sx = x; sy = y; }
     if (socks.length > 24) { socks.shift(); }
     socks.push({ x: sx, y: sy, life: SOCK_LIFE, t: 0 });
@@ -981,43 +1017,6 @@
     }
   }
 
-  /* 手电：耗电 + 光锥持续照射 1 秒定身 1 秒 */
-  function updateTorch(dt) {
-    if (torch) {
-      player.batt -= BATT_DRAIN * dt;
-      if (player.batt <= 0) {
-        player.batt = 0; torch = false;
-        banner('手电没电了', 1100);
-      }
-    } else if (player.batt < 100) {
-      player.batt = Math.min(100, player.batt + BATT_CHARGE * dt);
-    }
-
-    if (inRoom()) { return; }        /* 屋里没有走廊学生，照不到人 */
-
-    var face = Math.atan2(player.fy, player.fx);
-    for (var i = 0; i < students.length; i++) {
-      var s = students[i];
-      s.lit = false;
-      if (!torch || player.batt <= 0) { s.lightT = 0; continue; }
-      var dx = s.x - player.x, dy = s.y - player.y;
-      var d = Math.sqrt(dx * dx + dy * dy);
-      if (d > LIGHT_RANGE) { s.lightT = 0; continue; }
-      var diff = Math.atan2(dy, dx) - face;
-      while (diff > Math.PI) { diff -= Math.PI * 2; }
-      while (diff < -Math.PI) { diff += Math.PI * 2; }
-      if (Math.abs(diff) > LIGHT_HALF) { s.lightT = 0; continue; }
-      if (!losClear(player.x, player.y, s.x, s.y)) { s.lightT = 0; continue; }
-      s.lit = true;
-      s.lightT += dt;
-      if (s.lightT >= 1) {
-        s.lightT = 0;
-        s.stunT = Math.max(s.stunT, 1);
-        popFx(s.x, s.y - s.r - 8, '定身', '#ffd166');
-      }
-    }
-  }
-
   /* 身边最近的可抓学生（轻按 K 用） */
   function nearestStudent(range) {
     var best = null, bd = range * range, i, s, d;
@@ -1068,7 +1067,7 @@
   }
 
   /* ============================================================
-     12. 查寝 / 咆哮 / 喝水 / 手电开关
+     12. 查寝 / 咆哮 / 喝水
      ============================================================ */
   function findDoor() {
     var best = null, bd = DOOR_RANGE * DOOR_RANGE, i, rm, d;
@@ -1084,21 +1083,26 @@
   function searchDoor() {
     if (player.stun > 0 || player.shout > 0 || player.drink > 0) { return; }
 
-    /* 已经进屋了：F 只负责从门口出去 */
+    /* 已经进屋了：F 只负责从门口出去。 */
     if (inRoom()) {
       var rmIn = roomSc.room;
-      if (dist2(player.x, player.y, ROOM_DOOR.x, ROOM_DOOR.y) < 52 * 52 && roomSc.enterT > 0.5) {
+      if (dist2(player.x, player.y, ROOM_DOOR.x, ROOM_DOOR.y) < 52 * 52) {
+        /* 刚进屋的 ENTER_LOCK 秒内不放行：这么短就不提示了，免得糊屏幕 */
+        if (roomSc.enterT < ENTER_LOCK) { return; }
         leaveRoom();
         return;
       }
       if (rmIn.epic) { banner('走到桌边按 K 抓住他', 1100); return; }
-      banner('屋里没人违纪，走到门口按 F 出去', 1000);
+      /* 和屋外「站到宿舍门口再按 F」同一个说法，不再说“没人违纪” */
+      banner('站到门口再按 F 出去', 1000);
       return;
     }
 
     /* 走廊里：站在门口推门查寝 */
     var rm = findDoor();
     if (!rm) { banner('站到宿舍门口再按 F', 800); return; }
+    /* 刚出门的 REENTER_LOCK 秒内不放行，同样不提示（不在门口时仍然是上面那句） */
+    if (exitLock > 0) { return; }
     ringFx(rm.door.x, rm.door.y, 'rgba(120,180,255,.9)', 6, 52, 0.4);
     shake = Math.max(shake, 4);
     enterRoom(rm);
@@ -1207,6 +1211,7 @@
     scene = 'corridor';
     roomSc = null;
     camX = player.x; camY = player.y;
+    exitLock = REENTER_LOCK;        /* 出门这一小段内按 F 不会再把自己推进去 */
     banner('回到走廊', 700);
   }
 
@@ -1217,6 +1222,7 @@
     epicT = 25;
     score += TYPES.epic.pts;
     caught++;
+    epicCaught++;                    /* 硬性通关条件：抓到一次才算数 */
     shake = Math.max(shake, 9);
     flash = 0.32; flashCol = '176,108,240';
     burst(EPIC_SEAT.x, EPIC_SEAT.y, 26, TYPES.epic.color);
@@ -1250,12 +1256,6 @@
     banner('按住 E 喝枸杞水 · 松手就白喝', 900);
   }
 
-  function toggleTorch() {
-    if (player.stun > 0 || player.shout > 0 || player.drink > 0) { return; }
-    if (!torch && player.batt <= 0) { banner('手电没电了', 800); return; }
-    torch = !torch;
-  }
-
   /* ============================================================
      13. 血压 / 刷新 / 胜负
      ============================================================ */
@@ -1270,7 +1270,7 @@
       s = students[i];
       if (s.dead || s.type === 'toilet') { continue; }   /* 躲在厕所的看不见 */
       var d = dist2(s.x, s.y, player.x, player.y);
-      var seen = s.lit || (d < 250 * 250 && losClear(player.x, player.y, s.x, s.y));
+      var seen = d < 250 * 250 && losClear(player.x, player.y, s.x, s.y);
       if (seen) { s.discoverT += dt; } else { s.discoverT = Math.max(0, s.discoverT - dt * 1.6); }
       if (s.discoverT > BP_GRACE) { exposed = true; }
     }
@@ -1330,14 +1330,18 @@
     if (state !== 'playing') { return; }
     state = 'over';
     player.drink = 0; player.stun = 0; player.shout = 0;
-    var win = (kind === 'time' && score >= TARGET_SCORE);
+    /* 通关 = 到点没送医 + 纪律值达标 + 至少揪到一次电竞狂人 */
+    var scored = score >= TARGET_SCORE;
+    var win = (kind === 'time' && scored && epicCaught > 0);
     if (kind === 'sock') { elOverTitle.textContent = '连夜送医'; }
     else if (win) { elOverTitle.textContent = '全勤奖到手'; }
+    else if (scored && epicCaught === 0) { elOverTitle.textContent = '漏了电竞狂人'; }
     else { elOverTitle.textContent = '早会挨骂'; }
     if (win) { elOver.classList.remove('blood'); flash = 0.35; flashCol = '255,209,102'; }
     else { elOver.classList.add('blood'); flash = 0.6; flashCol = '255,40,40'; }
     elOverStats.textContent = '纪律值 ' + score + ' / 目标 ' + TARGET_SCORE +
-      ' · 抓到 ' + caught + ' 人 · 踩袜子 ' + socksHit + ' 次';
+      ' · 抓到 ' + caught + ' 人 · 踩袜子 ' + socksHit + ' 次' +
+      ' · 电竞狂人 ' + (epicCaught > 0 ? '已抓 ' + epicCaught + ' 次' : '没抓着');
     elOver.classList.remove('hidden');
   }
 
@@ -1350,6 +1354,7 @@
     if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) { elBanner.classList.remove('show'); } }
     if (shake > 0) { shake *= Math.pow(0.02, dt); if (shake < 0.4) { shake = 0; } }
     if (flash > 0) { flash -= dt; if (flash < 0) { flash = 0; } }
+    if (exitLock > 0) { exitLock -= dt; if (exitLock < 0) { exitLock = 0; } }
 
     timeLeft -= dt;
     if (timeLeft <= 0) {
@@ -1373,7 +1378,6 @@
     }
 
     if (!inRoom()) {
-      updateTorch(dt);     /* 手电与定身 */
       updateSocks(dt);     /* 臭袜子 */
       updateBP(dt);        /* 血压 */
       updateEpic(dt);      /* 电竞狂人换房 */
@@ -1390,8 +1394,7 @@
       }
     } else {
       curTarget = null;
-      roomSc.enterT += dt;   /* 刚进屋的 0.5 秒内不响应门口的 F，免得一按就出门 */
-      updateTorch(dt);       /* 屋里也照样耗电 / 回电 */
+      roomSc.enterT += dt;   /* 进屋计时：头 ENTER_LOCK 秒内门口按 F 不放行，浮字也不显示 */
       checkPlotTouch();      /* 走到那堆东西旁边就撞见 */
     }
 
@@ -1812,7 +1815,7 @@
     ctx.restore();
   }
 
-  /* 宿管阿姨：蓝制服 + 红袖章 + 手电 */
+  /* 宿管阿姨：蓝制服 + 红袖章 */
   function drawPlayer() {
     shadowEllipse(player.x, player.y + 7, player.r);
 
@@ -1833,7 +1836,7 @@
     ctx.beginPath();
     ctx.moveTo(player.x, player.y);
     ctx.lineTo(player.x + player.fx * (player.r + 8), player.y + player.fy * (player.r + 8));
-    ctx.strokeStyle = torch && player.batt > 0 ? 'rgba(255,240,190,.95)' : 'rgba(159,224,255,.75)';
+    ctx.strokeStyle = 'rgba(159,224,255,.75)';
     ctx.lineWidth = 2;
     ctx.stroke();
 
@@ -1900,17 +1903,21 @@
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    if (s.fear > 0 && s.type !== 'toilet') {
+    if (s.charge > 0) {
+      /* 贴脸状态：红色叹号，提醒你赶紧按 K 抓它、或者 Shift 冲开 */
+      ctx.fillStyle = '#ff5d5d';
+      ctx.font = '900 18px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillText('!', x, y - s.r - 9);
+      /* 脚下的袜子提示圈，让人看得懂它要干嘛 */
+      ctx.beginPath();
+      ctx.arc(x, y, s.r + 4, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(143,191,106,.85)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    } else if (s.fear > 0 && s.type !== 'toilet') {
       ctx.fillStyle = '#ffd166';
       ctx.font = '700 16px "PingFang SC","Microsoft YaHei",sans-serif';
       ctx.fillText('!', x, y - s.r - 8);
-    }
-    if (s.lit) {
-      ctx.beginPath();
-      ctx.arc(x, y, s.r + 3, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(255,238,170,.85)';
-      ctx.lineWidth = 2;
-      ctx.stroke();
     }
     if (s.stunT > 0) {
       ctx.fillStyle = 'rgba(200,230,255,.92)';
@@ -1943,55 +1950,6 @@
       ctx.stroke();
       ctx.restore();
     }
-  }
-
-  /* 光锥的填充（扇形路径已经由 beamShape 画好） */
-  function fillBeam(ox, oy) {
-    var g = ctx.createRadialGradient(ox, oy, 10, ox, oy, LIGHT_RANGE);
-    g.addColorStop(0, 'rgba(255,246,205,.42)');
-    g.addColorStop(0.55, 'rgba(255,235,165,.20)');
-    g.addColorStop(1, 'rgba(255,230,150,0)');
-    ctx.fillStyle = g;
-    ctx.fill();
-  }
-
-  /* 扇形路径：distFn 决定每条射线被什么挡住 */
-  function beamShape(ox, oy, face, distFn) {
-    var HALF = LIGHT_HALF, N = 22, i, a, t;
-    ctx.beginPath();
-    ctx.moveTo(ox, oy);
-    for (i = 0; i <= N; i++) {
-      a = face - HALF + (2 * HALF) * i / N;
-      t = distFn(ox, oy, Math.cos(a), Math.sin(a), LIGHT_RANGE);
-      ctx.lineTo(ox + Math.cos(a) * t, oy + Math.sin(a) * t);
-    }
-    ctx.closePath();
-  }
-
-  /* 宿舍内部：射线打到房间的墙上就停（房间是个矩形） */
-  function roomRayDist(ox, oy, dx, dy, maxT) {
-    var B = ROOM_BOX, t = maxT;
-    if (dx > 0) { t = Math.min(t, (B.x1 - ox) / dx); }
-    else if (dx < 0) { t = Math.min(t, (B.x0 - ox) / dx); }
-    if (dy > 0) { t = Math.min(t, (B.y1 - oy) / dy); }
-    else if (dy < 0) { t = Math.min(t, (B.y0 - oy) / dy); }
-    if (t < 0) { t = 0; }
-    return Math.min(maxT, t);
-  }
-
-  /* 走廊里的手电光锥：画在雾后面，按走廊墙裁剪 */
-  function drawBeam() {
-    if (!torch || player.batt <= 0) { return; }
-    var ox = player.x - camL, oy = player.y - camT;
-    beamShape(ox, oy, Math.atan2(player.fy, player.fx), rayDist);
-    fillBeam(ox, oy);
-  }
-
-  /* 宿舍里的手电光锥：同一套效果，只是被房间的墙挡住 */
-  function drawRoomBeam() {
-    if (!torch || player.batt <= 0) { return; }
-    beamShape(player.x, player.y, Math.atan2(player.fy, player.fx), roomRayDist);
-    fillBeam(player.x, player.y);
   }
 
   /* 操作提示：一至两条，压在你头顶 */
@@ -2262,7 +2220,8 @@
     var psx = player.x - camL, psy = player.y - camT;
     var list = [];
     if (state === 'playing') {
-      if (curTarget) {
+      /* 刚出门那一小段不显示门口的 F 提示：提示了也进不去 */
+      if (curTarget && exitLock <= 0) {
         list.push({
           t: 'F 推门查寝 ' + roomLabel(curTarget),
           c: '#ffd166'
@@ -2358,13 +2317,10 @@
 
     ctx.restore();
 
-    /* 夜色迷雾：视野恒定，开灯也不扩大；照明只靠光锥 */
+    /* 夜色迷雾：视野半径恒定，出圈全黑 */
     fog(player.x - camL, player.y - camT, FOG_R);
-    /* 夜色一直压着：只有手电光锥能把它照亮 */
     ctx.fillStyle = 'rgba(4,8,16,.20)';
     ctx.fillRect(0, 0, W, H);
-    /* 手电光锥打在雾后面，才是真的照出去 */
-    drawBeam();
     screenFX();
     drawPrompt();
     drawPopup();
@@ -2439,12 +2395,10 @@
     drawPops();
 
     fog(player.x, player.y, FOG_R);
-    /* 夜色一直压着：只有手电光锥能把它照亮 */
     ctx.fillStyle = 'rgba(4,8,16,.20)';
     ctx.fillRect(0, 0, W, H);
     /* 屋里那台电脑一直亮着：光画在雾之后，推门进来就看得见 */
     if (rm.epic) { drawEpicInRoom(); }
-    drawRoomBeam();
     screenFX();
     drawRoomPrompt();
     drawPopup();
@@ -2607,7 +2561,8 @@
     if (rm.epic && dist2(player.x, player.y, EPIC_SEAT.x, EPIC_SEAT.y) < CATCH_RANGE * CATCH_RANGE) {
       list.push({ t: 'K 抓住电竞狂人', c: '#ff8080' });
     }
-    if (dist2(player.x, player.y, ROOM_DOOR.x, ROOM_DOOR.y) < 52 * 52 && roomSc.enterT > 0.5) {
+    /* 门口的「F 推门出去」早于放行时间就别显，免得提示了也出不去 */
+    if (dist2(player.x, player.y, ROOM_DOOR.x, ROOM_DOOR.y) < 52 * 52 && roomSc.enterT >= ENTER_LOCK) {
       list.push({ t: 'F 推门出去', c: '#a7bbd8' });
     }
     drawPrompts(list, player.x, player.y);
@@ -2627,7 +2582,7 @@
         k === 'arrowup' || k === 'arrowdown' || k === 'arrowleft' || k === 'arrowright') {
       e.preventDefault();
     }
-    if (k === 'j' || k === 'f' || k === 'k' || k === 'l' || k === 'e') { e.preventDefault(); }
+    if (k === 'f' || k === 'k' || k === 'l' || k === 'e') { e.preventDefault(); }
 
     if (state !== 'playing') {
       if (fresh && (k === 'enter' || k === ' ')) { start(); }
@@ -2635,8 +2590,7 @@
     }
     if (!fresh) { return; }
 
-    if (k === 'j') { toggleTorch(); }
-    else if (k === 'f') { searchDoor(); }
+    if (k === 'f') { searchDoor(); }
     else if (k === 'l') { doRage(); }
     else if (k === 'e') { startDrink(); }
     else if (k === 'k') { pressK(); }
@@ -2675,7 +2629,7 @@
   function reset() {
     timeLeft = TIME_LIMIT;
     tNow = 0; bannerT = 0; last = 0;
-    score = 0; socksHit = 0; caught = 0;
+    score = 0; socksHit = 0; caught = 0; epicCaught = 0;
     shake = 0; flash = 0; flashCol = '255,60,60';
 
     scene = 'corridor';
@@ -2685,14 +2639,13 @@
     player.fx = 0; player.fy = 1;
     player.st = player.stMax;
     player.bp = 0;
-    player.batt = 100;
     player.stun = 0; player.drink = 0; player.shout = 0;
     drinkLock = false;
     player.rageCd = 0; player.slowT = 0;
     player.tired = false; player.stepAcc = 0;
 
-    torch = false;
     curTarget = null;
+    exitLock = 0;
 
     students.length = 0;
     socks.length = 0;
@@ -2722,7 +2675,7 @@
     state = 'playing';
     elIntro.classList.add('hidden');
     elOver.classList.add('hidden');
-    banner('天亮前抓够 ' + TARGET_SCORE + ' 纪律值', 1500);
+    banner('天亮前抓够 ' + TARGET_SCORE + ' 纪律值 · 还要揪到电竞狂人', 1600);
   }
 
   function draw() {
