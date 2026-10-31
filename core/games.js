@@ -211,7 +211,7 @@
    * 配置在 games.json 的 icons / meta 两段（见 docs/cover-and-icons.md）。
    * 这里只负责拼字符串：真实尺寸、绝对地址、twitter:card 由 tools/export-games.js 先算好再传进来。
    *
-   *   icons: { ico, svg, png: [{src, sizes}], appleTouch: {src, sizes} }
+   *   icons: { ico, icoSizes, svg, png: [{src, sizes}], appleTouch: {src, sizes}, manifest }
    *   meta:  { title, description, siteName, url, image, imageWidth, imageHeight, imageType, imageAlt, twitterCard }
    */
   function headHTML(opts) {
@@ -224,9 +224,14 @@
     if (meta.title) { out.push('<title>' + esc(meta.title) + '</title>'); }
     if (meta.description) { out.push('<meta name="description" content="' + esc(meta.description) + '">'); }
 
-    /* 站点图标：.ico 排在最前面是故意的 —— 它是兜底，谁都能读；后面依次是更清晰的选择 */
-    if (icons.ico) { out.push('<link rel="icon" href="' + esc(icons.ico) + '" sizes="any">'); }
-    if (icons.svg) { out.push('<link rel="icon" type="image/svg+xml" href="' + esc(icons.svg) + '">'); }
+    /* 站点图标：.ico 排在最前面当兜底（搜索引擎、老浏览器只认它）。
+       sizes 必须写 ICO 里**真实包含**的尺寸 —— 写成 any 等于告诉浏览器「任意尺寸都清晰」，
+       高分屏上它会把里面的位图放大显示，标签页图标就糊了；any 只留给 SVG。 */
+    if (icons.ico) {
+      out.push('<link rel="icon" href="' + esc(icons.ico) + '"' +
+        (icons.icoSizes ? ' sizes="' + esc(icons.icoSizes) + '"' : '') + '>');
+    }
+    if (icons.svg) { out.push('<link rel="icon" type="image/svg+xml" href="' + esc(icons.svg) + '" sizes="any">'); }
     var pngs = icons.png || [];
     for (var i = 0; i < pngs.length; i++) {
       out.push('<link rel="icon" type="image/png" sizes="' + esc(pngs[i].sizes) + '" href="' + esc(pngs[i].src) + '">');
@@ -234,6 +239,17 @@
     if (icons.appleTouch && icons.appleTouch.src) {
       out.push('<link rel="apple-touch-icon" sizes="' + esc(icons.appleTouch.sizes || '180x180') +
         '" href="' + esc(icons.appleTouch.src) + '">');
+    }
+    /* Android / 平板「添加到主屏幕」优先用 manifest 里的 192 / 512，比 ICO 清晰 */
+    if (icons.manifest) { out.push('<link rel="manifest" href="' + esc(icons.manifest) + '">'); }
+    /* iOS 不认 manifest 的 display，要「添加到主屏幕」后全屏只能靠这三条 meta */
+    if (icons.manifest) {
+      out.push('<meta name="apple-mobile-web-app-capable" content="yes">');
+      out.push('<meta name="mobile-web-app-capable" content="yes">');
+      out.push('<meta name="apple-mobile-web-app-status-bar-style" content="black">');
+      if (meta.shortName) {
+        out.push('<meta name="apple-mobile-web-app-title" content="' + esc(meta.shortName) + '">');
+      }
     }
 
     /* 分享卡片：微信 / QQ 认正方形，Twitter 认 summary 系列；宽高都按图片实际值写 */

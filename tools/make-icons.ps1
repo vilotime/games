@@ -6,18 +6,22 @@
     为什么需要这个脚本（详见 docs/cover-and-icons.md）：
       · 搜索引擎（Bing / Google）只认根目录的 /favicon.ico，没有就直接退回托管域名的小图标；
       · 现代浏览器优先用 SVG，但爬虫不认 SVG，所以两种都要有；
-      · 多尺寸 PNG 让抓缩略图的爬虫按 sizes 挑，不会把 512 缩成 16 用。
+      · 多尺寸 PNG 让抓缩略图的爬虫按 sizes 挑，不会把 512 缩成 16 用；
+      · ICO 里也塞一张 192：有些系统和浏览器只认 /favicon.ico，会把 48 放大成主屏 / 桌面图标；
+      · apple-touch-icon 要满版不透明（iOS 自己套圆角），带透明圆角反而会被底色填成方图。
 
     跑完会写出：
-      · <仓库根>/favicon.ico                     内含 16 / 32 / 48 三个尺寸（PNG 压缩的 ICO）
+      · <仓库根>/favicon.ico                     内含 16 / 32 / 48 / 192（PNG 压缩的 ICO）
       · <仓库根>/assets/icon-16.png
       · <仓库根>/assets/icon-32.png
       · <仓库根>/assets/icon-192.png
       · <仓库根>/assets/icon-512.png
-      · <仓库根>/assets/apple-touch-icon.png     180x180（iOS 添加到主屏幕）
+      · <仓库根>/assets/apple-touch-icon.png     180x180 满版不透明（iOS 添加到主屏幕）
 
-    然后回读校验：ICO 头是不是真的 ICO、每个 PNG 的实际宽高对不对。
-    改完文件后记得跑一次 tools\sync.cmd（或 node tools/export-games.js）把 index.html 的 head 同步一遍。
+    然后回读校验：ICO 头是不是真的 ICO、ICO 里的尺寸对不对、每个 PNG 的实际宽高对不对、
+    apple-touch-icon 四角是不是不透明。
+    改完文件后记得跑一次 tools\sync.cmd（或 node tools/export-games.js）把 index.html 的 head
+    和 site.webmanifest 同步一遍。
 
     assets/favicon.svg 是手写的矢量版，本脚本不会动它 —— 换图标设计时记得把 SVG 一起换掉，
     否则现代浏览器（用 SVG）和搜索引擎（用 ICO）会显示两个不同的图标。
@@ -65,13 +69,14 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $assetsDir = Join-Path $repoRoot 'assets'
 $icoPath = Join-Path $repoRoot 'favicon.ico'
-$icoSizes = @(16, 32, 48)                 # ICO 里内置的尺寸
+$icoSizes = @(16, 32, 48, 192)            # ICO 里内置的尺寸（大图也塞进去：有些系统只认 /favicon.ico）
 $pngTargets = @(
     @{ File = 'icon-16.png'; Size = 16 },
     @{ File = 'icon-32.png'; Size = 32 },
     @{ File = 'icon-192.png'; Size = 192 },
     @{ File = 'icon-512.png'; Size = 512 },
-    @{ File = 'apple-touch-icon.png'; Size = 180 }
+    # iOS 会自己套圆角遮罩，所以这张要满版不透明，不能带透明圆角
+    @{ File = 'apple-touch-icon.png'; Size = 180; FullBleed = $true }
 )
 $superSample = 4                          # 先放大 4 倍画，再缩回去，小尺寸边缘才不糙
 
@@ -121,19 +126,26 @@ function New-Blank([int]$size) {
 }
 
 # 画一遍「渐变圆角方块 + 白色播放三角」的基准图（4 倍超采样，缩到目标尺寸更干净）
-function New-MarkBitmap([int]$size) {
-    $n = [int]($size * $superSample)
+# -FullBleed：不套圆角、画满整块（给 iOS 主屏图标用，它自己做圆角遮罩）
+function New-MarkBitmap([int]$size, [switch]$FullBleed) {
+    # 满版图直接按目标尺寸画、不缩放：双三次插值会把最外一圈采样成半透明，四角就不透明了
+    $n = if ($FullBleed) { $size } else { [int]($size * $superSample) }
     $big = New-Blank $n
     $g = New-Canvas $big
     try {
         $rect = [System.Drawing.Rectangle]::new(0, 0, $n, $n)
-        $bg = New-RoundRectPath 0 0 $n $n ($n * 0.22)
         $grad = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
             $rect,
             [System.Drawing.ColorTranslator]::FromHtml($Bg1),
             [System.Drawing.ColorTranslator]::FromHtml($Bg2),
             [System.Drawing.Drawing2D.LinearGradientMode]::ForwardDiagonal)
-        $g.FillPath($grad, $bg)
+        if ($FullBleed) {
+            $g.FillRectangle($grad, $rect)
+        } else {
+            $bg = New-RoundRectPath 0 0 $n $n ($n * 0.22)
+            $g.FillPath($grad, $bg)
+            $bg.Dispose()
+        }
 
         # 播放三角：和 assets/favicon.svg 里那条 path 用同一套单位坐标
         $tri = [System.Drawing.Drawing2D.GraphicsPath]::new()
@@ -150,10 +162,12 @@ function New-MarkBitmap([int]$size) {
         $g.FillPath($white, $tri)
         $g.DrawPath($pen, $tri)
 
-        $pen.Dispose(); $white.Dispose(); $tri.Dispose(); $grad.Dispose(); $bg.Dispose()
+        $pen.Dispose(); $white.Dispose(); $tri.Dispose(); $grad.Dispose()
     } finally {
         $g.Dispose()
     }
+
+    if ($n -eq $size) { return $big }     # 满版：已经是目标尺寸，不用再缩放
 
     $out = New-Blank $size
     $g2 = New-Canvas $out
@@ -166,9 +180,10 @@ function New-MarkBitmap([int]$size) {
     return $out
 }
 
-# 用一张照片做图标：居中裁成正方形 → 套圆角 → 缩放到目标尺寸
-function New-PhotoBitmap([int]$size) {
-    $n = [int]($size * $superSample)
+# 用一张照片做图标：居中裁成正方形 → （默认）套圆角 → 缩放到目标尺寸
+function New-PhotoBitmap([int]$size, [switch]$FullBleed) {
+    # 满版图直接按目标尺寸画、不缩放：插值会把最外一圈采样成半透明，四角就不透明了
+    $n = if ($FullBleed) { $size } else { [int]($size * $superSample) }
     $src = [System.Drawing.Image]::FromFile($Source)
     try {
         $side = [Math]::Min($src.Width, $src.Height)
@@ -176,19 +191,31 @@ function New-PhotoBitmap([int]$size) {
         $sy = [int](($src.Height - $side) / 2)
         $big = New-Blank $n
         $g = New-Canvas $big
-        $clip = New-RoundRectPath 0 0 $n $n ($n * 0.22)
-        try {
-            $g.SetClip($clip)
-            $g.DrawImage($src, [System.Drawing.Rectangle]::new(0, 0, $n, $n),
-                [System.Drawing.Rectangle]::new($sx, $sy, $side, $side),
-                [System.Drawing.GraphicsUnit]::Pixel)
-        } finally {
-            $g.Dispose()
-            $clip.Dispose()
+        if ($FullBleed) {
+            try {
+                $g.DrawImage($src, [System.Drawing.Rectangle]::new(0, 0, $n, $n),
+                    [System.Drawing.Rectangle]::new($sx, $sy, $side, $side),
+                    [System.Drawing.GraphicsUnit]::Pixel)
+            } finally {
+                $g.Dispose()
+            }
+        } else {
+            $clip = New-RoundRectPath 0 0 $n $n ($n * 0.22)
+            try {
+                $g.SetClip($clip)
+                $g.DrawImage($src, [System.Drawing.Rectangle]::new(0, 0, $n, $n),
+                    [System.Drawing.Rectangle]::new($sx, $sy, $side, $side),
+                    [System.Drawing.GraphicsUnit]::Pixel)
+            } finally {
+                $g.Dispose()
+                $clip.Dispose()
+            }
         }
     } finally {
         $src.Dispose()
     }
+
+    if ($n -eq $size) { return $big }     # 满版：已经是目标尺寸，不用再缩放
 
     $out = New-Blank $size
     $g2 = New-Canvas $out
@@ -293,11 +320,15 @@ if ($Design -eq 'photo') {
 }
 
 $allSizes = @($icoSizes + ($pngTargets | ForEach-Object { $_.Size }) | Sort-Object -Unique)
+# 哪些尺寸要满版不透明（iOS 主屏图标自己做圆角）
+$fullBleedSize = @{}
+foreach ($t in $pngTargets) { if ($t.FullBleed) { $fullBleedSize[[int]$t.Size] = $true } }
 $bitmaps = @{}
 $pngBytes = @{}
 
 foreach ($s in $allSizes) {
-    if ($Design -eq 'photo') { $bmp = New-PhotoBitmap $s } else { $bmp = New-MarkBitmap $s }
+    $fb = [bool]$fullBleedSize[[int]$s]
+    if ($Design -eq 'photo') { $bmp = New-PhotoBitmap $s -FullBleed:$fb } else { $bmp = New-MarkBitmap $s -FullBleed:$fb }
     $bitmaps[$s] = $bmp
     $pngBytes[$s] = Get-PngBytes $bmp
 }
@@ -348,6 +379,26 @@ foreach ($t in $pngTargets) {
     } else {
         Write-Host ("  ✓ {0}：{1}x{1}" -f $t.File, $t.Size) -ForegroundColor Green
     }
+}
+
+# apple-touch-icon 必须满版不透明：iOS 自己做圆角遮罩，带透明圆角会被底色填成方图
+$touchPath = Join-Path $assetsDir 'apple-touch-icon.png'
+if (Test-Path -LiteralPath $touchPath) {
+    $tb = [System.Drawing.Bitmap]::new($touchPath)
+    try {
+        $alphas = @(
+            $tb.GetPixel(0, 0).A,
+            $tb.GetPixel($tb.Width - 1, 0).A,
+            $tb.GetPixel(0, $tb.Height - 1).A,
+            $tb.GetPixel($tb.Width - 1, $tb.Height - 1).A
+        )
+        if (@($alphas | Where-Object { $_ -lt 255 }).Count -gt 0) {
+            Write-Host ("  ✖ apple-touch-icon.png：四角有透明度（{0}），iOS 上会变成方图" -f ($alphas -join ' / ')) -ForegroundColor Red
+            $bad++
+        } else {
+            Write-Host '  ✓ apple-touch-icon.png：满版不透明' -ForegroundColor Green
+        }
+    } finally { $tb.Dispose() }
 }
 
 Write-Host ''

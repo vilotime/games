@@ -157,12 +157,13 @@ const rNumIndex = syncNumbers('index.html', [
 if (!rNumHome.ok) { fail('proF/主页.html：' + rNumHome.why); }
 if (!rNumIndex.ok) { fail('index.html：' + rNumIndex.why); }
 
-/* ---------------- 图标 / 分享封面（index.html 的 head 区块） ----------------
+/* ---------------- 图标 / 分享封面（index.html 的 head 区块 + site.webmanifest） ----------------
  * 配置在 games.json 的 icons / meta 两段，规范见 docs/cover-and-icons.md。
  * 本段负责：读真实尺寸（PNG 宽高 / ICO 里内置的尺寸）、把相对路径拼成绝对地址、
- * 按方图还是宽图自动选 twitter:card，然后把 index.html 的 head 标记区间整段重写。 */
-const ICON_KEYS = ['ico', 'svg', 'png', 'appleTouch'];
-const META_KEYS = ['title', 'description', 'siteName', 'url', 'image', 'imageAlt'];
+ * 按方图还是宽图自动选 twitter:card、按 icons 生成 site.webmanifest，
+ * 然后把 index.html 的 head 标记区间整段重写。 */
+const ICON_KEYS = ['ico', 'svg', 'png', 'appleTouch', 'manifest'];
+const META_KEYS = ['title', 'description', 'siteName', 'url', 'image', 'imageAlt', 'themeColor', 'backgroundColor'];
 
 function readPng(abs) {
   try {
@@ -222,6 +223,12 @@ if (rawIcons.ico) {
     } else {
       const miss = [16, 32, 48].filter(s => sizes.indexOf(s) < 0);
       if (miss.length) { warn(p + ' 里没有 ' + miss.join(' / ') + ' 这几个尺寸（现在有 ' + sizes.join(' / ') + '）'); }
+      /* ICO 里塞一张大图值得：有些系统和浏览器只认 /favicon.ico，会把 48 放大成主屏 / 桌面图标 */
+      if (Math.max.apply(null, sizes) < 192) {
+        warn(p + ' 里最大只有 ' + Math.max.apply(null, sizes) +
+          '，建议再塞一张 192（否则只认 /favicon.ico 的设备会放大显示，图标发糊）');
+      }
+      icons.icoSizes = sizes.map(s => s + 'x' + s).join(' ');
       icons.ico = p;
     }
   }
@@ -298,9 +305,20 @@ if (rawIcons.appleTouch) {
   warn('没配 icons.appleTouch —— iOS 添加到主屏幕会退回截图');
 }
 
+/* manifest：Android / 平板「添加到主屏幕」用它里面的 192 / 512，比 ICO 清楚 */
+const manifestRel = rawIcons.manifest ? String(rawIcons.manifest) : '';
+if (manifestRel) {
+  if (/[\\]/.test(manifestRel)) { warn('icons.manifest 要用正斜杠：' + manifestRel); }
+  if (/^https?:/i.test(manifestRel)) { fail('icons.manifest 要写仓库内的相对路径（如 "site.webmanifest"）'); }
+  else { icons.manifest = manifestRel.replace(/^\.?\//, ''); }
+} else {
+  warn('没配 icons.manifest —— Android / 平板「添加到主屏幕」会退回放大 ICO，图标会糊');
+}
+
 /* 2. 分享封面：标题 / 描述 / 方图，绝对地址由 meta.url 或 site.pagesUrl 拼出来 */
 meta.title = String(rawMeta.title || ds.site.name || '');
 meta.siteName = String(rawMeta.siteName || ds.site.name || '');
+meta.shortName = String(rawMeta.siteName || ds.site.name || meta.title || '');
 meta.description = String(rawMeta.description || '');
 if (!meta.title) { fail('meta.title 缺失（页面 <title> 和分享卡片标题都从这里取）'); }
 if (!meta.description) { warn('meta.description 缺失，分享卡片没有描述'); }
@@ -348,6 +366,13 @@ if (rawImage) {
       /* 方图配 summary（微信 / QQ 收藏按正方形裁），宽图才配 summary_large_image */
       const square = Math.abs(real.w - real.h) <= Math.max(2, Math.round(real.w * 0.02));
       meta.twitterCard = square ? 'summary' : 'summary_large_image';
+      if (!square) {
+        warn('分享封面是宽图（' + real.w + 'x' + real.h + '）：微信 / QQ 的缩略图按正方形裁，两边会被切掉；' +
+          '方图（800x800 或 1200x1200）最稳妥');
+      } else if (real.w < 800) {
+        warn('分享封面只有 ' + real.w + 'x' + real.h + '：建议换成 ≥800x800 的方图，否则卡片上放大后容易糊' +
+          '（直接覆盖同名文件即可，JSON 不用改）');
+      }
     } else {
       warn('meta.image 读不到宽高（不是 PNG），og:image:width/height 不输出，卡片可能被裁得不好：' + rawImage);
       meta.twitterCard = 'summary';
@@ -361,13 +386,74 @@ const headBody = indent(G.headHTML({ icons: icons, meta: meta }), 4);
 const rHead = replaceRegion('index.html', 'head:start', 'head:end', headBody);
 if (!rHead.ok) { fail('index.html：' + rHead.why); }
 
+/* ---------------- 生成 site.webmanifest ----------------
+ * Android / 平板的「添加到主屏幕」和桌面快捷方式优先用它里面的 192 / 512。
+ * 注意：manifest 里的 icons.src 是相对 manifest 文件自身解析的，start_url 同理，
+ * 所以图标和 manifest 都放在站点根目录、用相对路径，挂在子路径下也不会错。 */
+function writeIfChanged(file, content) {
+  const abs = path.join(root, file);
+  const text = content.replace(/\r\n/g, '\n');
+  const old = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : null;
+  if (old !== null && old.replace(/\r\n/g, '\n') === text) { return { ok: true, changed: false }; }
+  if (!CHECK_ONLY) { fs.writeFileSync(abs, text, 'utf8'); }
+  return { ok: true, changed: true };
+}
+
+let rManifest = { ok: true, changed: false };
+if (icons.manifest) {
+  if (!icons.png || !icons.png.length) {
+    fail('要生成 ' + icons.manifest + ' 就得配 icons.png（manifest 里的 192 / 512 从那里取）');
+  } else {
+    /* 给 manifest 挑 192 / 512；没有 512 就把最大的那张当 512 用不了，所以缺了要提醒 */
+    const wantSize = n => {
+      const hit = icons.png.filter(p => p.sizes === n + 'x' + n)[0];
+      return hit ? hit : null;
+    };
+    const big = [];
+    [192, 512].forEach(n => {
+      const hit = wantSize(n);
+      if (hit) { big.push({ src: hit.src, sizes: hit.sizes, type: 'image/png' }); }
+      else { warn('icons.png 里没有 ' + n + 'x' + n + '，' + icons.manifest + ' 里会缺这一档（Android 主屏图标会糊）'); }
+    });
+    const manifest = {
+      id: './',
+      name: meta.title || ds.site.name || '',
+      short_name: meta.shortName || meta.title || '',
+      description: meta.description || '',
+      lang: 'zh-CN',
+      start_url: './',
+      scope: './',
+      display: 'standalone',
+      background_color: String(rawMeta.backgroundColor || '#0b1220'),
+      theme_color: String(rawMeta.themeColor || '#2b3a4b'),
+      icons: big
+    };
+    rManifest = writeIfChanged(icons.manifest, JSON.stringify(manifest, null, 2) + '\n');
+    if (!rManifest.ok) { fail(icons.manifest + '：' + rManifest.why); }
+
+    /* 能不能「装成应用」：manifest 合格 + 注册了带 fetch 处理器的 Service Worker，缺一不可 */
+    if (!fileExists('sw.js')) {
+      warn('配了 manifest（想装成应用）但仓库根目录没有 sw.js —— 没有 Service Worker 时' +
+        '「添加到主屏幕」只会做成带地址栏的快捷方式，不会变成独立窗口');
+    } else {
+      let shell = '';
+      try { shell = fs.readFileSync(path.join(root, 'index.html'), 'utf8'); } catch (e) {}
+      if (shell.indexOf('serviceWorker.register') < 0) {
+        warn('index.html 里没找到 serviceWorker.register —— sw.js 存在但没注册，同样装不成独立应用');
+      }
+    }
+  }
+}
+
 /* ---------------- 输出 ---------------- */
 console.log('games.json：' + ds.total + ' 款游戏，' + ds.categories.length + ' 个分类');
 ds.categories.forEach(c => console.log('  · ' + c.name + '（' + c.key + '）：' + c.count + ' 款'));
 
 const iconLinks = [icons.ico, icons.svg].filter(Boolean).length +
-  (icons.png ? icons.png.length : 0) + (icons.appleTouch ? 1 : 0);
+  (icons.png ? icons.png.length : 0) + (icons.appleTouch ? 1 : 0) + (icons.manifest ? 1 : 0);
 console.log('\n图标 / 分享卡片：' + iconLinks + ' 个 <link>' +
+  (icons.icoSizes ? '（ICO 内含 ' + icons.icoSizes + '）' : '') +
+  (icons.manifest ? ' + ' + icons.manifest : '') +
   (meta.image ? '，封面 ' + meta.image : '，没有分享封面'));
 
 const touched = [];
@@ -376,6 +462,7 @@ if (rNav.changed) { touched.push('index.html（侧栏入口）'); }
 if (rNumHome.changed) { touched.push('proF/主页.html（顶部总数）'); }
 if (rNumIndex.changed) { touched.push('index.html（侧栏总数）'); }
 if (rHead.changed) { touched.push('index.html（图标 / 分享卡片）'); }
+if (rManifest.changed) { touched.push((icons.manifest || 'site.webmanifest') + '（主屏图标）'); }
 if (CHECK_ONLY) {
   if (touched.length) { console.log('\n需要同步：' + touched.join('、') + '（去掉 --check 可写入）'); }
   else { console.log('\n✓ 卡片 / 侧栏 / 数量 / 图标都已和 games.json 一致'); }

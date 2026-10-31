@@ -7,13 +7,18 @@
     <!-- head:start 图标 / 分享卡片由 games.json 的 icons、meta 生成，别手改（跑 tools\sync.cmd 同步） -->
     <title>叶初小游戏</title>
     <meta name="description" content="叶初小游戏 —— 绿茵足球、桌上足球、点球大师、CS 平面战场、星海突击、方块风暴、叶初的鱼塘、CS 观战等小游戏合集">
-    <link rel="icon" href="favicon.ico" sizes="any">
-    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+    <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48 192x192">
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" sizes="any">
     <link rel="icon" type="image/png" sizes="16x16" href="assets/icon-16.png">
     <link rel="icon" type="image/png" sizes="32x32" href="assets/icon-32.png">
     <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="assets/icon-512.png">
     <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="叶初小游戏">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="叶初小游戏">
     <meta property="og:title" content="叶初小游戏">
@@ -871,6 +876,21 @@ if (window.YCGames) {
         if (typeof window.__ycNavSync === 'function') { window.__ycNavSync(); }
     }).catch(function () {});
 }
+</script>
+
+<script>
+/* 注册 Service Worker：Chrome / Edge 判定「可以安装成应用」的必要条件。
+   有了它，手机菜单里的「添加到主屏幕 / 安装应用」才会做成独立窗口的 App；
+   没有它，加进去只是个带地址栏的快捷方式。file:// 不支持，直接跳过。 */
+(function () {
+    if (!('serviceWorker' in navigator)) { return; }
+    if (location.protocol !== 'http:' && location.protocol !== 'https:') { return; }
+    window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').catch(function () {
+            /* 注册失败不影响正常浏览（https 没配好、离线时都可能失败），这里静默处理 */
+        });
+    });
+})();
 </script>
 
 </body>

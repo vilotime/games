@@ -16,6 +16,8 @@
 ├─ index.html      外壳：侧栏导航 + iframe
 ├─ games.json      ★ 游戏清单（唯一数据源，加游戏只改这里）
 ├─ favicon.ico     站点图标兜底（搜索引擎只认根目录这个，tools/make-icons.ps1 生成）
+├─ site.webmanifest Android / PWA 主屏图标清单（tools/export-games.js 生成）
+├─ sw.js           Service Worker（只为「装成应用」，不做缓存）
 ├─ README.md       本文件
 ├─ LICENSE         许可证
 ├─ core/           站点自己的前台代码（清单渲染器 games.js）
@@ -73,34 +75,70 @@
 ## 站点信息：标题 / 图标 / 分享封面
 
 `games.json` 里除了游戏清单，还有三段站点级配置，全部由 `tools/export-games.js` 写进
-`index.html` 的 head 标记区（`<!-- head:start -->` … `<!-- head:end -->`），**生成出来的那段别手改**：
+`index.html` 的 head 标记区（`<!-- head:start -->` … `<!-- head:end -->`）并生成 `site.webmanifest`，
+**生成出来的那段和那个文件都别手改**：
 
 | 段 | 管什么 |
 |---|---|
 | `site` | 站点名、游戏目录 `dir`、主页 `homepage`、仓库地址，以及 `pagesUrl` —— 分享卡片拼绝对地址、`url` / `homepageUrl` 算路径前缀都用它。本站是项目站点，值是 `https://vilotime.github.io/games/`（**别写成域名根**，那是另一个仓库） |
-| `icons` | 站点图标：`ico` / `svg` / `png[]` / `appleTouch`。`.ico` 必须在**仓库根目录**，否则 Bing 会退回 GitHub 图标 |
-| `meta` | `<title>`、`<meta name="description">`、分享封面 `image`（方图自动配 `twitter:card=summary`，宽图自动切 `summary_large_image`） |
+| `icons` | 站点图标：`ico` / `svg` / `png[]` / `appleTouch` / `manifest`。`.ico` 必须在**仓库根目录**，否则 Bing 会退回 GitHub 图标 |
+| `meta` | `<title>`、`<meta name="description">`、分享封面 `image`（方图自动配 `twitter:card=summary`，宽图自动切 `summary_large_image`）、manifest 用的 `themeColor` / `backgroundColor` |
 
 ```json
 "icons": {
   "ico": "favicon.ico",
   "svg": "assets/favicon.svg",
-  "png": [{"src":"assets/icon-32.png","sizes":"32x32"}],
-  "appleTouch": {"src":"assets/apple-touch-icon.png","sizes":"180x180"}
+  "png": [
+    {"src":"assets/icon-16.png","sizes":"16x16"},
+    {"src":"assets/icon-192.png","sizes":"192x192"}
+  ],
+  "appleTouch": {"src":"assets/apple-touch-icon.png","sizes":"180x180"},
+  "manifest": "site.webmanifest"
 },
 "meta": {
   "title": "叶初小游戏",
   "description": "……",
   "siteName": "叶初小游戏",
   "image": "assets/share-square.png",
-  "imageAlt": "叶初小游戏 · 封面"
+  "imageAlt": "叶初小游戏 · 封面",
+  "themeColor": "#2b3a4b",
+  "backgroundColor": "#0b1220"
 }
 ```
 
-- 换图标：`.\tools\make-icons.ps1`（渐变底 + 白色播放三角，或 `-Design photo -Source 图.png`），
-  它会写出根目录 `favicon.ico`（16/32/48）+ `assets/icon-16/32/192/512.png` + `apple-touch-icon.png` 并回读校验；
+- **`sizes` 一律按真实尺寸写**：`<link rel="icon">` 指 `.ico` 时写的是 ICO **内部真实包含**的尺寸
+  （现在是 `16x16 32x32 48x48 192x192`，由脚本读 ICO 目录自动生成），**不能写 `any`** ——
+  写了 `any` 浏览器会当它可缩放，高分屏上把位图放大，标签页图标就糊了。`sizes="any"` 只给 SVG。
+- 换图标：`.\tools\make-icons.ps1`（渐变底 + 白色播放三角，或 `-Design photo -Source 图.png`）。
+  它写出根目录 `favicon.ico`（内含 16/32/48/**192**）+ `assets/icon-16/32/192/512.png`
+  + `apple-touch-icon.png`（180，**满版不透明**，iOS 自己套圆角）并回读校验；
 - 换封面：直接替换 `assets/share-square.png`（保持方图），JSON 不用改 —— 宽高是脚本读 PNG 文件头现算的；
-- 细节和踩坑记录见 [`docs/cover-and-icons.md`](docs/cover-and-icons.md)。
+- `site.webmanifest` 由脚本按 `icons.png` 的 192 / 512 生成，给 Android / 平板「添加到主屏幕」用
+  （里面的 `src` 相对 manifest 自身解析，`start_url` 用 `./`，所以挂在 `/games/` 下也不会错）；
+- 规则与踩坑记录见 [`docs/cover-and-icons.md`](docs/cover-and-icons.md)，那篇是通用版（不绑本项目）。
+
+## 像 App 一样装到主屏
+
+想让「添加到主屏幕」变成**独立窗口的应用**（不带地址栏、有自己的图标和启动底色），三样东西缺一不可，
+现在都已经就位：
+
+| 东西 | 在哪 | 谁管 |
+|---|---|---|
+| `site.webmanifest`（`name`、192/512 图标、`start_url`、`display: standalone`） | 仓库根目录 | `tools/export-games.js` 按 `games.json` 的 `icons` / `meta` 生成 |
+| **Service Worker**（带 fetch 处理器） | 根目录 `sw.js`，由 `index.html` 末尾那段脚本注册 | 手写，一般不用动 |
+| iOS 的三条 meta（`apple-mobile-web-app-capable` 等） | `index.html` 的 head 标记区 | 跟着 manifest 一起生成 |
+
+- `sw.js` **故意不做任何缓存**：这个站是纯静态、靠浏览器缓存 + `Ctrl+F5`，SW 再叠一层只会出现
+  「改了看不到」。它存在的意义只是满足 Chrome / Edge 的安装条件；断网时会返回一句提示而不是白屏。
+  以后真要离线可玩再加 precache，但那时记得给缓存加版本号、并让 HTML 走 network-first。
+- `tools/export-games.js` 会顺手校验这条链路：`icons.manifest` 配了但仓库里没有 `sw.js`、
+  或者 `index.html` 里没有 `serviceWorker.register`，都会提醒「只会做成带地址栏的快捷方式」。
+- **怎么确认生效**：手机 Chrome / Edge → 右上菜单应出现「安装应用 / 添加到主屏幕」这类字眼，
+  装完点开是**没有地址栏**的独立窗口；桌面 F12 → **Application** 面板里
+  `Manifest` 无警告、`Service Workers` 状态是 activated。iOS 用 Safari「分享 → 添加到主屏幕」，
+  靠的是 `apple-mobile-web-app-capable` + `apple-touch-icon`（180 那张是满版不透明）。
+- 注意：Service Worker 只在**安全上下文**里生效 —— 线上是 https，本地用 `node tools/dev.js` 开
+  `http://127.0.0.1:8080`（localhost 豁免）也算；直接双击 `file://` 打开时那段注册代码会自己跳过，不影响浏览。
 
 ## `core/games.js`（清单渲染器）
 
@@ -135,13 +173,14 @@ YCGames.load('./games.json').then(function (ds) {
 | **运行时渲染** | 用 `http(s)` 打开时（线上、或本地 `tools/dev.js`） | `fetch('games.json')` → `core/games.js` 现场生成卡片 / 侧栏 / 数量 |
 | **静态兜底** | 无 JS、断网，或**双击 `file://` 打开**（`fetch` 被 CORS 拦） | HTML 里由脚本预先写好的副本 |
 
-### 会被同步的 5 个位置
+### 会被同步的 6 个位置
 
 | 位置 | 由谁维护 |
 |---|---|
 | `proF/主页.html` 的 `<!-- games:start -->` … `<!-- games:end -->`（全部卡片） | `tools/export-games.js` 整段重写 |
 | `index.html` 的 `<!-- nav:start -->` … `<!-- nav:end -->`（侧栏入口） | 同上 |
 | `index.html` 的 `<!-- head:start -->` … `<!-- head:end -->`（标题 / 图标 / 分享卡片） | 同上，按 `icons`、`meta` 生成 |
+| `site.webmanifest`（Android / PWA 主屏图标） | 同上，按 `icons.png` 的 192 / 512 整个文件生成 |
 | `proF/主页.html` 顶部「共 `data-game-total` 款」 | 同上，单独重写数字 |
 | `index.html` 侧栏「`data-game-count` 款」 | 同上，单独重写数字 |
 
@@ -162,18 +201,19 @@ YCGames.load('./games.json').then(function (ds) {
 ### 命令
 
 ```bash
-node tools/export-games.js           # 校验 json + 重写静态兜底、数量和 head
+node tools/export-games.js           # 校验 json + 重写静态兜底、数量、head 和 site.webmanifest
 node tools/export-games.js --check   # 只检查，不写文件（CI / 提交前用）
 node tools/dev.js                    # 本地 http 预览（启动前自动同步 + 监听 json 自动同步）
 powershell -File tools/sync.ps1      # 上面第一条的 PowerShell 包装，跑完停住看结果
-powershell -File tools/make-icons.ps1   # 重新生成站点图标（ICO + 多尺寸 PNG + 主屏图标）
+powershell -File tools/make-icons.ps1   # 重新生成站点图标（ICO + 多尺寸 PNG + 满版主屏图标）
 ```
 
 `tools/export-games.js` 除了同步，还会校验 json：`id` 重复、`file` 指向的文件不存在、
 颜色不是 hex、`pcOnly` 类型不对、字段名拼错、`file` 用了反斜杠等，有问题会逐条打印；
-图标 / 封面那两段还会查：`.ico` 是不是真 ICO、PNG 的 `sizes` 和实际宽高是否一致、
-分享封面有没有被拼成绝对地址、有没有忘了配 `icons.ico`（Bing 会退回 GitHub 图标）、
-`site.pagesUrl` 和仓库对不对得上（项目站点漏掉 `/games/` 会指向另一个仓库）。
+图标 / 封面那几段还会查：`.ico` 是不是真 ICO、里面有没有 48 和 192、
+PNG 的 `sizes` 和实际宽高是否一致、`appleTouch` 是不是 180×180、
+分享封面有没有被拼成绝对地址、是不是方图（宽图微信会裁）、有没有忘了配 `icons.ico`（Bing 会退回
+GitHub 图标）或 `icons.manifest`、`site.pagesUrl` 和仓库对不对得上（项目站点漏掉 `/games/` 会指向另一个仓库）。
 
 ### Windows 一键：双击 `tools\sync.cmd`
 

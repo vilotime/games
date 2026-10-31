@@ -1,6 +1,6 @@
 {
   "schema": "yc-games/2",
-  "site": {"name":"叶初小游戏","dir":"proF/","homepage":"proF/主页.html","repo":"https://github.com/VILOTIME/games","pagesUrl":"https://vilotime.github.io/games/"},
+  "site": {"name":"叶初小游戏","dir":"proF/","homepage":"proF/主页.html","repo":"https://github.com/vilotime/games","pagesUrl":"https://vilotime.github.io/games/"},
 
   "icons": {
     "ico": "favicon.ico",
@@ -11,7 +11,8 @@
       {"src":"assets/icon-192.png","sizes":"192x192"},
       {"src":"assets/icon-512.png","sizes":"512x512"}
     ],
-    "appleTouch": {"src":"assets/apple-touch-icon.png","sizes":"180x180"}
+    "appleTouch": {"src":"assets/apple-touch-icon.png","sizes":"180x180"},
+    "manifest": "site.webmanifest"
   },
 
   "meta": {
@@ -19,7 +20,9 @@
     "description": "叶初小游戏 —— 绿茵足球、桌上足球、点球大师、CS 平面战场、星海突击、方块风暴、叶初的鱼塘、CS 观战等小游戏合集",
     "siteName": "叶初小游戏",
     "image": "assets/share-square.png",
-    "imageAlt": "叶初小游戏 · 封面"
+    "imageAlt": "叶初小游戏 · 封面",
+    "themeColor": "#2b3a4b",
+    "backgroundColor": "#0b1220"
   },
 
   "categories": [
