@@ -37,6 +37,16 @@
       ]
     },
     {
+      "key": "shooting",
+      "icon": "🎯",
+      "name": "对抗",
+      "games": [
+        {"file":"proF/CS战场.html","name":"CS 战场","icon":"🎯","desc":"平面对枪 / 观战 · 开局选模式","pcOnly":false,"c1":"#4a6fa5","c2":"#22344f"},
+        {"file":"proF/CS秘密行动.html","name":"CS 秘密行动","icon":"🔫","desc":"一波波清剿 · 战术走位","pcOnly":true,"c1":"#6b7a3a","c2":"#3a4520"},
+        {"file":"proF/拳斗十杰.html","name":"拳斗十杰","icon":"🥊","desc":"十名斗士各怀连段必杀，60 秒打空血条即胜","pcOnly":true,"c1":"#ff5a3c","c2":"#a32a17"}
+      ]
+    },
+    {
       "key": "casual",
       "icon": "🧩",
       "name": "休闲",
@@ -54,15 +64,6 @@
         {"file":"proF/11人足球.html","name":"绿茵足球","icon":"🏟️","desc":"11 v 11 全场 · 手机可观战","pcOnly":false,"c1":"#2f9e6a","c2":"#14663f"},
         {"file":"proF/桌上足球.html","name":"桌上足球","icon":"⚔️","desc":"同机对战 / 单挑 AI / 观战 · 开局选模式","pcOnly":false,"c1":"#3d7ff0","c2":"#2347a8"},
         {"file":"proF/任意球练习.html","name":"点球大师","icon":"🥅","desc":"选角度 · 预判扑救点位","pcOnly":false,"c1":"#f0913f","c2":"#b35b12"}
-      ]
-    },
-    {
-      "key": "shooting",
-      "icon": "🎯",
-      "name": "射击",
-      "games": [
-        {"file":"proF/CS战场.html","name":"CS 战场","icon":"🎯","desc":"平面对枪 / 观战 · 开局选模式","pcOnly":false,"c1":"#4a6fa5","c2":"#22344f"},
-        {"file":"proF/CS秘密行动.html","name":"CS 秘密行动","icon":"🔫","desc":"一波波清剿 · 战术走位","pcOnly":true,"c1":"#6b7a3a","c2":"#3a4520"}
       ]
     }
   ]

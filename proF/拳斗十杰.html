@@ -1,0 +1,1869 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>拳斗十杰</title>
+<link rel="stylesheet" href="../ui/yc-ui.css">
+<style>
+  /* ===== 本游戏专属：格斗 HUD ===== */
+  #hud { gap: 8px; }
+  .hb-wrap { flex: 1; min-width: 0; }
+  .hb-wrap.right { text-align: right; }
+  .hb-name {
+    font-size: 12px; font-weight: 700; letter-spacing: 1px;
+    color: #e9f1fb; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .hb {
+    position: relative; height: 16px; border-radius: 6px;
+    background: rgba(6,10,18,.7); border: 1px solid rgba(120,180,255,.25);
+    overflow: hidden;
+  }
+  .hb-fill {
+    height: 100%; border-radius: 5px;
+    background: linear-gradient(90deg, #37d67a, #b8f06b);
+    transition: width .12s linear;
+  }
+  .hb-wrap.right .hb-fill { margin-left: auto; }
+  .hb-fill.low { background: linear-gradient(90deg, #e0453a, #ff8a5c); }
+  .eb {
+    margin-top: 3px; height: 6px; border-radius: 4px;
+    background: rgba(6,10,18,.7); border: 1px solid rgba(255,209,102,.18);
+    overflow: hidden;
+  }
+  .eb-fill {
+    height: 100%; width: 0%; border-radius: 3px;
+    background: linear-gradient(90deg, #b8860b, #ffd166);
+  }
+  .hb-wrap.right .eb-fill { margin-left: auto; }
+  .eb-fill.ready {
+    background: linear-gradient(90deg, #ffd166, #fff3b0);
+    box-shadow: 0 0 10px rgba(255,209,102,.8);
+  }
+  #clock { font-size: 18px; font-weight: 800; padding: 6px 14px; color: #ffd166; flex: 0 0 auto; }
+  #clock.hurry { color: #ff5d5d; border-color: rgba(255,93,93,.5); }
+  #vsTag { font-size: 11px; color: #a7bbd8; }
+  .panel .ctl { font-size: 12px; line-height: 2; color: #cfe0f7; }
+  .panel .ctl b { color: #ffd166; font-weight: 700; }
+  #pause .panel h1 { letter-spacing: 6px; }
+  body.selecting #hud { display: none; }
+  @media (max-width: 760px), (max-height: 620px) {
+    .hb { height: 10px; }
+    .eb { height: 5px; }
+    .hb-name { font-size: 10px; margin-bottom: 2px; }
+    #clock { font-size: 13px; padding: 3px 9px; }
+    #vsTag { display: none; }
+  }
+</style>
+</head>
+<body data-pc-only="1">
+<div id="wrap">
+  <div id="stage">
+    <canvas id="cv"></canvas>
+
+    <div id="hud">
+      <div class="hb-wrap left">
+        <div class="hb-name" id="name1">P1</div>
+        <div class="hb"><div class="hb-fill" id="hp1"></div></div>
+        <div class="eb"><div class="eb-fill" id="en1"></div></div>
+      </div>
+      <div class="chip" id="clock">60</div>
+      <div class="hb-wrap right">
+        <div class="hb-name" id="name2">CPU</div>
+        <div class="hb"><div class="hb-fill" id="hp2"></div></div>
+        <div class="eb"><div class="eb-fill" id="en2"></div></div>
+      </div>
+    </div>
+
+    <div id="banner"></div>
+    <div id="hint">A/D 移动 · W 跳 · S 蹲 · J 拳 · K 腿 · L 防 · U 必杀</div>
+
+    <div class="overlay" id="intro">
+      <div class="panel">
+        <h1>拳斗十杰</h1>
+        <p>十名斗士，各怀连段与必杀。60 秒内打空对手血条即胜。</p>
+        <p class="ctl">
+          <b>A/D</b> 移动　<b>W</b> 跳跃　<b>S</b> 蹲<br>
+          <b>J</b> 拳　<b>K</b> 腿　<b>L/Shift</b> 格挡　<b>U</b> 必杀<br>
+          连段示例 <b>J→J→K</b>（角色不同，收招时按出即取消连携）
+        </p>
+        <button class="btn" id="startBtn" type="button">选择斗士</button>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="pause">
+      <div class="panel"><h1>暂停</h1><p>按 Esc 继续</p></div>
+    </div>
+
+    <div class="overlay hidden" id="over">
+      <div class="panel">
+        <h1 id="overTitle">胜利</h1>
+        <p id="overStats"></p>
+        <button class="btn" id="retryBtn" type="button">再来一局</button>
+        <button class="btn ghost" id="changeBtn" type="button">更换斗士</button>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="mobile">
+      <div class="panel">
+        <h1>这个游戏只能在电脑上玩</h1>
+        <p>「拳斗十杰」需要键盘操作，手机 / 平板上没法正常出招。</p>
+        <p>请用电脑打开本页面，或回主页挑个手机能玩的游戏。</p>
+        <button class="btn" id="mobileBack" type="button">返回主页</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../ui/yc-ui.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  /* ============================================================
+   * 1. 画布
+   * ============================================================ */
+  var W = 900, H = 560;
+  var cv = document.getElementById('cv');
+  var ctx = cv.getContext('2d');
+  var st = document.getElementById('stage');
+  var UNIT = 1;
+
+  function resize() {
+    var availW = Math.max(160, window.innerWidth - 20);
+    var availH = Math.max(160, window.innerHeight - 20);
+    var s = Math.min(availW / W, availH / H);
+    var dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(W * s * dpr);
+    cv.height = Math.round(H * s * dpr);
+    cv.style.width = Math.min(availW, Math.round(W * s)) + 'px';
+    cv.style.height = Math.min(availH, Math.round(H * s)) + 'px';
+    st.style.width = cv.style.width;
+    st.style.height = cv.style.height;
+    UNIT = s * dpr;
+  }
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
+  resize();
+
+  /* ============================================================
+   * 2. 常量与工具
+   * ============================================================ */
+  var GROUND = 480;          /* 地面 y（脚下） */
+  var GRAV = 1500;
+  var MAX_ENERGY = 100;
+  var SP_COST = 50;
+  var EDGE_L = 36, EDGE_R = W - 36;
+
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function extend(o, p) {
+    for (var k in p) { if (p.hasOwnProperty(k)) { o[k] = p[k]; } }
+    return o;
+  }
+  function rr(x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function rectHit(a, b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  }
+
+  /* ============================================================
+   * 3. 十名斗士配置
+   *    fin = 连段终结技；sp = 必杀（六类行为）
+   * ============================================================ */
+  var FIN_BASE = { startup: .08, active: .08, recovery: .26, dmg: 100, range: 88,
+    hbw: 34, hbh: 26, hy: 58, kbx: 260, kby: 0, hitstun: .36, pose: 'punch' };
+
+  var FIGHTERS = [
+    {
+      id: 0, name: '炎', title: '烈焰拳师', color: '#ff5a3c', dark: '#a32a17',
+      speed: 230, jump: 560, hp: 1000, power: 1.0, defense: 1.0,
+      chain: ['j', 'j', 'k'],
+      fin: extend({}, extend(FIN_BASE, { dmg: 118, kbx: 340, hitstun: .4, pose: 'punch' })),
+      sp: { name: '波动拳', type: 'projectile', startup: .14, active: .06, recovery: .24,
+            pspeed: 430, pdmg: 120, pstun: .38, pr: 15, effect: 'fire' }
+    },
+    {
+      id: 1, name: '岚', title: '疾风腿', color: '#3ddc84', dark: '#157a45',
+      speed: 265, jump: 600, hp: 950, power: .9, defense: 1.05,
+      chain: ['j', 'k', 'k'],
+      fin: extend({}, extend(FIN_BASE, { dmg: 95, startup: .06, active: .14, recovery: .22,
+        kbx: 180, hits: 3, hitstun: .34, pose: 'kick' })),
+      sp: { name: '旋风腿', type: 'spin', startup: .06, active: .7, recovery: .2,
+            hits: 4, hdmg: 46, pr: 78 }
+    },
+    {
+      id: 2, name: '钢', title: '铁拳重铠', color: '#9aa7b8', dark: '#4a5568',
+      speed: 190, jump: 480, hp: 1100, power: 1.18, defense: .85,
+      chain: ['j', 'k'],
+      fin: extend({}, extend(FIN_BASE, { dmg: 150, startup: .14, active: .1, recovery: .32,
+        range: 84, kbx: 300, kby: 180, knockdown: true, hitstun: .45, pose: 'smash' })),
+      sp: { name: '震地拳', type: 'slam', startup: .2, active: .08, recovery: .32,
+            radius: 160, pdmg: 160, kby: 220 }
+    },
+    {
+      id: 3, name: '雪', title: '寒冰术士', color: '#67d8ef', dark: '#2a7f9e',
+      speed: 225, jump: 550, hp: 1000, power: .95, defense: 1.0,
+      chain: ['j', 'j', 'k'],
+      fin: extend({}, extend(FIN_BASE, { dmg: 92, kby: 360, launch: true,
+        freeze: true, hitstun: .6, kbx: 120, pose: 'uppercut' })),
+      sp: { name: '冰晶弹', type: 'projectile', startup: .14, active: .06, recovery: .24,
+            pspeed: 400, pdmg: 100, pstun: 1.0, pr: 14, effect: 'ice' }
+    },
+    {
+      id: 4, name: '霆', title: '雷神', color: '#ffd23f', dark: '#b08a12',
+      speed: 250, jump: 590, hp: 1000, power: 1.0, defense: 1.0,
+      chain: ['j', 'k'],
+      fin: extend({}, extend(FIN_BASE, { dmg: 105, startup: .06, recovery: .2,
+        kbx: 200, stun: .6, hitstun: .55, pose: 'knee' })),
+      sp: { name: '雷鸣突袭', type: 'rush', startup: .08, active: .42, recovery: .22,
+            rspeed: 620, hits: 3, hdmg: 58 }
+    },
+    {
+      id: 5, name: '影', title: '暗影忍者', color: '#9b6dff', dark: '#4e2a99',
+      speed: 270, jump: 620, hp: 920, power: .92, defense: 1.08,
+      chain: ['j', 'j', 'k'],
+      fin: extend({}, extend(FIN_BASE, { dmg: 108, startup: .07, advance: 260,
+        kbx: 240, kby: 120, hitstun: .38, pose: 'kick' })),
+      sp: { name: '手里剑', type: 'projectile', startup: .1, active: .05, recovery: .18,
+            pspeed: 540, pdmg: 72, pstun: .3, pr: 10, effect: 'blade', airOk: true }
+    },
+    {
+      id: 6, name: '醉', title: '醉八仙', color: '#c98a4b', dark: '#7a4a22',
+      speed: 215, jump: 530, hp: 1050, power: 1.05, defense: 1.0,
+      chain: ['j', 'j', 'j', 'k'],
+      fin: extend({}, extend(FIN_BASE, { dmg: 112, startup: .1, active: .16,
+        hits: 2, kbx: 240, kby: 80, hitstun: .4, pose: 'drunk' })),
+      sp: { name: '酒雾', type: 'breath', startup: .12, active: .6, recovery: .26,
+            range: 115, hits: 5, hdmg: 32 }
+    },
+    {
+      id: 7, name: '霸', title: '泰拳王', color: '#e0455e', dark: '#851f33',
+      speed: 220, jump: 540, hp: 1000, power: 1.1, defense: .95,
+      chain: ['j', 'k'],
+      fin: extend({}, extend(FIN_BASE, { dmg: 128, guardCrush: true, kbx: 280,
+        hitstun: .42, pose: 'elbow' })),
+      sp: { name: '凶膝连打', type: 'rush', startup: .1, active: .4, recovery: .24,
+            rspeed: 460, hits: 3, hdmg: 56 }
+    },
+    {
+      id: 8, name: '械', title: '机械兵', color: '#5aa9ff', dark: '#2b5f9e',
+      speed: 200, jump: 500, hp: 1080, power: 1.05, defense: .9,
+      chain: ['j', 'j', 'k'],
+      fin: extend({}, extend(FIN_BASE, { dmg: 120, range: 132, hbw: 30,
+        kbx: 320, hitstun: .4, pose: 'punch' })),
+      sp: { name: '导弹齐射', type: 'missile', startup: .16, active: .1, recovery: .28,
+            pdmg: 88, pstun: .34, pr: 12 }
+    },
+    {
+      id: 9, name: '龙', title: '龙斗士', color: '#2fd4b8', dark: '#147a68',
+      speed: 235, jump: 570, hp: 1000, power: 1.02, defense: 1.0,
+      chain: ['j', 'j', 'k'],
+      fin: extend({}, extend(FIN_BASE, { dmg: 104, kby: 400, launch: true,
+        kbx: 100, hitstun: .55, pose: 'uppercut' })),
+      sp: { name: '升龙拳', type: 'uppercut', startup: .05, active: .4, recovery: .28,
+            rise: 620, pdmg: 150 }
+    }
+  ];
+
+  /* ============================================================
+   * 4. 基础动作（按角色 power 缩放伤害）
+   * ============================================================ */
+  function baseMoves(cfg) {
+    var p = cfg.power;
+    /* 必杀/终结技对象补齐 id，否则 updateMove 里按 id 分发的专属逻辑永不执行 */
+    if (!cfg.sp.id) { cfg.sp.id = 'sp'; }
+    if (!cfg.fin.id) { cfg.fin.id = 'fin'; }
+    return {
+      lp:  { id: 'lp', startup: .05, active: .07, recovery: .13, dmg: 42 * p,
+             range: 74, hbw: 26, hbh: 22, hy: 64, kbx: 120, kby: 0, hitstun: .28, pose: 'punch' },
+      hk:  { id: 'hk', startup: .1, active: .09, recovery: .24, dmg: 88 * p,
+             range: 96, hbw: 30, hbh: 24, hy: 50, kbx: 240, kby: 60, hitstun: .34, pose: 'kick' },
+      clp: { id: 'clp', startup: .06, active: .08, recovery: .16, dmg: 52 * p,
+             range: 70, hbw: 26, hbh: 18, hy: 26, kbx: 150, kby: 0, low: true,
+             hitstun: .3, knockdown: true, pose: 'low' },
+      alp: { id: 'alp', startup: .04, active: .1, recovery: .14, dmg: 58 * p,
+             range: 78, hbw: 26, hbh: 24, hy: 50, kbx: 180, kby: 40, hitstun: .3, pose: 'punch' },
+      ahk: { id: 'ahk', startup: .08, active: .1, recovery: .2, dmg: 92 * p,
+             range: 92, hbw: 30, hbh: 26, hy: 44, kbx: 260, kby: 130, hitstun: .36, pose: 'kick' },
+      fin: cfg.fin,
+      sp: cfg.sp
+    };
+  }
+
+  /* ============================================================
+   * 5. DOM 引用
+   * ============================================================ */
+  var elHud = document.getElementById('hud');
+  var elHp1 = document.getElementById('hp1'), elHp2 = document.getElementById('hp2');
+  var elEn1 = document.getElementById('en1'), elEn2 = document.getElementById('en2');
+  var elName1 = document.getElementById('name1'), elName2 = document.getElementById('name2');
+  var elClock = document.getElementById('clock');
+  var elBanner = document.getElementById('banner'), bannerT = 0;
+  var elHint = document.getElementById('hint');
+  var elIntro = document.getElementById('intro');
+  var elOver = document.getElementById('over'), elOverTitle = document.getElementById('overTitle');
+  var elOverStats = document.getElementById('overStats');
+  var elPause = document.getElementById('pause');
+  var elMobile = document.getElementById('mobile');
+
+  function banner(text, ms) {
+    elBanner.textContent = text;
+    elBanner.classList.add('show');
+    bannerT = (ms || 1000) / 1000;
+  }
+
+  /* ============================================================
+   * 6. 斗士对象
+   * ============================================================ */
+  function makeFighter(cfg, isPlayer, x, facing) {
+    return {
+      cfg: cfg, moves: baseMoves(cfg), isPlayer: isPlayer,
+      x: x, y: GROUND, vx: 0, vy: 0, grounded: true, facing: facing,
+      hp: cfg.hp, energy: 0,
+      state: 'idle',        /* idle walk crouch jump attack hit block down ko */
+      move: null, moveT: 0, hitDone: false, lastHitT: 0,
+      animT: Math.random() * 6, stun: 0,
+      buffer: null, chainStep: -1,
+      invuln: 0, flash: 0,
+      combo: 0, comboT: 0, maxCombo: 0, hits: 0,
+      downPending: false, getup: 0,
+      aiMode: 'wait', aiT: 0, aiBlock: 0, aiQueue: [],
+      specialDone: false, rushHits: 0, spinA: 0,
+      jumpQueued: false, blockHeld: false
+    };
+  }
+
+  /* ============================================================
+   * 7. 全局状态
+   * ============================================================ */
+  var state = 'intro';              /* intro select playing over */
+  var paused = false;
+  var roundPhase = 'ready';         /* ready fight run ko end */
+  var phaseT = 0;
+  var timeLeft = 60;
+  var p1 = null, p2 = null;
+  var selIndex = 0;
+  var hoverIndex = -1;
+  var projectiles = [], particles = [], dmgTexts = [];
+  var hitstop = 0, shake = 0, flashA = 0;
+  var pendingResult = null;
+  var last = 0;
+  var demoMode = location.hash.indexOf('#demo') === 0;
+  var demoP = null, demoC = null;
+  if (demoMode) {
+    var parts = location.hash.split('-');
+    if (parts.length >= 3) {
+      demoP = clamp(parseInt(parts[1], 10) || 0, 0, 9);
+      demoC = clamp(parseInt(parts[2], 10) || 0, 0, 9);
+    }
+  }
+
+  /* ============================================================
+   * 8. 输入
+   * ============================================================ */
+  var keys = Object.create(null);
+
+  var CODE_MAP = {
+    9: 'tab', 13: 'enter', 27: 'escape', 16: 'shift',
+    37: 'arrowleft', 38: 'arrowup', 39: 'arrowright', 40: 'arrowdown',
+    65: 'a', 87: 'w', 83: 's', 68: 'd',
+    74: 'j', 75: 'k', 76: 'l', 85: 'u',
+    186: ';', 188: ',', 190: '.', 191: '/'
+  };
+
+  function queuePress(f, btn) {
+    f.buffer = { btn: btn, t: 0 };
+  }
+
+  window.addEventListener('keydown', function (e) {
+    var k = (e.key || '').toLowerCase();
+    if (!k && CODE_MAP[e.keyCode]) { k = CODE_MAP[e.keyCode]; }
+    keys[k] = true;
+
+    if (k === 'w' || k === 'a' || k === 's' || k === 'd' || k === ' ' || k === 'tab' ||
+        k === 'arrowup' || k === 'arrowdown' || k === 'arrowleft' || k === 'arrowright') {
+      e.preventDefault();
+    }
+
+    if (k === 'escape') {
+      if (state === 'playing' && roundPhase === 'run') {
+        paused = !paused;
+        elPause.classList.toggle('hidden', !paused);
+      }
+      return;
+    }
+
+    if (k === 'enter') {
+      if (state === 'intro') { goSelect(); }
+      else if (state === 'select') { confirmSelect(); }
+      else if (state === 'over') { startRound(); }
+      return;
+    }
+
+    if (state === 'select') {
+      if (k === 'tab') { twoP = !twoP; pickPhase = 'p1'; selIndex = 0; return; }
+      if (k === 'a' || k === 'arrowleft') { moveSel(-1, 0); }
+      else if (k === 'd' || k === 'arrowright') { moveSel(1, 0); }
+      else if (k === 'w' || k === 'arrowup') { moveSel(0, -1); }
+      else if (k === 's' || k === 'arrowdown') { moveSel(0, 1); }
+      else if (k === 'j' || k === 'k') { confirmSelect(); }
+      return;
+    }
+
+    if (state === 'playing' && !paused) {
+      if (p1 && p1.isPlayer) {
+        if (k === BIND_P1.punch) { queuePress(p1, 'j'); }
+        if (k === BIND_P1.kick) { queuePress(p1, 'k'); }
+        if (k === BIND_P1.special) { queuePress(p1, 'u'); }
+        if (k === BIND_P1.jump) { p1.jumpQueued = true; }
+      }
+      if (p2 && p2.isPlayer) {
+        if (k === BIND_P2.punch) { queuePress(p2, 'j'); }
+        if (k === BIND_P2.kick) { queuePress(p2, 'k'); }
+        if (k === BIND_P2.special) { queuePress(p2, 'u'); }
+        if (k === BIND_P2.jump) { p2.jumpQueued = true; }
+      }
+    }
+  });
+
+  window.addEventListener('keyup', function (e) {
+    var k = (e.key || '').toLowerCase();
+    if (!k && CODE_MAP[e.keyCode]) { k = CODE_MAP[e.keyCode]; }
+    keys[k] = false;
+  });
+  window.addEventListener('blur', function () {
+    keys = Object.create(null);
+    if (p1) { p1.jumpQueued = false; }
+  });
+  document.addEventListener('visibilitychange', function () { last = 0; });
+
+  function toWorld(clientX, clientY) {
+    var r = cv.getBoundingClientRect();
+    return { x: (clientX - r.left) / (r.width / W), y: (clientY - r.top) / (r.height / H) };
+  }
+
+  /* 选择界面鼠标 */
+  cv.addEventListener('mousemove', function (e) {
+    if (state !== 'select') { return; }
+    var p = toWorld(e.clientX, e.clientY);
+    hoverIndex = cardAt(p.x, p.y);
+    if (hoverIndex >= 0) { selIndex = hoverIndex; }
+  });
+  cv.addEventListener('click', function (e) {
+    if (state !== 'select') { return; }
+    var p = toWorld(e.clientX, e.clientY);
+    if (cardAt(p.x, p.y) >= 0) { confirmSelect(); }
+  });
+
+  /* ============================================================
+   * 9. 角色选择
+   * ============================================================ */
+  var CARD_W = 158, CARD_H = 126, CARD_GAP = 14;
+  var CARD_X0 = (W - (5 * CARD_W + 4 * CARD_GAP)) / 2;
+  var CARD_Y0 = 176;
+
+  function cardRect(i) {
+    var col = i % 5, row = Math.floor(i / 5);
+    return { x: CARD_X0 + col * (CARD_W + CARD_GAP),
+             y: CARD_Y0 + row * (CARD_H + CARD_GAP), w: CARD_W, h: CARD_H };
+  }
+  function cardAt(x, y) {
+    for (var i = 0; i < 10; i++) {
+      var c = cardRect(i);
+      if (x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h) { return i; }
+    }
+    return -1;
+  }
+  function moveSel(dx, dy) {
+    var col = selIndex % 5, row = Math.floor(selIndex / 5);
+    col = (col + dx + 5) % 5;
+    row = (row + dy + 2) % 2;
+    selIndex = row * 5 + col;
+  }
+  function goSelect() {
+    state = 'select';
+    document.body.classList.add('selecting');
+    elIntro.classList.add('hidden');
+    elOver.classList.add('hidden');
+    pickPhase = 'p1';
+    selIndex = 0;
+    elHint.textContent = 'WASD / 方向键选择 · J 确认 · Tab 切换双人';
+  }
+  function confirmSelect() {
+    if (twoP) {
+      if (pickPhase === 'p1') {
+        chosenP = selIndex;
+        pickPhase = 'p2';
+        selIndex = (selIndex + 5) % 10;
+        return;
+      }
+      chosenC = selIndex;
+      beginMatch(chosenP, chosenC);
+      return;
+    }
+    var cpuIdx = Math.floor(Math.random() * 10);
+    beginMatch(selIndex, cpuIdx);
+  }
+
+  /* ============================================================
+   * 10. 开局 / 重置
+   * ============================================================ */
+  var chosenP = 0, chosenC = 1;
+  var twoP = false;        /* true = 双人对战 */
+  var pickPhase = 'p1';    /* 双人选角：p1 选完选 p2 */
+
+  var BIND_P1 = { left: 'a', right: 'd', jump: 'w', crouch: 's',
+                  punch: 'j', kick: 'k', block: 'l', special: 'u' };
+  var BIND_P2 = { left: 'arrowleft', right: 'arrowright', jump: 'arrowup', crouch: 'arrowdown',
+                  punch: ',', kick: '.', block: '/', special: ';' };
+
+  function beginMatch(pi, ci) {
+    chosenP = pi; chosenC = ci;
+    startRound();
+  }
+
+  function startRound() {
+    projectiles.length = 0; particles.length = 0; dmgTexts.length = 0;
+    hitstop = 0; shake = 0; flashA = 0;
+    pendingResult = null;
+    timeLeft = 60;
+    roundPhase = 'ready'; phaseT = 0;
+    paused = false;
+    document.body.classList.remove('selecting');
+    elPause.classList.add('hidden');
+    elOver.classList.add('hidden');
+    elIntro.classList.add('hidden');
+
+    p1 = makeFighter(FIGHTERS[chosenP], !demoMode, 260, 1);
+    p2 = makeFighter(FIGHTERS[chosenC], !demoMode && twoP, 640, -1);
+    if (demoMode) { p1.isPlayer = false; p2.isPlayer = false; }
+
+    elName1.textContent = 'P1 ' + p1.cfg.name;
+    elName2.textContent = (twoP ? 'P2 ' : 'CPU ') + p2.cfg.name;
+    window.__DBG = { p1: p1, p2: p2, projectiles: projectiles };   /* 只读调试钩子 */
+    elHint.textContent = twoP
+      ? 'P1: A/D移动 W跳 J拳 K腿 L防 U必杀   ·   P2: 方向键移动 ,拳 .腿 /防 ;必杀'
+      : 'A/D 移动 · W 跳 · S 蹲 · J 拳 · K 腿 · L 防 · U 必杀';
+    state = 'playing';
+    banner('READY', 900);
+  }
+
+  function finishRound(result) {
+    roundPhase = 'end'; phaseT = 0;
+    elOverTitle.textContent = result === 'win' ? 'K.O. 胜利'
+      : result === 'lose' ? '败北' : '平局';
+    var hpPct = Math.round((p1.hp / p1.cfg.hp) * 100);
+    elOverStats.innerHTML =
+      '剩余血量 ' + hpPct + '%　最高连击 ' + p1.maxCombo + '<br>命中 ' + p1.hits +
+      ' 次　对手 ' + p2.cfg.name + ' 最高连击 ' + p2.maxCombo;
+    elOver.classList.remove('hidden');
+    state = 'over';
+  }
+
+  /* ============================================================
+   * 11. 动作启动与取消连段
+   * ============================================================ */
+  function moveById(id, f) { return f.moves[id]; }
+
+  function beginMove(f, mv) {
+    f.state = 'attack';
+    f.move = mv;
+    f.moveT = 0;
+    f.hitDone = false;
+    f.lastHitT = 0;
+    f.specialDone = false;
+    f.rushHits = 0;
+  }
+
+  function startButtonMove(f, btn) {
+    var id;
+    if (btn === 'j') {
+      id = !f.grounded ? 'alp' : (f.state === 'crouch' ? 'clp' : 'lp');
+    } else {
+      id = !f.grounded ? 'ahk' : 'hk';
+    }
+    f.chainStep = (f.cfg.chain[0] === btn) ? 0 : -1;
+    beginMove(f, f.moves[id]);
+  }
+
+  function trySpecial(f) {
+    if (f.energy < SP_COST) { return false; }
+    if (!f.grounded && !f.moves.sp.airOk) { return false; }
+    f.energy -= SP_COST;
+    f.chainStep = -1;
+    beginMove(f, f.moves.sp);
+    return true;
+  }
+
+  /* 缓冲输入：每帧检查 */
+  function consumeBuffer(f) {
+    if (!f.buffer) { return; }
+    if (f.buffer.t > .4) { f.buffer = null; return; }
+    var btn = f.buffer.btn;
+
+    if (f.state === 'attack') {
+      var mv = f.move;
+      var total = mv.startup + mv.active + mv.recovery;
+      var inCancel = f.moveT > mv.startup + mv.active * .5;
+      if (!inCancel) { return; }
+      /* 必杀可取消大部分普通技 */
+      if (btn === 'u' && mv.id !== 'sp') {
+        f.buffer = null;
+        if (trySpecial(f)) { return; }
+      }
+      /* 连段链 */
+      var next = f.chainStep + 1;
+      if (f.chainStep >= 0 && next < f.cfg.chain.length &&
+          f.cfg.chain[next] === btn) {
+        f.buffer = null;
+        if (next === f.cfg.chain.length - 1) {
+          f.chainStep = -1;
+          beginMove(f, f.moves.fin);
+        } else {
+          f.chainStep = next;
+          startButtonMoveKeepChain(f, btn, next);
+        }
+      } else if (f.moveT >= total) {
+        f.buffer = null;
+        if (btn === 'u') { trySpecial(f); }
+        else { startButtonMove(f, btn); }
+      }
+    } else if (f.state === 'idle' || f.state === 'crouch' ||
+               f.state === 'walk' || f.state === 'jump') {
+      f.buffer = null;
+      if (btn === 'u') { trySpecial(f); }
+      else { startButtonMove(f, btn); }
+    }
+  }
+
+  function startButtonMoveKeepChain(f, btn, step) {
+    var id;
+    if (btn === 'j') {
+      id = !f.grounded ? 'alp' : (f.state === 'crouch' ? 'clp' : 'lp');
+    } else {
+      id = !f.grounded ? 'ahk' : 'hk';
+    }
+    beginMove(f, f.moves[id]);
+    f.chainStep = step;
+  }
+
+  /* ============================================================
+   * 12. 玩家 / AI 控制
+   * ============================================================ */
+  function controlPlayer(f, bind) {
+    f.blockHeld = !!keys[bind.block];
+
+    if (f.state === 'idle' || f.state === 'walk' ||
+        f.state === 'crouch' || f.state === 'block') {
+      /* 格挡硬直中不接管 */
+      if (f.stun > 0) { f.jumpQueued = false; return; }
+      if (f.blockHeld) {
+        f.state = 'block'; f.vx = 0;
+      } else {
+        var crouch = keys[bind.crouch];
+        var dir = 0;
+        if (keys[bind.left]) { dir -= 1; }
+        if (keys[bind.right]) { dir += 1; }
+        if (crouch) {
+          f.state = 'crouch'; f.vx = 0;
+        } else {
+          f.vx = dir * f.cfg.speed;
+          f.state = dir ? 'walk' : 'idle';
+        }
+        if (f.jumpQueued && !crouch) {
+          doJump(f);
+        }
+      }
+    }
+    f.jumpQueued = false;
+  }
+
+  function doJump(f) {
+    if (!f.grounded) { return; }
+    f.vy = -f.cfg.jump;          /* 屏幕坐标：向上为负 */
+    f.grounded = false;
+    f.state = 'jump';
+    f.vx = f.vx;
+  }
+
+  /* ---------- CPU ---------- */
+  function aiDecide(f, foe) {
+    var d = Math.abs(foe.x - f.x);
+    var toward = foe.x > f.x ? 1 : -1;
+    var sp = f.cfg.sp;
+
+    /* 即时格挡反应：对手正在出招且距离近 */
+    if (foe.state === 'attack' && d < 120 && Math.random() < .5) {
+      f.aiMode = 'block'; f.aiT = rnd(.25, .45); return;
+    }
+
+    /* 必杀 */
+    if (f.energy >= SP_COST) {
+      if (sp.type === 'projectile' && d > 260 && Math.random() < .7) {
+        queuePress(f, 'u'); f.aiMode = 'wait'; f.aiT = .5; return;
+      }
+      if (sp.type === 'missile' && d > 240 && Math.random() < .7) {
+        queuePress(f, 'u'); f.aiMode = 'wait'; f.aiT = .5; return;
+      }
+      if ((sp.type === 'rush') && d < 220 && d > 60 && Math.random() < .65) {
+        queuePress(f, 'u'); f.aiMode = 'wait'; f.aiT = .6; return;
+      }
+      if (sp.type === 'slam' && d < 150 && foe.grounded && Math.random() < .6) {
+        queuePress(f, 'u'); f.aiMode = 'wait'; f.aiT = .6; return;
+      }
+      if (sp.type === 'uppercut' && !foe.grounded && d < 120 && Math.random() < .8) {
+        queuePress(f, 'u'); f.aiMode = 'wait'; f.aiT = .6; return;
+      }
+      if ((sp.type === 'spin' || sp.type === 'breath') && d < 95 &&
+          Math.random() < .65) {
+        queuePress(f, 'u'); f.aiMode = 'wait'; f.aiT = .7; return;
+      }
+    }
+
+    if (d > 300) {
+      if (Math.random() < .22) { f.aiMode = 'jump'; f.aiT = .8; }
+      else { f.aiMode = 'approach'; f.aiT = rnd(.3, .6); }
+    } else if (d > 130) {
+      if (Math.random() < .62) { f.aiMode = 'approach'; f.aiT = rnd(.2, .4); }
+      else { f.aiMode = 'wait'; f.aiT = rnd(.15, .35); }
+    } else {
+      var r = Math.random();
+      if (r < .45) {
+        f.aiMode = 'attack';
+        f.aiQueue = ['j'];
+        if (Math.random() < .75) {
+          f.aiQueue.push(f.cfg.chain[Math.min(1, f.cfg.chain.length - 1)]);
+        }
+        f.aiT = rnd(.5, .8);
+      } else if (r < .65) {
+        f.aiMode = 'attack';
+        queuePress(f, 'k');
+        f.aiT = rnd(.5, .75);
+      } else if (r < .82) {
+        f.aiMode = 'retreat'; f.aiT = rnd(.25, .5);
+      } else {
+        f.aiMode = 'block'; f.aiT = rnd(.25, .4);
+      }
+    }
+  }
+
+  function controlAI(f, dt) {
+    f.aiT -= dt;
+    if (f.aiT <= 0) { aiDecide(f, f === p1 ? p2 : p1); }
+
+    /* 把攻击队列逐拍送入缓冲（起手招打完再送下一个） */
+    if (f.aiQueue.length && !f.buffer) {
+      f.buffer = { btn: f.aiQueue.shift(), t: 0 };
+    }
+
+    var canCtl = (f.state === 'idle' || f.state === 'walk' ||
+                  f.state === 'crouch' || f.state === 'block');
+    if (!canCtl) { return; }
+    /* 格挡硬直中不切换 */
+    if (f.state === 'block' && f.stun > 0) { return; }
+    var foe = (f === p1) ? p2 : p1;
+    var toward = foe.x > f.x ? 1 : -1;
+
+    if (f.aiMode === 'approach') {
+      f.vx = toward * f.cfg.speed; f.state = 'walk';
+    } else if (f.aiMode === 'retreat') {
+      f.vx = -toward * f.cfg.speed * .85; f.state = 'walk';
+    } else if (f.aiMode === 'jump') {
+      f.vx = toward * f.cfg.speed * .7;
+      doJump(f);
+      f.aiMode = 'approach';
+    } else if (f.aiMode === 'block') {
+      f.state = 'block'; f.vx = 0;
+    } else {
+      f.vx = 0; f.state = 'idle';
+    }
+  }
+
+  /* ============================================================
+   * 13. 命中盒
+   * ============================================================ */
+  function normalHitBox(f, mv) {
+    /* 命中盒从身前约 1/3 处延伸到最大攻击距离，保证贴身也能打中 */
+    var bx = f.x + f.facing * mv.range * .35;
+    var w = mv.range * .65;
+    return { x: f.facing === 1 ? bx : bx - w,
+             y: f.y - (mv.hy + mv.hbh / 2), w: w, h: mv.hbh };
+  }
+  function bodyBox(f) {
+    var h = f.state === 'crouch' ? 52 : 86;
+    return { x: f.x - 20, y: f.y - h, w: 40, h: h };
+  }
+
+  function specialHitBox(f, sp) {
+    if (sp.type === 'uppercut') {
+      return { x: f.x - 14, y: f.y - 150, w: 52, h: 150 };
+    }
+    if (sp.type === 'rush') {
+      return f.facing === 1
+        ? { x: f.x - 22, y: f.y - 80, w: 74, h: 80 }
+        : { x: f.x - 52, y: f.y - 80, w: 74, h: 80 };
+    }
+    if (sp.type === 'spin') {
+      return { x: f.x - sp.pr, y: f.y - 92, w: sp.pr * 2, h: 92 };
+    }
+    if (sp.type === 'breath') {
+      return f.facing === 1
+        ? { x: f.x, y: f.y - 78, w: sp.range, h: 72 }
+        : { x: f.x - sp.range, y: f.y - 78, w: sp.range, h: 72 };
+    }
+    return null;
+  }
+
+  /* ============================================================
+   * 14. 命中结算
+   * ============================================================ */
+  function applyHit(att, tgt, mv, opts) {
+    opts = opts || {};
+    if (tgt.invuln > 0 || tgt.state === 'ko') { return false; }
+
+    var blocking = (tgt.state === 'block') && !mv.unblockable;
+    var rawDmg = mv.dmg;
+    var dmg = rawDmg * (att ? att.cfg.power : 1) * tgt.cfg.defense;
+
+    if (blocking) {
+      dmg = dmg * (mv.guardCrush ? .5 : .15);
+      tgt.hp = Math.max(0, tgt.hp - dmg);
+      tgt.stun = .16;
+      tgt.vx = (att ? att.facing : opts.face || 1) * 110;
+      tgt.state = 'block';
+      tgt.move = null;
+      addDmgText(tgt.x, tgt.y - 90, Math.round(dmg), '#9fe0ff');
+      burst(tgt.x, tgt.y - 58, '#9fe0ff', 7, 180);
+      hitstop = Math.max(hitstop, .035);
+      return true;
+    }
+
+    tgt.hp = Math.max(0, tgt.hp - dmg);
+    tgt.move = null;
+    tgt.stun = mv.hitstun;
+    tgt.flash = .12;
+    var face = att ? att.facing : (opts.face || 1);
+    tgt.facing = -face;
+    tgt.vx = face * (mv.kbx || 120);
+
+    if (mv.kby) {
+      tgt.vy = -mv.kby;          /* 向上击飞（屏幕坐标负方向） */
+      tgt.grounded = false;
+      tgt.downPending = !!mv.knockdown;
+    }
+    if (mv.launch) { tgt.downPending = true; }
+    if (mv.freeze) { tgt.stun = Math.max(tgt.stun, 1.0); }
+
+    tgt.state = 'hit';
+    if (att) {
+      att.combo += 1;
+      att.comboT = .9;
+      att.maxCombo = Math.max(att.maxCombo, att.combo);
+      att.hits += 1;
+      att.energy = clamp(att.energy + 10, 0, MAX_ENERGY);
+    }
+    tgt.energy = clamp(tgt.energy + 6, 0, MAX_ENERGY);
+
+    addDmgText(tgt.x, tgt.y - 92, Math.round(dmg), mv.guardCrush ? '#ff9f6b' : '#ffd166');
+    burst(tgt.x, tgt.y - 58, mv.guardCrush ? '#ff8a5c' : '#ffd166', 12, 260);
+    burst(tgt.x, tgt.y - 58, '#ff5d5d', 6, 200);
+    hitstop = Math.max(hitstop, (rawDmg >= 110 ? .09 : .05));
+    shake = Math.max(shake, (rawDmg >= 110 ? 10 : 6));
+    flashA = Math.max(flashA, .18);
+
+    if (tgt.hp <= 0) {
+      tgt.state = 'ko';
+      tgt.vx = face * 260;
+      tgt.vy = -260;
+      tgt.grounded = false;
+      tgt.downPending = false;
+      roundPhase = 'ko'; phaseT = 0;
+      banner('K.O.', 1600);
+      shake = 16; flashA = .4;
+      for (var i = 0; i < 26; i++) {
+        burst(tgt.x, tgt.y - 50, i % 2 ? '#ffd166' : '#ff5d5d', 1, 340);
+      }
+    }
+    return true;
+  }
+
+  /* 攻击方主动检测 */
+  function checkFighterHit(att, tgt, dt) {
+    if (att.state !== 'attack' || !att.move) { return; }
+    var mv = att.move;
+    var t = att.moveT;
+    var isSP = mv.id === 'sp';
+    var sp = isSP ? mv : null;
+
+    if (isSP) {
+      checkSpecial(att, tgt, sp, t, dt);
+      return;
+    }
+    if (t < mv.startup || t >= mv.startup + mv.active) { return; }
+    if (att.hitDone) { return; }
+    var box = normalHitBox(att, mv);
+    if (rectHit(box, bodyBox(tgt))) {
+      att.hitDone = true;
+      applyHit(att, tgt, mv);
+    }
+  }
+
+  /* 多段攻击节流 */
+  function canMultiHit(att, dt) {
+    att.lastHitT -= dt;
+    if (att.lastHitT <= 0) { att.lastHitT = .14; return true; }
+    return false;
+  }
+
+  function checkSpecial(att, tgt, sp, t, dt) {
+    if (sp.type === 'projectile' || sp.type === 'missile') { return; } /* 发射物在别处处理 */
+
+    if (sp.type === 'slam') {
+      if (t >= sp.startup && !att.specialDone) {
+        att.specialDone = true;
+        ring(att.x, GROUND, sp.radius);
+        shake = Math.max(shake, 12);
+        if (Math.abs(tgt.x - att.x) < sp.radius && tgt.grounded) {
+          applyHit(att, tgt, { dmg: sp.pdmg, hitstun: .45, kbx: 200,
+            kby: sp.kby, knockdown: true, guardCrush: false });
+        }
+      }
+      return;
+    }
+
+    if (t < sp.startup || t >= sp.startup + sp.active) { return; }
+    var box = specialHitBox(att, sp);
+
+    if (sp.type === 'uppercut') {
+      if (!att.hitDone && rectHit(box, bodyBox(tgt))) {
+        att.hitDone = true;
+        applyHit(att, tgt, { dmg: sp.pdmg, hitstun: .5, kbx: 120,
+          kby: 420, launch: true });
+      }
+      return;
+    }
+
+    /* 多段：rush / spin / breath */
+    if (rectHit(box, bodyBox(tgt)) && canMultiHit(att, dt)) {
+      if (att.rushHits >= sp.hits) { return; }
+      att.rushHits += 1;
+      var synth;
+      if (sp.type === 'rush') {
+        synth = { dmg: sp.hdmg, hitstun: .26, kbx: 140, kby: 0 };
+      } else if (sp.type === 'spin') {
+        synth = { dmg: sp.hdmg, hitstun: .22, kbx: 130, kby: 30 };
+      } else {
+        synth = { dmg: sp.hdmg, hitstun: .24, kbx: 90, kby: 0 };
+      }
+      applyHit(att, tgt, synth);
+    }
+  }
+
+  /* ============================================================
+   * 15. 投射物 / 粒子 / 飘字
+   * ============================================================ */
+  function spawnProjectile(att, sp) {
+    var n = (sp.type === 'missile') ? 2 : 1;
+    for (var i = 0; i < n; i++) {
+      var isMiss = sp.type === 'missile';
+      projectiles.push({
+        owner: att,
+        x: att.x + att.facing * 28,
+        y: GROUND - 58 - (isMiss ? i * 26 : 0),
+        vx: att.facing * (sp.pspeed || (isMiss ? 360 : 380)),
+        dmg: sp.pdmg, stun: sp.pstun, r: sp.pr,
+        effect: sp.effect || (isMiss ? 'missile' : 'fire'),
+        arc: 0, vy: 0,
+        wob: isMiss ? rnd(0, 6) : 0,
+        face: att.facing
+      });
+    }
+  }
+
+  function burst(x, y, color, n, spd) {
+    if (particles.length > 240) { return; }
+    for (var i = 0; i < n; i++) {
+      var a = rnd(0, Math.PI * 2), s = rnd(spd * .3, spd);
+      particles.push({ x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 40,
+        life: rnd(.25, .55), max: .55, color: color, size: rnd(2, 4.5), star: true });
+    }
+  }
+  function ring(x, y, radius) {
+    particles.push({ x: x, y: y, vx: 0, vy: 0, life: .4, max: .4,
+      color: '#ffd166', size: radius, ring: true });
+  }
+  function addDmgText(x, y, txt, color) {
+    dmgTexts.push({ x: x + rnd(-8, 8), y: y, vy: -70, life: .75, txt: txt, color: color });
+  }
+
+  /* ============================================================
+   * 16. 物理与状态计时
+   * ============================================================ */
+  function updateFighter(f, dt) {
+    f.animT += dt;
+    if (f.flash > 0) { f.flash -= dt; }
+    if (f.invuln > 0) { f.invuln -= dt; }
+
+    /* 连段计数超时 */
+    if (f.comboT > 0) {
+      f.comboT -= dt;
+      if (f.comboT <= 0) { f.combo = 0; }
+    }
+
+    /* 倒地 */
+    if (f.state === 'down') {
+      f.getup -= dt;
+      f.vx = 0;
+      if (f.getup <= 0) {
+        f.state = 'idle'; f.invuln = .25;
+      }
+      return;
+    }
+
+    /* 受击/格挡硬直（仅在硬直计时为正时处理） */
+    if (f.state === 'hit' || f.state === 'block') {
+      if (f.stun > 0) {
+        f.stun -= dt;
+        if (f.stun <= 0 && f.grounded) { f.state = 'idle'; }
+      }
+    }
+
+    /* 动作推进 */
+    if (f.state === 'attack') { updateMove(f, dt); }
+
+    /* 缓冲输入 */
+    if (f.buffer) { f.buffer.t += dt; }
+    consumeBuffer(f);
+
+    /* 物理 */
+    if (!f.grounded) {
+      f.vy += GRAV * dt;         /* 屏幕坐标：重力向下为正 */
+      f.y += f.vy * dt;
+      if (f.y >= GROUND) {
+        f.y = GROUND; f.vy = 0; f.grounded = true;
+        if (f.state === 'ko') { /* 躺地 */ }
+        else if (f.downPending) {
+          f.downPending = false;
+          f.state = 'down'; f.getup = .85; f.vx = 0;
+        } else if (f.stun > 0) {
+          f.state = 'hit';
+        } else if (f.state === 'jump' || f.state === 'attack') {
+          f.state = 'idle'; f.move = null;
+        }
+      }
+    }
+
+    f.x += f.vx * dt;
+    if (f.grounded && f.state !== 'attack' && f.state !== 'walk') { f.vx *= .8; }
+    if (f.state === 'hit' || f.state === 'block') { f.vx *= .92; }
+    f.x = clamp(f.x, EDGE_L, EDGE_R);
+
+    /* 自动朝向（非攻击/受击时） */
+    var foe = (f === p1) ? p2 : p1;
+    if (foe && f.grounded && (f.state === 'idle' || f.state === 'walk' ||
+        f.state === 'crouch' || f.state === 'block')) {
+      f.facing = foe.x >= f.x ? 1 : -1;
+    }
+  }
+
+  function updateMove(f, dt) {
+    var mv = f.move;
+    f.moveT += dt;
+    var t = f.moveT;
+
+    /* 终结技前冲（影的落踵） */
+    if (mv.id === 'fin' && mv.advance && t < mv.startup) {
+      f.x += f.facing * mv.advance * dt;
+      f.x = clamp(f.x, EDGE_L, EDGE_R);
+    }
+
+    if (mv.id === 'sp') {
+      if (mv.type === 'rush' && t >= mv.startup && t < mv.startup + mv.active) {
+        f.x += f.facing * mv.rspeed * dt;
+        f.x = clamp(f.x, EDGE_L, EDGE_R);
+      }
+      if (mv.type === 'uppercut') {
+        if (t < mv.startup + mv.active && f.grounded) {
+          f.vy = -mv.rise; f.grounded = false;   /* 升龙向上 */
+        }
+      }
+      if (mv.type === 'spin') { f.spinA += dt * 22; }
+      if ((mv.type === 'projectile' || mv.type === 'missile') &&
+          t >= mv.startup && !f.specialDone &&
+          (f.grounded || mv.airOk)) {
+        f.specialDone = true;
+        spawnProjectile(f, mv);
+      }
+    }
+
+    var total = mv.startup + mv.active + mv.recovery;
+    if (t >= total) {
+      f.move = null;
+      f.state = f.grounded ? 'idle' : 'jump';
+      f.chainStep = -1;
+    }
+  }
+
+  /* 身体推挤，防止重叠 */
+  function separate() {
+    var a = p1, b = p2;
+    var d = b.x - a.x;
+    var minD = 34;
+    if (Math.abs(d) < minD) {
+      var push = (minD - Math.abs(d)) / 2;
+      var sgn = d >= 0 ? 1 : -1;
+      a.x = clamp(a.x - sgn * push, EDGE_L, EDGE_R);
+      b.x = clamp(b.x + sgn * push, EDGE_L, EDGE_R);
+    }
+  }
+
+  /* ============================================================
+   * 17. 主更新
+   * ============================================================ */
+  function update(dt) {
+    if (bannerT > 0) {
+      bannerT -= dt;
+      if (bannerT <= 0) { elBanner.classList.remove('show'); }
+    }
+    if (flashA > 0) { flashA -= dt; }
+    if (shake > 0) { shake = Math.max(0, shake - 38 * dt); }
+
+    /* 粒子/飘字任何阶段都更新 */
+    updateParticles(dt);
+
+    if (state !== 'playing') { return; }
+    if (paused) { return; }
+
+    if (hitstop > 0) {
+      hitstop -= dt;
+      return;
+    }
+
+    phaseT += dt;
+
+    if (roundPhase === 'ready') {
+      if (phaseT >= 1.0) {
+        roundPhase = 'fight'; phaseT = 0;
+        banner('FIGHT!', 700);
+      }
+      return;
+    }
+
+    if (roundPhase === 'ko') {
+      /* 不再接收指令，但物理继续，让被 KO / 时间到的局面自然收尾 */
+      updateFighter(p1, dt);
+      updateFighter(p2, dt);
+      separate();
+      updateProjectiles(dt);
+      updateHud();
+      if (phaseT >= 1.7) {
+        finishRound(pendingResult || (p1.hp > 0 ? 'win' : 'lose'));
+      }
+      return;
+    }
+
+    if (roundPhase === 'end') { return; }
+
+    /* run / fight 阶段：计时 */
+    if (roundPhase === 'run') {
+      timeLeft -= dt;
+      if (timeLeft <= 0) {
+        timeLeft = 0;
+        pendingResult = (p1.hp === p2.hp) ? 'draw'
+          : (p1.hp > p2.hp ? 'win' : 'lose');
+        banner('TIME UP', 1200);
+        roundPhase = 'ko'; phaseT = 0;
+        return;
+      }
+    }
+    if (roundPhase === 'fight' && phaseT >= .7) {
+      roundPhase = 'run'; phaseT = 0;
+    }
+
+    /* 控制 */
+    if (p1.isPlayer) { controlPlayer(p1, BIND_P1); } else { controlAI(p1, dt); }
+    if (p2.isPlayer) { controlPlayer(p2, BIND_P2); } else { controlAI(p2, dt); }
+
+    /* 动作/物理 */
+    updateFighter(p1, dt);
+    updateFighter(p2, dt);
+    separate();
+
+    /* 命中 */
+    checkFighterHit(p1, p2, dt);
+    checkFighterHit(p2, p1, dt);
+
+    /* 投射物 */
+    updateProjectiles(dt);
+
+    updateHud();
+  }
+
+  function updateParticles(dt) {
+    var i;
+    for (i = particles.length - 1; i >= 0; i--) {
+      var q = particles[i];
+      q.life -= dt;
+      if (q.life <= 0) { particles.splice(i, 1); continue; }
+      if (q.ring) { continue; }
+      q.vy += 500 * dt;
+      q.x += q.vx * dt;
+      q.y += q.vy * dt;
+    }
+    for (i = dmgTexts.length - 1; i >= 0; i--) {
+      var d = dmgTexts[i];
+      d.life -= dt;
+      d.y += d.vy * dt;
+      d.vy *= .94;
+      if (d.life <= 0) { dmgTexts.splice(i, 1); }
+    }
+  }
+
+  function updateProjectiles(dt) {
+    var i, j;
+    for (i = projectiles.length - 1; i >= 0; i--) {
+      var pr = projectiles[i];
+      pr.x += pr.vx * dt;
+      if (pr.arc) {
+        pr.vy += GRAV * .55 * dt;
+        pr.y += pr.vy * dt;
+      }
+      if (pr.x < -30 || pr.x > W + 30 || pr.y > GROUND + 10) {
+        projectiles.splice(i, 1); continue;
+      }
+      var tgt = pr.owner === p1 ? p2 : p1;
+      if (rectHit({ x: pr.x - pr.r, y: pr.y - pr.r, w: pr.r * 2, h: pr.r * 2 },
+                  bodyBox(tgt))) {
+        var mv = { dmg: pr.dmg, hitstun: pr.stun, kbx: 200 * pr.face,
+                   kby: 0, freeze: pr.effect === 'ice' };
+        applyHit(pr.owner, tgt, mv, { face: pr.face });
+        projectiles.splice(i, 1);
+        continue;
+      }
+      /* 投射物对撞抵消 */
+      for (j = projectiles.length - 1; j >= 0; j--) {
+        if (j === i) { continue; }
+        var o = projectiles[j];
+        if (o.owner !== pr.owner &&
+            Math.abs(o.x - pr.x) < pr.r + o.r &&
+            Math.abs(o.y - pr.y) < pr.r + o.r) {
+          burst(pr.x, pr.y, '#ffd166', 10, 220);
+          projectiles.splice(Math.max(i, j), 1);
+          projectiles.splice(Math.min(i, j), 1);
+          break;
+        }
+      }
+    }
+  }
+
+  /* ============================================================
+   * 18. HUD
+   * ============================================================ */
+  function updateHud() {
+    var h1 = clamp(p1.hp / p1.cfg.hp, 0, 1) * 100;
+    var h2 = clamp(p2.hp / p2.cfg.hp, 0, 1) * 100;
+    elHp1.style.width = h1 + '%';
+    elHp2.style.width = h2 + '%';
+    elHp1.classList.toggle('low', h1 < 30);
+    elHp2.classList.toggle('low', h2 < 30);
+
+    var e1 = clamp(p1.energy / MAX_ENERGY, 0, 1) * 100;
+    var e2 = clamp(p2.energy / MAX_ENERGY, 0, 1) * 100;
+    elEn1.style.width = e1 + '%';
+    elEn2.style.width = e2 + '%';
+    elEn1.classList.toggle('ready', p1.energy >= SP_COST);
+    elEn2.classList.toggle('ready', p2.energy >= SP_COST);
+
+    var sec = Math.ceil(timeLeft);
+    elClock.textContent = (sec < 10 ? '0' : '') + sec;
+    elClock.classList.toggle('hurry', sec <= 10);
+  }
+
+  /* ============================================================
+   * 19. 背景（离屏缓存）
+   * ============================================================ */
+  var bgCv = document.createElement('canvas');
+  bgCv.width = W; bgCv.height = H;
+  (function paintBg() {
+    var b = bgCv.getContext('2d');
+    var g = b.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#1d2746');
+    g.addColorStop(.65, '#121a30');
+    g.addColorStop(1, '#0a0e1a');
+    b.fillStyle = g; b.fillRect(0, 0, W, H);
+
+    /* 星 */
+    b.fillStyle = 'rgba(220,235,255,.5)';
+    for (var s = 0; s < 70; s++) {
+      var sx = (s * 137.5) % W, sy = (s * 71.3) % 300;
+      b.fillRect(sx, sy, 1.4, 1.4);
+    }
+    /* 月 */
+    b.fillStyle = 'rgba(255,240,200,.9)';
+    b.beginPath(); b.arc(740, 92, 34, 0, Math.PI * 2); b.fill();
+    b.fillStyle = 'rgba(29,39,70,.9)';
+    b.beginPath(); b.arc(728, 84, 30, 0, Math.PI * 2); b.fill();
+
+    /* 远景楼群 */
+    b.fillStyle = '#0d1424';
+    var bx = 0;
+    while (bx < W) {
+      var bw = 34 + ((bx * 13) % 40), bh = 90 + ((bx * 29) % 120);
+      b.fillRect(bx, GROUND - bh, bw, bh);
+      bx += bw + 8;
+    }
+    /* 塔 */
+    b.fillStyle = '#0a1020';
+    b.fillRect(120, GROUND - 230, 46, 230);
+    b.fillRect(110, GROUND - 248, 66, 18);
+    b.fillRect(118, GROUND - 268, 50, 20);
+    b.beginPath();
+    b.moveTo(143, GROUND - 300); b.lineTo(125, GROUND - 268); b.lineTo(161, GROUND - 268);
+    b.closePath(); b.fill();
+
+    /* 灯柱 + 灯笼 */
+    function lamp(x) {
+      b.strokeStyle = '#2a3550'; b.lineWidth = 5;
+      b.beginPath(); b.moveTo(x, GROUND); b.lineTo(x, 150); b.stroke();
+      b.lineWidth = 3;
+      b.beginPath(); b.moveTo(x, 150); b.lineTo(x - 26, 168); b.stroke();
+      b.beginPath(); b.moveTo(x, 150); b.lineTo(x + 26, 168); b.stroke();
+      b.fillStyle = '#d94a3a';
+      b.beginPath(); b.ellipse(x - 26, 182, 12, 16, 0, 0, Math.PI * 2); b.fill();
+      b.beginPath(); b.ellipse(x + 26, 182, 12, 16, 0, 0, Math.PI * 2); b.fill();
+      b.fillStyle = 'rgba(255,180,90,.35)';
+      b.beginPath(); b.arc(x - 26, 182, 22, 0, Math.PI * 2); b.fill();
+      b.beginPath(); b.arc(x + 26, 182, 22, 0, Math.PI * 2); b.fill();
+    }
+    lamp(64); lamp(836);
+
+    /* 地面 */
+    var gg = b.createLinearGradient(0, GROUND, 0, H);
+    gg.addColorStop(0, '#243049');
+    gg.addColorStop(1, '#141b2c');
+    b.fillStyle = gg; b.fillRect(0, GROUND, W, H - GROUND);
+    b.fillStyle = '#3a4a6e'; b.fillRect(0, GROUND, W, 4);
+    b.strokeStyle = 'rgba(120,150,200,.18)'; b.lineWidth = 1;
+    for (var px = 20; px < W; px += 56) {
+      b.beginPath(); b.moveTo(px, GROUND + 6); b.lineTo(px - 14, H); b.stroke();
+    }
+    b.strokeStyle = 'rgba(120,150,200,.12)';
+    b.beginPath(); b.moveTo(0, GROUND + 34); b.lineTo(W, GROUND + 34); b.stroke();
+    b.beginPath(); b.moveTo(0, GROUND + 60); b.lineTo(W, GROUND + 60); b.stroke();
+  })();
+
+  /* ============================================================
+   * 20. 绘制斗士（参数化人形）
+   * ============================================================ */
+  function drawFighter(f) {
+    var x = f.x, y = f.y;
+
+    /* 影子 */
+    ctx.fillStyle = 'rgba(0,0,0,.35)';
+    ctx.beginPath();
+    ctx.ellipse(x, GROUND + 6, 26 * clamp(y / GROUND, .4, 1), 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.save();
+    ctx.translate(x, y);
+
+    if (f.state === 'ko') {
+      ctx.rotate(-f.facing * 1.35);
+      ctx.translate(0, 6);
+    } else if (f.state === 'down') {
+      ctx.rotate(-f.facing * 1.45);
+      ctx.translate(0, 4);
+    } else {
+      ctx.scale(f.facing, 1);
+    }
+
+    var pose = computePose(f);
+    var crouchD = pose.crouch * 16;
+
+    /* 腿 */
+    drawLegs(f, pose, crouchD);
+
+    /* 躯干 */
+    ctx.save();
+    ctx.translate(0, -crouchD);
+    ctx.rotate(pose.lean);
+    rr(-14, -64, 28, 34, 9);
+    ctx.fillStyle = f.cfg.color; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = f.cfg.dark; ctx.stroke();
+    /* 腰带 */
+    ctx.fillStyle = f.cfg.dark;
+    ctx.fillRect(-14, -36, 28, 7);
+    ctx.fillStyle = '#ffd166';
+    ctx.fillRect(-4, -35, 8, 5);
+
+    /* 后臂 */
+    drawArm(f, pose, -1, crouchD);
+
+    /* 头 */
+    ctx.save();
+    ctx.translate(2, -74);
+    ctx.fillStyle = '#f0c8a0';
+    ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = f.cfg.dark; ctx.lineWidth = 1.5; ctx.stroke();
+    /* 头发/头带 */
+    ctx.fillStyle = f.cfg.dark;
+    ctx.beginPath(); ctx.arc(0, -2, 12, Math.PI, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = f.cfg.color;
+    ctx.fillRect(-12, -5, 24, 5);
+    ctx.fillRect(6, -3, 12, 3);
+    /* 眼 */
+    ctx.fillStyle = '#1a2030';
+    ctx.beginPath(); ctx.arc(5, 1, 1.8, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    /* 前臂（出招） */
+    drawArm(f, pose, 1, crouchD);
+
+    ctx.restore();
+    ctx.restore();
+
+    /* 连段计数（画在 canvas 上的战斗反馈） */
+    if (f.combo >= 2 && f.comboT > 0) {
+      var tx = f.x - f.facing * 44, ty = f.y - 120;
+      ctx.save();
+      ctx.translate(tx, ty);
+      var pop = 1 + clamp(f.comboT / .9, 0, 1) * .3;
+      ctx.scale(pop, pop);
+      ctx.font = '800 20px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillStyle = '#ffd166';
+      ctx.textAlign = 'center';
+      ctx.fillText(f.combo + ' 连击', 0, 0);
+      ctx.restore();
+    }
+  }
+
+  function computePose(f) {
+    var pose = { crouch: 0, armE: 0, armUp: 0, kickE: 0, lean: 0, block: 0, tuck: 0 };
+    if (f.state === 'crouch') { pose.crouch = 1; }
+    if (!f.grounded && f.state !== 'attack') { pose.tuck = 1; }
+
+    if (f.state === 'hit') { pose.lean = -.28; return pose; }
+    if (f.state === 'block') { pose.block = 1; return pose; }
+
+    if (f.state === 'attack' && f.move) {
+      var mv = f.move, t = f.moveT;
+      var total = mv.startup + mv.active + mv.recovery;
+      var p = clamp(t / total, 0, 1);
+      var bell = Math.sin(p * Math.PI);          /* 0→1→0 */
+      var early = clamp(t / (mv.startup + mv.active), 0, 1);
+
+      if (mv.id === 'lp' || mv.id === 'alp') {
+        pose.armE = bell;
+        if (mv.id === 'alp') { pose.tuck = 1; }
+      } else if (mv.id === 'hk' || mv.id === 'ahk') {
+        pose.kickE = bell;
+        if (mv.id === 'ahk') { pose.tuck = 1; }
+      } else if (mv.id === 'clp') {
+        pose.crouch = .7; pose.armE = bell;
+      } else if (mv.id === 'fin') {
+        if (mv.pose === 'kick') { pose.kickE = bell; }
+        else if (mv.pose === 'uppercut') { pose.armUp = bell; pose.lean = .15; }
+        else if (mv.pose === 'smash') { pose.armUp = Math.sin(clamp(p * 1.4, 0, 1) * Math.PI); }
+        else if (mv.pose === 'knee') { pose.kickE = bell * .8; pose.lean = .2; }
+        else if (mv.pose === 'elbow') { pose.armE = bell; pose.lean = .2; }
+        else if (mv.pose === 'drunk') { pose.armE = bell; pose.lean = Math.sin(p * 8) * .12; }
+        else { pose.armE = bell; }
+      } else if (mv.id === 'sp') {
+        if (mv.type === 'projectile' || mv.type === 'missile') {
+          pose.armE = clamp(early * 1.4, 0, 1);
+          pose.lean = .1;
+        } else if (mv.type === 'spin') {
+          pose.armE = 1; pose.lean = .1;
+        } else if (mv.type === 'uppercut') {
+          pose.armUp = bell; pose.lean = .2;
+        } else if (mv.type === 'slam') {
+          pose.armUp = Math.sin(clamp(p * 1.4, 0, 1) * Math.PI);
+        } else if (mv.type === 'rush') {
+          pose.armE = .9; pose.lean = .28;
+        } else if (mv.type === 'breath') {
+          pose.lean = -.18; pose.armE = bell;
+        }
+      }
+    }
+    return pose;
+  }
+
+  function drawLegs(f, pose, crouchD) {
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = f.cfg.dark;
+
+    if (pose.kickE > 0) {
+      /* 支撑腿 */
+      ctx.lineWidth = 10;
+      ctx.beginPath();
+      ctx.moveTo(-7, -28 - crouchD);
+      ctx.lineTo(-9, -2);
+      ctx.stroke();
+      /* 攻击腿 */
+      var ke = pose.kickE;
+      ctx.strokeStyle = f.cfg.color;
+      ctx.lineWidth = 10;
+      ctx.beginPath();
+      ctx.moveTo(7, -28 - crouchD);
+      ctx.lineTo(12 + 26 * ke, -30 - 10 * ke);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(12 + 26 * ke, -30 - 10 * ke);
+      ctx.lineTo(14 + 40 * ke, -28 - 6 * ke);
+      ctx.stroke();
+      ctx.fillStyle = '#e9f1fb';
+      ctx.beginPath();
+      ctx.arc(14 + 40 * ke, -28 - 6 * ke, 5, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+
+    var swing = 0;
+    if (f.state === 'walk') { swing = Math.sin(f.animT * 11) * 11; }
+    if (pose.tuck) { swing = 4; }
+    var bend = pose.crouch * 12;
+
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = f.cfg.dark;
+    ctx.beginPath();
+    ctx.moveTo(-7, -28 - crouchD);
+    ctx.lineTo(-9 - swing * .5, -16 - bend);
+    ctx.lineTo(-10 - swing, -2);
+    ctx.stroke();
+
+    ctx.strokeStyle = f.cfg.color;
+    ctx.beginPath();
+    ctx.moveTo(7, -28 - crouchD);
+    ctx.lineTo(9 + swing * .5, -16 - bend);
+    ctx.lineTo(10 + swing, -2);
+    ctx.stroke();
+  }
+
+  function drawArm(f, pose, side, crouchD) {
+    /* side: 1 前（朝向侧），-1 后 */
+    var sx = side * 12, sy = -58 - crouchD;
+    ctx.lineCap = 'round';
+
+    if (pose.block) {
+      ctx.strokeStyle = side === 1 ? f.cfg.color : f.cfg.dark;
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(15, sy + 6);
+      ctx.lineTo(16, sy - 12);
+      ctx.stroke();
+      return;
+    }
+
+    if (side === 1 && pose.armUp > 0) {
+      ctx.strokeStyle = f.cfg.color;
+      ctx.lineWidth = 9;
+      var u = pose.armUp;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(14, sy - 10 - 26 * u);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(14, sy - 10 - 26 * u);
+      ctx.lineTo(18, sy - 20 - 40 * u);
+      ctx.stroke();
+      fist(18, sy - 20 - 40 * u, f);
+      return;
+    }
+
+    if (side === 1 && pose.armE > 0) {
+      ctx.strokeStyle = f.cfg.color;
+      ctx.lineWidth = 9;
+      var e = pose.armE;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(14 + 12 * e, sy + 4);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(14 + 12 * e, sy + 4);
+      ctx.lineTo(16 + 34 * e, sy + 2);
+      ctx.stroke();
+      fist(16 + 34 * e, sy + 2, f);
+      return;
+    }
+
+    /* 自然垂臂（走路摆动） */
+    var sw = (f.state === 'walk') ? Math.sin(f.animT * 11 + (side === 1 ? Math.PI : 0)) * 7 : 0;
+    ctx.strokeStyle = side === 1 ? f.cfg.color : f.cfg.dark;
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(sx + sw * .4, sy + 13);
+    ctx.lineTo(sx + sw, sy + 27);
+    ctx.stroke();
+  }
+
+  function fist(x, y, f) {
+    ctx.fillStyle = f.cfg.dark;
+    ctx.beginPath(); ctx.arc(x, y, 5.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = f.cfg.color;
+    ctx.beginPath(); ctx.arc(x - 1, y - 1, 4, 0, Math.PI * 2); ctx.fill();
+  }
+
+  /* ============================================================
+   * 21. 投射物 / 粒子绘制
+   * ============================================================ */
+  function drawProjectiles() {
+    for (var i = 0; i < projectiles.length; i++) {
+      var pr = projectiles[i];
+      ctx.save();
+      ctx.translate(pr.x, pr.y);
+      if (pr.effect === 'fire') {
+        ctx.fillStyle = 'rgba(255,120,60,.35)';
+        ctx.beginPath(); ctx.arc(0, 0, pr.r + 7, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ff5a3c';
+        ctx.beginPath(); ctx.arc(0, 0, pr.r, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffd166';
+        ctx.beginPath(); ctx.arc(-pr.face * 3, 0, pr.r * .55, 0, Math.PI * 2); ctx.fill();
+      } else if (pr.effect === 'ice') {
+        ctx.fillStyle = 'rgba(120,220,240,.35)';
+        ctx.beginPath(); ctx.arc(0, 0, pr.r + 7, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#67d8ef';
+        ctx.beginPath();
+        ctx.moveTo(0, -pr.r); ctx.lineTo(pr.r, 0);
+        ctx.lineTo(0, pr.r); ctx.lineTo(-pr.r, 0);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#e9fbff';
+        ctx.beginPath(); ctx.arc(0, 0, pr.r * .4, 0, Math.PI * 2); ctx.fill();
+      } else if (pr.effect === 'blade') {
+        ctx.rotate(-pr.face * .5);
+        ctx.fillStyle = '#c9b8ff';
+        ctx.beginPath();
+        ctx.moveTo(pr.r, 0); ctx.lineTo(-pr.r, -5); ctx.lineTo(-pr.r, 5);
+        ctx.closePath(); ctx.fill();
+      } else {
+        /* 导弹（直线飞行，轻微上下摆动） */
+        ctx.translate(0, Math.sin(pr.x * .05 + pr.wob) * 5);
+        ctx.fillStyle = 'rgba(120,180,255,.3)';
+        ctx.beginPath(); ctx.arc(0, 0, pr.r + 6, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#5aa9ff';
+        rr(-pr.r, -5, pr.r * 2, 10, 5); ctx.fill();
+        ctx.fillStyle = '#ff8a5c';
+        ctx.beginPath(); ctx.arc(-pr.face * pr.r, 0, 4, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  function drawParticles() {
+    for (var i = 0; i < particles.length; i++) {
+      var q = particles[i];
+      var a = clamp(q.life / q.max, 0, 1);
+      if (q.ring) {
+        ctx.strokeStyle = q.color;
+        ctx.globalAlpha = a;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.ellipse(q.x, q.y, q.size * (1.4 - a), q.size * .35 * (1.4 - a), 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        continue;
+      }
+      ctx.globalAlpha = a;
+      ctx.fillStyle = q.color;
+      if (q.star) {
+        ctx.save(); ctx.translate(q.x, q.y);
+        ctx.rotate(q.life * 9);
+        ctx.fillRect(-q.size, -q.size * .3, q.size * 2, q.size * .6);
+        ctx.fillRect(-q.size * .3, -q.size, q.size * .6, q.size * 2);
+        ctx.restore();
+      } else {
+        ctx.beginPath(); ctx.arc(q.x, q.y, q.size, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawDmgTexts() {
+    ctx.textAlign = 'center';
+    ctx.font = '800 15px "PingFang SC","Microsoft YaHei",sans-serif';
+    for (var i = 0; i < dmgTexts.length; i++) {
+      var d = dmgTexts[i];
+      ctx.globalAlpha = clamp(d.life / .75, 0, 1);
+      ctx.fillStyle = d.color;
+      ctx.fillText(d.txt, d.x, d.y);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  /* ============================================================
+   * 22. 选择界面绘制
+   * ============================================================ */
+  function drawSelect() {
+    ctx.textAlign = 'center';
+    ctx.font = '800 30px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillStyle = '#e9f1fb';
+    ctx.fillText(twoP ? '双人对战' : '选择你的斗士', W / 2, 70);
+    ctx.font = '400 13px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillStyle = '#a7bbd8';
+    ctx.fillText(
+      twoP ? (pickPhase === 'p1' ? 'P1 选角 · J 确认' : 'P2 选角 · J 确认')
+           : '单人模式 · 按 Tab 切换双人对战',
+      W / 2, 100);
+
+    for (var i = 0; i < 10; i++) {
+      var c = cardRect(i);
+      var cfg = FIGHTERS[i];
+      var sel = (i === selIndex);
+      /* 双人模式下 P1 已选卡片标蓝 */
+      var p1Picked = twoP && pickPhase === 'p2' && i === chosenP;
+
+      ctx.save();
+      if (sel) { ctx.translate(c.x + c.w / 2, c.y + c.h / 2); ctx.scale(1.05, 1.05); ctx.translate(-(c.x + c.w / 2), -(c.y + c.h / 2)); }
+
+      rr(c.x, c.y, c.w, c.h, 10);
+      ctx.fillStyle = sel ? '#1a2740' : '#101a2e';
+      ctx.fill();
+      ctx.lineWidth = sel ? 3 : (p1Picked ? 2.5 : 1.5);
+      ctx.strokeStyle = sel ? '#ffd166' : (p1Picked ? '#4f9cf9' : 'rgba(120,180,255,.25)');
+      ctx.stroke();
+
+      /* 迷你人形 */
+      ctx.save();
+      ctx.translate(c.x + c.w / 2, c.y + 44);
+      ctx.fillStyle = cfg.color;
+      ctx.beginPath(); ctx.arc(0, -16, 9, 0, Math.PI * 2); ctx.fill();
+      rr(-8, -8, 16, 20, 6); ctx.fill();
+      ctx.fillStyle = cfg.dark;
+      ctx.fillRect(-8, 8, 16, 4);
+      ctx.restore();
+
+      /* 名字 */
+      ctx.font = '800 17px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillStyle = sel ? '#ffd166' : (p1Picked ? '#9cc7ff' : '#e9f1fb');
+      ctx.fillText(cfg.name, c.x + c.w / 2, c.y + 72);
+      ctx.font = '400 11px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillStyle = '#a7bbd8';
+      ctx.fillText(cfg.title, c.x + c.w / 2, c.y + 89);
+
+      /* 数值条 */
+      statBar(c.x + 22, c.y + 98, c.w - 44, cfg.speed / 280, '#4f9cf9');
+      statBar(c.x + 22, c.y + 110, c.w - 44, cfg.power / 1.2, '#ff5d5d');
+
+      ctx.font = '400 10px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillStyle = '#8fa6c6';
+      ctx.fillText(cfg.sp.name, c.x + c.w / 2, c.y + 124);
+
+      /* P1 已选标记 */
+      if (p1Picked) {
+        ctx.font = '800 10px "PingFang SC","Microsoft YaHei",sans-serif';
+        ctx.fillStyle = '#4f9cf9';
+        ctx.fillText('P1 已选', c.x + c.w / 2, c.y + 14);
+      }
+      ctx.restore();
+    }
+  }
+
+  function statBar(x, y, w, ratio, color) {
+    ctx.fillStyle = 'rgba(255,255,255,.08)';
+    rr(x, y, w, 4, 2); ctx.fill();
+    ctx.fillStyle = color;
+    rr(x, y, w * clamp(ratio, 0, 1), 4, 2); ctx.fill();
+  }
+
+  /* ============================================================
+   * 23. 总绘制
+   * ============================================================ */
+  function draw() {
+    ctx.setTransform(UNIT, 0, 0, UNIT, 0, 0);
+
+    if (state === 'select') {
+      ctx.drawImage(bgCv, 0, 0);
+      drawSelect();
+      return;
+    }
+
+    var sx = 0, sy = 0;
+    if (shake > 0) { sx = rnd(-shake, shake); sy = rnd(-shake * .5, shake * .5); }
+    ctx.save();
+    ctx.translate(sx, sy);
+
+    ctx.drawImage(bgCv, 0, 0);
+
+    if (p1 && p2) {
+      /* 远者先画 */
+      if (p1.y < p2.y) { drawFighter(p1); drawFighter(p2); }
+      else { drawFighter(p2); drawFighter(p1); }
+      drawProjectiles();
+    }
+
+    drawParticles();
+    drawDmgTexts();
+    ctx.restore();
+
+    if (flashA > 0) {
+      ctx.fillStyle = 'rgba(255,255,255,' + clamp(flashA, 0, .5) + ')';
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  /* ============================================================
+   * 24. 主循环
+   * ============================================================ */
+  function tick(ts) {
+    var now = ts / 1000;
+    if (!last) { last = now; }
+    var dt = Math.min(.05, Math.max(0, now - last));
+    last = now;
+    update(dt);
+    draw();
+  }
+  function loop(ts) { tick(ts); requestAnimationFrame(loop); }
+
+  /* ============================================================
+   * 25. 按钮与移动端拦截
+   * ============================================================ */
+  document.getElementById('startBtn').addEventListener('click', goSelect);
+  document.getElementById('retryBtn').addEventListener('click', startRound);
+  document.getElementById('changeBtn').addEventListener('click', function () {
+    state = 'select';
+    elOver.classList.add('hidden');
+    elHint.textContent = 'WASD / 方向键选择 · J 或 Enter 确认';
+  });
+  document.getElementById('mobileBack').addEventListener('click', function () {
+    location.href = '主页.html';
+  });
+
+  function isTouchOnlyDevice() {
+    try {
+      var tp = navigator.maxTouchPoints || 0;
+      var ua = navigator.userAgent || '';
+      var mobileUA = /Android|iPhone|iPad|iPod|Mobile|Tablet|Silk|Kindle/i.test(ua);
+      if (window.matchMedia) {
+        if (window.matchMedia('(pointer: coarse)').matches &&
+            window.matchMedia('(hover: none)').matches) { return true; }
+        if (mobileUA) { return true; }
+      }
+      return mobileUA || (tp > 0 && window.matchMedia &&
+        !window.matchMedia('(any-pointer: fine)').matches);
+    } catch (e) { return false; }
+  }
+
+  if (isTouchOnlyDevice() && !demoMode) {
+    elMobile.classList.remove('hidden');
+  } else {
+    if (demoMode) {
+      chosenP = (demoP === null) ? Math.floor(Math.random() * 10) : demoP;
+      chosenC = (demoC === null) ? Math.floor(Math.random() * 10) : demoC;
+      startRound();
+    }
+    requestAnimationFrame(loop);
+  }
+})();
+</script>
+</body>
+</html>
