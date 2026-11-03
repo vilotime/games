@@ -139,23 +139,28 @@ function readFile(file, res) {
   });
 }
 
-/* ---------------- 监听 games.json ---------------- */
+/* ---------------- 监听 games.json / url.txt ---------------- */
 let watchTimer = null;
-function watchData() {
+function watchFile(abs, label) {
   try {
-    fs.watch(DATA, { persistent: false }, () => {
+    fs.watch(abs, { persistent: false }, () => {
       /* Windows 上一次保存会触发多次事件，压一下 */
       if (watchTimer) { clearTimeout(watchTimer); }
       watchTimer = setTimeout(() => {
         watchTimer = null;
-        syncFallback('games.json 变了，重新生成静态兜底…');
-        console.log('[提示] 静态兜底已更新，刷新浏览器（Ctrl+R）就能看到。');
+        syncFallback(label + ' 变了，重新生成静态兜底与 head…');
+        console.log('[提示] 已同步，刷新浏览器（Ctrl+R）就能看到。');
       }, 250);
     });
-    console.log('[监听] games.json 已监听：保存后自动同步兜底');
+    console.log('[监听] ' + path.basename(abs) + ' 已监听：保存后自动同步');
   } catch (e) {
-    console.warn('[监听] 无法监听 games.json（' + e.message + '）：改完请手动跑 node tools/export-games.js');
+    console.warn('[监听] 无法监听 ' + path.basename(abs) + '（' + e.message + '）：改完请手动跑 node tools/export-games.js');
   }
+}
+function watchData() {
+  watchFile(DATA, 'games.json');
+  /* 站点地址也在根目录的 url.txt 里，改域名同样要重算 head 里的绝对地址 */
+  watchFile(path.join(ROOT, 'url.txt'), 'url.txt');
 }
 
 /* ---------------- 启动 ---------------- */

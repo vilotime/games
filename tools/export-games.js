@@ -315,7 +315,35 @@ if (manifestRel) {
   warn('没配 icons.manifest —— Android / 平板「添加到主屏幕」会退回放大 ICO，图标会糊');
 }
 
-/* 2. 分享封面：标题 / 描述 / 方图，绝对地址由 meta.url 或 site.pagesUrl 拼出来 */
+/* 2. 分享封面 / 站点地址：绝对地址全部由根目录的 url.txt 决定
+ *    —— 换域名只改 url.txt 这一行，跑一次同步，og:url / og:image / twitter:image 全部跟着走。
+ *    没有 url.txt 时才退回 games.json 里的 meta.url / site.pagesUrl（兼容旧配置）。 */
+function readUrlTxt() {
+  const abs = path.join(root, 'url.txt');
+  if (!fs.existsSync(abs)) { return null; }
+  const lines = fs.readFileSync(abs, 'utf8').split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line || line.charAt(0) === '#') { continue; }
+    return line;
+  }
+  return '';                                   /* 文件在，但没有有效地址 */
+}
+
+const urlTxt = readUrlTxt();
+const jsonUrl = String(rawMeta.url || ds.site.pagesUrl || '');
+const baseUrl = String(urlTxt === null ? jsonUrl : urlTxt);
+
+if (urlTxt === null) {
+  warn('根目录没有 url.txt —— 站点地址暂时用 games.json 里的值。建议新建 url.txt，只写一行站点地址，' +
+    '以后换域名只改那个文件');
+} else if (urlTxt === '') {
+  warn('url.txt 里没有有效地址（空行和 # 注释不算），站点地址退回 games.json 里的值');
+} else if (jsonUrl && jsonUrl.replace(/\/+$/, '') !== urlTxt.replace(/\/+$/, '')) {
+  warn('url.txt（' + urlTxt + '）已经覆盖 games.json 里的地址（' + jsonUrl + '）；' +
+    '以 url.txt 为准，games.json 里的 site.pagesUrl / meta.url 可以删掉了');
+}
+
 meta.title = String(rawMeta.title || ds.site.name || '');
 meta.siteName = String(rawMeta.siteName || ds.site.name || '');
 meta.shortName = String(rawMeta.siteName || ds.site.name || meta.title || '');
@@ -323,28 +351,51 @@ meta.description = String(rawMeta.description || '');
 if (!meta.title) { fail('meta.title 缺失（页面 <title> 和分享卡片标题都从这里取）'); }
 if (!meta.description) { warn('meta.description 缺失，分享卡片没有描述'); }
 
-const baseUrl = String(rawMeta.url || ds.site.pagesUrl || '');
 if (!isAbsUrl(baseUrl)) {
-  warn('meta.url / site.pagesUrl 不是完整地址（要 http(s):// 开头），og:url、og:image 这类需要绝对地址的标签会被跳过：' + JSON.stringify(baseUrl));
+  warn('站点地址不是完整地址（要 http(s):// 开头），og:url、og:image 这类需要绝对地址的标签会被跳过：' +
+    JSON.stringify(baseUrl) + '（来源：' + (urlTxt === null ? 'games.json' : 'url.txt') + '）');
 } else {
   if (meta.title) { meta.url = baseUrl; }
 
-  /* 站点地址和 GitHub 仓库对不对得上：项目站点必须带 /仓库名/，
-     写成域名根会指向另一个仓库（分享封面直接 404）。自定义域名这里只提醒，不拦。 */
-  const mRepo = /^https?:\/\/github\.com\/([^\/]+)\/([^\/]+?)(?:\.git)?\/?$/i.exec(String(ds.site.repo || ''));
-  if (mRepo) {
-    const user = mRepo[1].toLowerCase();
-    const name = mRepo[2].toLowerCase();
-    const isUserSite = name === (user + '.github.io');
-    const want = isUserSite
-      ? 'https://' + user + '.github.io/'
-      : 'https://' + user + '.github.io/' + name + '/';
-    const got = baseUrl.replace(/\/+$/, '') + '/';
-    if (got.toLowerCase() !== want) {
-      warn('site.pagesUrl 和仓库对不上：仓库 ' + ds.site.repo + ' 的线上地址是 ' + want +
-        '，现在配的是 ' + JSON.stringify(baseUrl) +
-        '（项目站点漏掉 /' + name + '/ 这段，分享封面和站点图标就会指向别的仓库）');
+  /* 站点地址和仓库对不对得上（三种情况）：
+     · url.txt 写的是 GitHub Pages 官方地址（*.github.io）→ 项目站必须带 /仓库名/，
+       漏了就会指向另一个仓库，这里直接提醒；
+     · 写的是自定义域名（games.example.cn 这种）→ 那才是线上入口，压根不该拿仓库名去比，
+       所以这项检查跳过，只跟仓库里的 CNAME 文件对一下；
+     · 仓库里有 CNAME 文件时，url.txt 的域名和它保持一致。 */
+  const host = (function () {
+    try { return new URL(baseUrl).host.toString().toLowerCase(); } catch (e) { return ''; }
+  })();
+  const isGhPagesHost = /\.github\.io$/.test(host);
+
+  const cnameAbs = path.join(root, 'CNAME');
+  const cname = fs.existsSync(cnameAbs)
+    ? (fs.readFileSync(cnameAbs, 'utf8').split(/\r?\n/).map(s => s.trim()).filter(Boolean)[0] || '')
+    : '';
+
+  if (isGhPagesHost) {
+    const mRepo = /^https?:\/\/github\.com\/([^\/]+)\/([^\/]+?)(?:\.git)?\/?$/i.exec(String(ds.site.repo || ''));
+    if (mRepo) {
+      const user = mRepo[1].toLowerCase();
+      const name = mRepo[2].toLowerCase();
+      const isUserSite = name === (user + '.github.io');
+      const want = isUserSite
+        ? 'https://' + user + '.github.io/'
+        : 'https://' + user + '.github.io/' + name + '/';
+      const got = baseUrl.replace(/\/+$/, '') + '/';
+      if (got.toLowerCase() !== want) {
+        warn('站点地址和仓库对不上：仓库 ' + ds.site.repo + ' 的线上地址是 ' + want +
+          '，现在配的是 ' + JSON.stringify(baseUrl) +
+          '（项目站点漏掉 /' + name + '/ 这段，分享封面和站点图标就会指向别的仓库）');
+      }
     }
+    if (cname) {
+      warn('仓库里有 CNAME（自定义域名 ' + cname + '），但 url.txt 写的是 GitHub Pages 地址 ' +
+        JSON.stringify(baseUrl) + '；线上实际入口是 https://' + cname + '/，建议把 url.txt 改成它');
+    }
+  } else if (cname && host && host !== cname) {
+    warn('url.txt 的域名（' + host + '）和仓库里 CNAME 文件（' + cname + '）不一致：' +
+      '搜索引擎与分享卡片认的是 CNAME 那个域名');
   }
 }
 
@@ -451,7 +502,9 @@ ds.categories.forEach(c => console.log('  · ' + c.name + '（' + c.key + '）�
 
 const iconLinks = [icons.ico, icons.svg].filter(Boolean).length +
   (icons.png ? icons.png.length : 0) + (icons.appleTouch ? 1 : 0) + (icons.manifest ? 1 : 0);
-console.log('\n图标 / 分享卡片：' + iconLinks + ' 个 <link>' +
+console.log('\n站点地址：' + (baseUrl || '（未配置，og:url / og:image 会被跳过）') +
+  (urlTxt === null ? '  ← 来自 games.json（建议改用 url.txt）' : '  ← url.txt'));
+console.log('图标 / 分享卡片：' + iconLinks + ' 个 <link>' +
   (icons.icoSizes ? '（ICO 内含 ' + icons.icoSizes + '）' : '') +
   (icons.manifest ? ' + ' + icons.manifest : '') +
   (meta.image ? '，封面 ' + meta.image : '，没有分享封面'));

@@ -1,8 +1,10 @@
 # 叶初小游戏
 
 通过Vibe Coding，按照一定范式构建的纯 Canvas 小游戏，外壳是一个侧栏 + iframe 的静态页，没有构建步骤、没有后端、没有依赖，
-直接 GitHub Pages 托管（仓库 `VILOTIME/games`，**项目站点**，所以带 `/games/` 路径）：
-<https://vilotime.github.io/games/>
+托管在 GitHub Pages（仓库 `VILOTIME/games`），绑定自定义域名：
+<https://games.vilotime.cn/>
+
+> 站点地址只写在根目录的 [`url.txt`](url.txt) 里，换域名只改那一行。
 
 > **想邀请别人用 AI 帮忙做游戏？** [`docs/AI辅助编程说明.md`](docs/work-with-ai.md) 是给**制作方**看的说明书，
 > 可以直接连同压缩包一起转给对方：怎么装 DSH、怎么打开游戏包、两种提示词写法（**方式一**在对话框里
@@ -13,8 +15,9 @@
 
 ```
 .
-├─ index.html      外壳：侧栏导航 + iframe
+├─ index.html      外壳：侧栏导航 + iframe（head 那一段由脚本生成）
 ├─ games.json      ★ 游戏清单（唯一数据源，加游戏只改这里）
+├─ url.txt         ★ 站点地址（唯一来源，换域名只改这一行）
 ├─ favicon.ico     站点图标兜底（搜索引擎只认根目录这个，tools/make-icons.ps1 生成）
 ├─ site.webmanifest Android / PWA 主屏图标清单（tools/export-games.js 生成）
 ├─ sw.js           Service Worker（只为「装成应用」，不做缓存）
@@ -63,7 +66,7 @@
 |---|---|
 | `id` | `file` 的文件名去掉 `.html`（稳定 key） |
 | `rel` | `file` 相对 `site.dir` 的路径（主页卡片 `href`） |
-| `url` | 站点路径前缀（取自 `site.pagesUrl`，本站是 `/games`）+ `/` + `file`；没配 `pagesUrl` 时退回 `file` |
+| `url` | 站点根路径：`/` + `file`（域名和路径前缀由 `url.txt` 在构建时用于绝对地址，运行时用不到这个字段） |
 | `mobile` | `!pcOnly` |
 | `tags` | `pcOnly ? ['pc-only'] : []` |
 | `pageTitle` | 同 `name` |
@@ -72,7 +75,24 @@
 
 旧写法 `{"id":"文件名"}` 仍然认，会按 `site.dir + id + '.html'` 推断。
 
-## 站点信息：标题 / 图标 / 分享封面
+## 站点信息：域名 / 标题 / 图标 / 分享封面
+
+**站点地址只有一处：根目录的 `url.txt`。** 里面就一行（`#` 开头的行是注释、空行忽略）：
+
+```text
+https://games.vilotime.cn/
+```
+
+换域名（或换成自定义域名、搬回 GitHub Pages、搬到别的子路径）只改这一行，然后跑一次 `tools\sync.cmd` ——
+`index.html` 里的 `og:url`、`og:image`、`twitter:image` 这些**必须写绝对地址**的标签全部跟着变。
+
+脚本还会校验这个地址：
+
+- 写的是 GitHub Pages 官方地址（`*.github.io`）→ 项目站必须带 `/仓库名/`，漏了会提醒（否则指向另一个仓库）；
+- 写的是**自定义域名**（本站就是 `games.vilotime.cn`）→ 直接放行，不会再拿仓库名去比；
+- 仓库里有 `CNAME` 文件时，会顺带核对 `url.txt` 的域名和它一致，防止两边打架。
+
+图标（`.ico` / `.svg` / `.png` / `apple-touch-icon`）用的都是**相对路径**，域名改了它们自动跟着走，不用动。
 
 `games.json` 里除了游戏清单，还有三段站点级配置，全部由 `tools/export-games.js` 写进
 `index.html` 的 head 标记区（`<!-- head:start -->` … `<!-- head:end -->`）并生成 `site.webmanifest`，
@@ -80,7 +100,7 @@
 
 | 段 | 管什么 |
 |---|---|
-| `site` | 站点名、游戏目录 `dir`、主页 `homepage`、仓库地址，以及 `pagesUrl` —— 分享卡片拼绝对地址、`url` / `homepageUrl` 算路径前缀都用它。本站是项目站点，值是 `https://vilotime.github.io/games/`（**别写成域名根**，那是另一个仓库） |
+| `site` | 站点名、游戏目录 `dir`、主页 `homepage`、GitHub 仓库地址 `repo`（只用来校验 `url.txt` 里的地址对不对）。**域名不写在这里**，见上面的 `url.txt` |
 | `icons` | 站点图标：`ico` / `svg` / `png[]` / `appleTouch` / `manifest`。`.ico` 必须在**仓库根目录**，否则 Bing 会退回 GitHub 图标 |
 | `meta` | `<title>`、`<meta name="description">`、分享封面 `image`（方图自动配 `twitter:card=summary`，宽图自动切 `summary_large_image`）、manifest 用的 `themeColor` / `backgroundColor` |
 
@@ -109,6 +129,8 @@
 - **`sizes` 一律按真实尺寸写**：`<link rel="icon">` 指 `.ico` 时写的是 ICO **内部真实包含**的尺寸
   （现在是 `16x16 32x32 48x48 192x192`，由脚本读 ICO 目录自动生成），**不能写 `any`** ——
   写了 `any` 浏览器会当它可缩放，高分屏上把位图放大，标签页图标就糊了。`sizes="any"` 只给 SVG。
+- 域名相关的**绝对地址只有 `url.txt` 一个来源**；图标、封面、manifest 里的路径都是相对的，
+  所以换域名不需要改动任何图片文件或 `games.json`。
 - 换图标：`.\tools\make-icons.ps1`（渐变底 + 白色播放三角，或 `-Design photo -Source 图.png`）。
   它写出根目录 `favicon.ico`（内含 16/32/48/**192**）+ `assets/icon-16/32/192/512.png`
   + `apple-touch-icon.png`（180，**满版不透明**，iOS 自己套圆角）并回读校验；
@@ -213,7 +235,9 @@ powershell -File tools/make-icons.ps1   # 重新生成站点图标（ICO + 多�
 图标 / 封面那几段还会查：`.ico` 是不是真 ICO、里面有没有 48 和 192、
 PNG 的 `sizes` 和实际宽高是否一致、`appleTouch` 是不是 180×180、
 分享封面有没有被拼成绝对地址、是不是方图（宽图微信会裁）、有没有忘了配 `icons.ico`（Bing 会退回
-GitHub 图标）或 `icons.manifest`、`site.pagesUrl` 和仓库对不对得上（项目站点漏掉 `/games/` 会指向另一个仓库）。
+GitHub 图标）或 `icons.manifest`；`url.txt` 里的站点地址是不是完整 `http(s)` 地址、是不是根本不存在 /
+里面没写地址；以及地址和仓库的对应关系（`*.github.io` 才校验 `/仓库名/`，自定义域名直接放行，
+仓库有 `CNAME` 文件时和它对齐）。
 
 ### Windows 一键：双击 `tools\sync.cmd`
 
