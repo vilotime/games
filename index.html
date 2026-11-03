@@ -14,7 +14,6 @@
     <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="assets/icon-512.png">
     <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
-    <link rel="manifest" href="site.webmanifest">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -43,6 +42,18 @@
             try { s = localStorage.getItem('yc-theme'); } catch (e) {}
             var dark = (s === 'dark') || (s !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
             document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+        })();
+
+        /* 站点清单（PWA）只在 http(s) 下挂：
+           双击用 file:// 打开时 origin 是 null，浏览器去抓 site.webmanifest 会被 CORS 拦掉，
+           控制台就多出「Access to manifest ... blocked by CORS policy」「net::ERR_FAILED」几条红字。
+           动态插入在 http(s) 下效果和写在 <head> 里一样（浏览器一插入就会去抓 manifest）。 */
+        (function () {
+            if (location.protocol !== 'http:' && location.protocol !== 'https:') { return; }
+            var l = document.createElement('link');
+            l.rel = 'manifest';
+            l.href = 'site.webmanifest';
+            document.head.appendChild(l);
         })();
     </script>
     <style>
@@ -85,6 +96,13 @@
             -webkit-text-size-adjust: 100%;
             transition: background-color .25s ease, color .25s ease;
         }
+
+        /* ---------- 隐藏浏览器自带的滚动条 ----------
+           滚轮 / 触控板 / 触摸依旧能滚，只是不画那条竖条，布局完全不变。
+           scrollbar-width 管 Firefox 与 Chromium 121+，::-webkit-scrollbar 管 Edge / Chrome / Safari */
+        html, body, .sidebar, .nav { scrollbar-width: none; -ms-overflow-style: none; }
+        html::-webkit-scrollbar, body::-webkit-scrollbar,
+        .sidebar::-webkit-scrollbar, .nav::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
         /* ---------- 侧边栏 ---------- */
         .sidebar {

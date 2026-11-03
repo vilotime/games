@@ -492,6 +492,12 @@ if (icons.manifest) {
       if (shell.indexOf('serviceWorker.register') < 0) {
         warn('index.html 里没找到 serviceWorker.register —— sw.js 存在但没注册，同样装不成独立应用');
       }
+      /* manifest 的 <link> 是页面脚本在 http(s) 下动态插的（file:// 下挂它会被 CORS 拦、控制台刷红字），
+         所以这里检查那段注入代码还在不在，别被人手删掉后线上悄悄失去安装能力 */
+      if (shell.indexOf("l.rel = 'manifest'") < 0 && shell.indexOf('rel="manifest"') < 0) {
+        warn('index.html 里没找到挂 manifest 的代码（脚本里 `l.rel = \'manifest\'`）—— ' +
+          '线上会失去「装成应用」的能力');
+      }
     }
   }
 }
@@ -550,12 +556,12 @@ console.log('games.json：' + ds.total + ' 款游戏，' + ds.categories.length 
 ds.categories.forEach(c => console.log('  · ' + c.name + '（' + c.key + '）：' + c.count + ' 款'));
 
 const iconLinks = [icons.ico, icons.svg].filter(Boolean).length +
-  (icons.png ? icons.png.length : 0) + (icons.appleTouch ? 1 : 0) + (icons.manifest ? 1 : 0);
+  (icons.png ? icons.png.length : 0) + (icons.appleTouch ? 1 : 0);   /* manifest 不是 <link>，见下面单独说明 */
 console.log('\n站点地址：' + (baseUrl || '（未配置，og:url / og:image 会被跳过）') +
   (urlTxt === null ? '  ← 来自 games.json（建议改用 url.txt）' : '  ← url.txt'));
 console.log('图标 / 分享卡片：' + iconLinks + ' 个 <link>' +
   (icons.icoSizes ? '（ICO 内含 ' + icons.icoSizes + '）' : '') +
-  (icons.manifest ? ' + ' + icons.manifest : '') +
+  (icons.manifest ? '，manifest 是 ' + icons.manifest + '（页面脚本在 http(s) 下动态挂载）' : '') +
   (meta.image ? '，封面 ' + meta.image : '，没有分享封面'));
 
 const touched = [];

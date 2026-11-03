@@ -136,9 +136,13 @@
     var u = url || './games.json';
 
     /* file:// 下浏览器一律拒绝读本地 json（origin 为 null），与其刷一串 CORS 红字，
-       不如直接走 HTML 静态兜底；想看实时 json 起 tools/dev.js 走 http 即可。 */
+       不如直接走 HTML 静态兜底；想看实时 json 起 tools/dev.js 走 http 即可。
+       提示只在顶层窗口打一次：内嵌的游戏墙（主页.html）也在同一套控制台里，
+       两边都打就会看到一模一样的两行。 */
     if (typeof location !== 'undefined' && location.protocol === 'file:') {
-      if (typeof console !== 'undefined' && console.info) {
+      var isTop = true;
+      try { isTop = (typeof window === 'undefined') || window.top === window.self; } catch (e2) { isTop = false; }
+      if (isTop && typeof console !== 'undefined' && console.info) {
         console.info('[games.json] 本地 file:// 打不开 json，页面使用 HTML 静态兜底（要看实时 json 请先跑 node tools/dev.js）');
       }
       return Promise.reject(new Error('file:// 下不读取 json'));
@@ -240,8 +244,11 @@
       out.push('<link rel="apple-touch-icon" sizes="' + esc(icons.appleTouch.sizes || '180x180') +
         '" href="' + esc(icons.appleTouch.src) + '">');
     }
-    /* Android / 平板「添加到主屏幕」优先用 manifest 里的 192 / 512，比 ICO 清晰 */
-    if (icons.manifest) { out.push('<link rel="manifest" href="' + esc(icons.manifest) + '">'); }
+    /* Android / 平板「添加到主屏幕」优先用 manifest 里的 192 / 512，比 ICO 清晰。
+       注意：这里故意不输出 <link rel="manifest"> —— 浏览器会去抓那个文件，
+       而我们常常直接双击 index.html 用 file:// 打开（origin 为 null），
+       那条请求必然被 CORS 拦掉、控制台刷红字。改成页面脚本在 http(s) 下动态插进去
+       （见 index.html 头部那段），线上行为不变、本地不再报错。 */
     /* iOS 不认 manifest 的 display，要「添加到主屏幕」后全屏只能靠这三条 meta */
     if (icons.manifest) {
       out.push('<meta name="apple-mobile-web-app-capable" content="yes">');

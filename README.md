@@ -162,14 +162,19 @@ https://games.vilotime.cn/
 | 东西 | 在哪 | 谁管 |
 |---|---|---|
 | `site.webmanifest`（`name`、192/512 图标、`start_url`、`display: standalone`） | 仓库根目录 | `tools/export-games.js` 按 `games.json` 的 `icons` / `meta` 生成 |
+| 它的 `<link rel="manifest">` | **不是静态写在 head 里**，而是 `index.html` 头部那段小脚本在 `http(s)` 下动态插入 | 见下面「为什么动态挂」 |
 | **Service Worker**（带 fetch 处理器） | 根目录 `sw.js`，由 `index.html` 末尾那段脚本注册 | 手写，一般不用动 |
 | iOS 的三条 meta（`apple-mobile-web-app-capable` 等） | `index.html` 的 head 标记区 | 跟着 manifest 一起生成 |
 
+- **为什么 manifest 要动态挂**：浏览器一看到 `<link rel="manifest">` 就会去抓那个文件。而平时调样式常常是
+  直接双击 `index.html`（`file://`，origin 为 `null`），这条请求必然被 CORS 拦掉，控制台会多出
+  「Access to manifest … blocked by CORS policy」「net::ERR_FAILED」几条红字。改成在 `http(s)` 下由脚本插入，
+  线上行为和写在 head 里完全一样（浏览器一插入就会去抓），本地双击则**一条报错都没有**。
 - `sw.js` **故意不做任何缓存**：这个站是纯静态、靠浏览器缓存 + `Ctrl+F5`，SW 再叠一层只会出现
   「改了看不到」。它存在的意义只是满足 Chrome / Edge 的安装条件；断网时会返回一句提示而不是白屏。
   以后真要离线可玩再加 precache，但那时记得给缓存加版本号、并让 HTML 走 network-first。
 - `tools/export-games.js` 会顺手校验这条链路：`icons.manifest` 配了但仓库里没有 `sw.js`、
-  或者 `index.html` 里没有 `serviceWorker.register`，都会提醒「只会做成带地址栏的快捷方式」。
+  `index.html` 里没有 `serviceWorker.register`、或者没有挂 manifest 的那几句脚本，都会提醒。
 - **怎么确认生效**：手机 Chrome / Edge → 右上菜单应出现「安装应用 / 添加到主屏幕」这类字眼，
   装完点开是**没有地址栏**的独立窗口；桌面 F12 → **Application** 面板里
   `Manifest` 无警告、`Service Workers` 状态是 activated。iOS 用 Safari「分享 → 添加到主屏幕」，
@@ -231,9 +236,11 @@ YCGames.load('./games.json').then(function (ds) {
 | **本地 http 预览** | 跑 `node tools/dev.js`，浏览器开 `http://127.0.0.1:8080/index.html`；保存 json 会自动同步兜底，`Ctrl + R` 就能看到 |
 | **本地双击 `index.html`** | `file://` 下浏览器不允许读本地 json，页面**一律走静态兜底**（不会再刷 CORS 报错）—— 改了 json **必须双击 `tools\sync.cmd` 同步一次**，否则看到的还是旧内容 |
 
-> 双击打开时控制台会有一句蓝色提示
+> 双击打开时控制台会有一句灰色提示（**只在顶层窗口打一次**，内嵌的游戏墙不会重复打）
 > `[games.json] 本地 file:// 打不开 json，页面使用 HTML 静态兜底（要看实时 json 请先跑 node tools/dev.js）`
 > —— 不是报错，是在提醒你"想改完立刻生效就用 http 预览"。
+> 至于 `site.webmanifest` 的 CORS 报错，已经不会出现了：manifest 的 `<link>` 改成在 `http(s)` 下由脚本动态挂
+> （见「像 App 一样装到主屏」那节），`file://` 下压根不会去抓它。
 
 ### 命令
 

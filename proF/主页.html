@@ -56,6 +56,10 @@
   }
 
   html, body { height: 100%; }
+  /* 隐藏浏览器自带的滚动条：页面照样能滚（滚轮 / 触控板 / 触摸），只是不画那条竖条，布局不变。
+     scrollbar-width 管 Firefox 与 Chromium 121+，::-webkit-scrollbar 管 Edge / Chrome / Safari */
+  html, body { scrollbar-width: none; -ms-overflow-style: none; }
+  html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; display: none; }
   body {
     margin: 0;
     font-family: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", Arial, sans-serif;
