@@ -405,7 +405,9 @@ if (isTouchOnlyDevice()) {
 
 ### C. 只能在电脑上玩（键盘 / 鼠标必需）
 
-1. `<body data-pc-only="1">` —— 只负责在手机上隐藏 `#hud` / `#hint` / `#banner`；
+1. `<body data-pc-only="1">` —— 只负责在手机上隐藏 `#hud` / `#hint` / `#banner`（`ui/yc-ui.js` 干的）。
+   **注意它不管 `.overlay` 弹层**：`#intro`（开局规则）、`#over`、`#pause` 这些要你自己收起来，
+   否则会和半透明的拦截面板叠在一起、从背后透出来（第 3 步的代码里有示范）；
 2. 拦截面板自己写在页面里，**面板上必须带一个「返回主页」按钮**（这个游戏最终会被放进站点
    `proF/` 目录，同目录里就有 `主页.html`，所以按钮写成 `location.href = '主页.html'` 就行；
    在包里直接双击时点它会 404，属正常，不影响验收）：
@@ -444,6 +446,10 @@ function isTouchOnlyDevice() {
 }
 
 if (isTouchOnlyDevice()) {
+  /* ★ 必须先把开局的规则层收掉，再弹拦截面板。
+     否则两个 .overlay 叠在一起（z-index 都是 10、背景是 rgba(…,.78) + 毛玻璃），
+     规则文字会从拦截面板背后隐约透出来。 */
+  document.getElementById('intro').classList.add('hidden');
   document.getElementById('mobile').classList.remove('hidden');
   /* 不启动主循环 */
 } else {
@@ -465,6 +471,7 @@ if (isTouchOnlyDevice()) {
       `getContext` 报错；整个页面只有一个可见 canvas
 - [ ] 切标签页回来不瞬移、不粘键
 - [ ] 移动端策略三选一已实现（可玩 / 只能观战 / 拦截面板）
+- [ ] 用手机打开时，拦截面板背后**没有**开局规则 / 结算面板透出来（先把 `#intro` 这些 `.overlay` 加 `hidden`）
 - [ ] 没有全屏按钮、没有暂停按钮、没有外部资源，没改 `ui/yc-ui.*`
 - [ ] 包里只多了一个改好的游戏 HTML，没有多出其它文件或目录
 - [ ] `GAME-INFO.txt` 的 8 项全部填写，显示名与 `<title>` 一致，颜色是 hex
@@ -498,6 +505,7 @@ Start-Process -FilePath $edge -ArgumentList @(
 | 上 WebGL、Three.js、Phaser、PixiJS、matter.js、Konva | 项目只允许 Canvas 2D + 原生 JS，没有任何引擎 |
 | 往 `#stage` 里加第二个可见 canvas，或多个 canvas 叠层拼游戏 | 整页只有一个 `canvas#cv`；离屏缓存用 `document.createElement('canvas')`，不插入 DOM |
 | 覆盖 `#stage` 的 `overflow` | HUD 会溢出画布 |
+| 手机上只弹拦截面板、忘了把 `#intro` 等 `.overlay` 收起来 | 两个弹层同 z-index 叠着，面板背景是 `rgba(…,.78)` + 毛玻璃，规则文字会从背后隐约透出来 |
 | CSS 像素做物理、世界坐标做 DOM | 两套坐标混用必然错位 |
 | 重开不重置数组 / 计时器 | 第二局残影、负计时 |
 | 用 `Date.now()` 算 dt | 与 rAF 时间基准不一致，会抖 |

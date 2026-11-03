@@ -1854,6 +1854,8 @@
   }
 
   if (isTouchOnlyDevice() && !demoMode) {
+    /* 拦截面板是半透明 + 毛玻璃，得先把开局的规则层收掉，否则规则会从背后透出来 */
+    elIntro.classList.add('hidden');
     elMobile.classList.remove('hidden');
   } else {
     if (demoMode) {

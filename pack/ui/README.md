@@ -50,6 +50,8 @@ ui/
 - 自动判断手机 / 平板（UA、`pointer: coarse`、触控点、UA-CH），暴露 `window.YCUI.isMobile()`；
 - 若 `<body data-pc-only="1">` 且当前是手机 / 平板，会隐藏 `#hud`、`#hint`、`#banner`
   （配合页面自己的「只能在电脑上玩」拦截面板使用，面板要自己写）；
+  **它不管 `.overlay` 弹层** —— 弹拦截面板之前记得先给 `#intro` 加上 `hidden`（`classList.add('hidden')`），
+  否则开局规则会从半透明面板背后隐约透出来；
 - 不含全屏 / 横竖屏逻辑（本项目已移除全屏按钮）。
 
 ## 手机适配（CSS 已内置）
