@@ -530,8 +530,9 @@ const fullTitle = meta.title || ds.site.name || '';
 const shortName = meta.shortName || fullTitle;
 
 const rTitleShell = replaceTextInFile('index.html', [
-  /* 标签页标题的运行时后缀（就是它把新名字打回旧的） */
+  /* 标签页标题：baseTitle = 全名（主页 / 没选游戏）；baseShort = 短名（选中游戏时「游戏名 · 短名」） */
   { re: /(var baseTitle = ')[^']*(';)/, value: escJs(fullTitle) },
+  { re: /(var baseShort = ')[^']*(';)/, value: escJs(shortName) },
   /* 侧栏左上角的品牌名：窄，用短名 */
   { re: /(<span class="brand-name">)[^<]*(<\/span>)/, value: escText(shortName) }
 ]);

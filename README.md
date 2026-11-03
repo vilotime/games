@@ -108,8 +108,11 @@ https://games.vilotime.cn/
 
 | 字段 | 会同步到（全部自动，别手改） |
 |---|---|
-| `meta.title`（全名，可带副标题） | `index.html` 的 `<title>`、`og:title`、`twitter:title`、**运行时 `baseTitle`**（切游戏时「游戏名 · 全名」用的就是它）、`proF/主页.html` 的 `<title>` |
-| `meta.siteName`（短名） | `og:site_name`、`site.webmanifest` 的 `name`/`short_name`、`apple-mobile-web-app-title`、侧栏左上角品牌名、主页 `<h1>` 与页脚 |
+| `meta.title`（全名，可带副标题） | `index.html` 的 `<title>`、`og:title`、`twitter:title`、**运行时 `baseTitle`**（主页 / 没选中游戏时的标签页标题）、`proF/主页.html` 的 `<title>` |
+| `meta.siteName`（短名） | **运行时 `baseShort`**（选中游戏时「游戏名 · 短名」的后缀）、`og:site_name`、`site.webmanifest` 的 `name`/`short_name`、`apple-mobile-web-app-title`、侧栏左上角品牌名、主页 `<h1>` 与页脚 |
+
+> 标签页标题的实际效果：主页 = `meta.title`（全名）；点开某个游戏 = `游戏名 · meta.siteName`（短名），
+> 例如「植物VS僵尸 · 叶初小游戏」。
 
 > 为什么非要脚本同步：页面里原本把名字写死在好几处，其中 `index.html` 里的 `var baseTitle = '…'`
 > 会在**页面加载后覆盖 `document.title`**。只改 `games.json` 只重新生成 head 的话，

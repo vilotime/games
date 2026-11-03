@@ -590,7 +590,11 @@
     var gbIcon = document.getElementById('gbIcon');
     var gbName = document.getElementById('gbName');
     var frame = document.getElementById('gameFrame');
+    /* 这两个标题都由 games.json 生成（tools/export-games.js 会重写这两行，别手改）：
+       baseTitle = meta.title（全名）→ 主页 / 没选中游戏时的标签页标题
+       baseShort = meta.siteName（短名）→ 选中游戏时「游戏名 · 短名」的后缀 */
     var baseTitle = '叶初小游戏 - 浏览器在线小游戏';
+    var baseShort = '叶初小游戏';
     var miniIcon = document.getElementById('miniIcon');
     var miniName = document.getElementById('miniName');
     /* 侧栏入口由 games.json 动态重建，所以每次现取，不缓存 NodeList */
@@ -630,7 +634,7 @@
         setBar(link.getAttribute('data-icon') || '🎮', link.getAttribute('data-name') || link.textContent.trim());
         if (updateTitle !== false) {
             var nm = link.getAttribute('data-name') || '';
-            document.title = nm && nm !== '主页' ? nm + ' · ' + baseTitle : baseTitle;
+            document.title = nm && nm !== '主页' ? nm + ' · ' + baseShort : baseTitle;
         }
         /* 让当前项在窄屏横向导航里可见 */
         try {
@@ -665,7 +669,7 @@
             var links = getLinks();
             for (var j = 0; j < links.length; j++) { links[j].classList.remove('active'); }
             setBar('📄', decodeURIComponent(file).replace(/\.html$/i, ''));
-            document.title = decodeURIComponent(file).replace(/\.html$/i, '') + ' · ' + baseTitle;
+            document.title = decodeURIComponent(file).replace(/\.html$/i, '') + ' · ' + baseShort;
         }
     });
 
@@ -681,7 +685,7 @@
         for (var j = 0; j < links.length; j++) { links[j].classList.remove('active'); }
         var nm = d.name || decodeSafe(String(d.ycNav).split('/').pop()).replace(/\.html$/i, '');
         setBar(d.icon || '🎮', nm);
-        document.title = nm ? nm + ' · ' + baseTitle : baseTitle;
+        document.title = nm ? nm + ' · ' + baseShort : baseTitle;
     });
 
     /* ---------- 加载遮罩：点导航就先盖上，页面加载完再撤 ---------- */
