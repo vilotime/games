@@ -496,6 +496,54 @@ if (icons.manifest) {
   }
 }
 
+/* ---------------- 标题同步：全站名字只在 games.json 里写一遍 ----------------
+ * 为什么需要这一步：<title> 是由 head 区块生成的，但页面里还有几处**写死**的名字，
+ * 其中最坑的是 index.html 里的 `var baseTitle = '…'` —— 页面一加载就会用它在运行时覆盖
+ * `document.title`。所以只改 games.json、只重新生成 head 时，标签页会被它打回旧名字
+ * （本地看源码是新名字、浏览器标签页还是旧的，就是这个原因）。
+ *
+ * 分工：
+ *   meta.title（全名）   → <title>、og:title、twitter:title、切游戏时的 baseTitle、主页的 <title>
+ *   meta.siteName（短名）→ og:site_name、manifest、apple 主屏标题、侧栏品牌名、主页大标题与页脚
+ * 规则都是「(前缀)(后缀)」两组，中间那段整段替换，避免拼进 $ 之类的正则特殊字符。 */
+function replaceTextInFile(file, rules) {
+  const abs = path.join(root, file);
+  if (!fs.existsSync(abs)) { return { ok: false, why: '文件不存在' }; }
+  let src = fs.readFileSync(abs, 'utf8');
+  const before = src;
+  rules.forEach(r => {
+    src = src.replace(r.re, function (m, a, b) { return (a || '') + r.value + (b || ''); });
+  });
+  if (src === before) { return { ok: true, changed: false }; }
+  if (!CHECK_ONLY) { fs.writeFileSync(abs, src, 'utf8'); }
+  return { ok: true, changed: true };
+}
+
+function escText(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function escJs(s) {
+  return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+const fullTitle = meta.title || ds.site.name || '';
+const shortName = meta.shortName || fullTitle;
+
+const rTitleShell = replaceTextInFile('index.html', [
+  /* 标签页标题的运行时后缀（就是它把新名字打回旧的） */
+  { re: /(var baseTitle = ')[^']*(';)/, value: escJs(fullTitle) },
+  /* 侧栏左上角的品牌名：窄，用短名 */
+  { re: /(<span class="brand-name">)[^<]*(<\/span>)/, value: escText(shortName) }
+]);
+if (!rTitleShell.ok) { fail('index.html：' + rTitleShell.why); }
+
+const rTitleHome = replaceTextInFile('proF/主页.html', [
+  { re: /(<title>)[^<]*(<\/title>)/, value: escText(fullTitle) },
+  { re: /(<h1>)[^<]*(<\/h1>)/, value: escText(shortName) },
+  { re: /(<div class="footer">)[^<]*( · [^<]*<\/div>)/, value: escText(shortName) }
+]);
+if (!rTitleHome.ok) { fail('proF/主页.html：' + rTitleHome.why); }
+
 /* ---------------- 输出 ---------------- */
 console.log('games.json：' + ds.total + ' 款游戏，' + ds.categories.length + ' 个分类');
 ds.categories.forEach(c => console.log('  · ' + c.name + '（' + c.key + '）：' + c.count + ' 款'));
@@ -516,13 +564,15 @@ if (rNumHome.changed) { touched.push('proF/主页.html（顶部总数）'); }
 if (rNumIndex.changed) { touched.push('index.html（侧栏总数）'); }
 if (rHead.changed) { touched.push('index.html（图标 / 分享卡片）'); }
 if (rManifest.changed) { touched.push((icons.manifest || 'site.webmanifest') + '（主屏图标）'); }
+if (rTitleShell.changed) { touched.push('index.html（标题 / 品牌名）'); }
+if (rTitleHome.changed) { touched.push('proF/主页.html（标题 / 大标题 / 页脚）'); }
 if (CHECK_ONLY) {
   if (touched.length) { console.log('\n需要同步：' + touched.join('、') + '（去掉 --check 可写入）'); }
-  else { console.log('\n✓ 卡片 / 侧栏 / 数量 / 图标都已和 games.json 一致'); }
+  else { console.log('\n✓ 卡片 / 侧栏 / 数量 / 图标 / 标题都已和 games.json 一致'); }
 } else if (touched.length) {
   console.log('\n已同步：' + touched.join('、'));
 } else {
-  console.log('\n✓ 卡片 / 侧栏 / 数量 / 图标都已和 games.json 一致，无需改动');
+  console.log('\n✓ 卡片 / 侧栏 / 数量 / 图标 / 标题都已和 games.json 一致，无需改动');
 }
 
 if (warnings.length) {

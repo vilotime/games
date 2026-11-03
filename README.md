@@ -100,9 +100,21 @@ https://games.vilotime.cn/
 
 | 段 | 管什么 |
 |---|---|
-| `site` | 站点名、游戏目录 `dir`、主页 `homepage`、GitHub 仓库地址 `repo`（只用来校验 `url.txt` 里的地址对不对）。**域名不写在这里**，见上面的 `url.txt` |
+| `site` | 游戏目录 `dir`、主页 `homepage`、GitHub 仓库地址 `repo`（只用来校验 `url.txt` 里的地址对不对）。**域名不写在这里**（见上面的 `url.txt`），**站名也不写在这里**（见下面的 `meta.title` / `meta.siteName`） |
 | `icons` | 站点图标：`ico` / `svg` / `png[]` / `appleTouch` / `manifest`。`.ico` 必须在**仓库根目录**，否则 Bing 会退回 GitHub 图标 |
-| `meta` | `<title>`、`<meta name="description">`、分享封面 `image`（方图自动配 `twitter:card=summary`，宽图自动切 `summary_large_image`）、manifest 用的 `themeColor` / `backgroundColor` |
+| `meta` | 标题与分享信息。**`title`（全名）和 `siteName`（短名）的分工见下面**；还有分享封面 `image`（方图自动配 `twitter:card=summary`，宽图自动切 `summary_large_image`）、manifest 用的 `themeColor` / `backgroundColor` |
+
+### 改站名只改 `games.json` 的两行
+
+| 字段 | 会同步到（全部自动，别手改） |
+|---|---|
+| `meta.title`（全名，可带副标题） | `index.html` 的 `<title>`、`og:title`、`twitter:title`、**运行时 `baseTitle`**（切游戏时「游戏名 · 全名」用的就是它）、`proF/主页.html` 的 `<title>` |
+| `meta.siteName`（短名） | `og:site_name`、`site.webmanifest` 的 `name`/`short_name`、`apple-mobile-web-app-title`、侧栏左上角品牌名、主页 `<h1>` 与页脚 |
+
+> 为什么非要脚本同步：页面里原本把名字写死在好几处，其中 `index.html` 里的 `var baseTitle = '…'`
+> 会在**页面加载后覆盖 `document.title`**。只改 `games.json` 只重新生成 head 的话，
+> 标签页会被它打回旧名字（源码看着是新的、浏览器标签页还是旧的，就是这个原因）。
+> 改完记得跑 `tools\sync.cmd`，推上去再 `Ctrl + F5` 强刷（GitHub Pages 的 HTML 默认缓存 10 分钟）。
 
 ```json
 "icons": {
