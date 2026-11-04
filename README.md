@@ -1,8 +1,7 @@
 # 叶初小游戏
 
 通过Vibe Coding，按照一定范式构建的纯 Canvas 小游戏，外壳是一个侧栏 + iframe 的静态页，没有构建步骤、没有后端、没有依赖，
-托管在 GitHub Pages（仓库 `VILOTIME/games`），绑定自定义域名：
-<https://games.vilotime.cn/>
+托管在 GitHub Pages（仓库 `VILOTIME/games`），自定义域名：<https://games.vilotime.cn/>
 
 > 站点地址只写在根目录的 [`url.txt`](url.txt) 里，换域名只改那一行。
 
