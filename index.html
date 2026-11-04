@@ -97,12 +97,32 @@
             transition: background-color .25s ease, color .25s ease;
         }
 
-        /* ---------- 隐藏浏览器自带的滚动条 ----------
-           滚轮 / 触控板 / 触摸依旧能滚，只是不画那条竖条，布局完全不变。
-           scrollbar-width 管 Firefox 与 Chromium 121+，::-webkit-scrollbar 管 Edge / Chrome / Safari */
-        html, body, .sidebar, .nav { scrollbar-width: none; -ms-overflow-style: none; }
+        /* ---------- 细滚动条：平时透明，滚动时才出现（停下 0.7 秒淡出）----------
+           模仿手机上的「叠加式滚动条」：宽度瘦成 6px、轨道透明，只有正在滚动的那一下才看得见。
+           · scrollbar-width / scrollbar-color → Firefox、Chromium 121+（Edge / Chrome 新版）
+           · ::-webkit-scrollbar → 老版 Chrome 与 Safari
+           滚动状态由页面底部那段脚本打 .is-scrolling 类控制（滚动本身永远是原生行为，布局不变） */
+        html, body, .sidebar, .nav {
+            scrollbar-width: thin;
+            scrollbar-color: transparent transparent;
+        }
+        html.is-scrolling, body.is-scrolling,
+        .sidebar.is-scrolling, .nav.is-scrolling {
+            scrollbar-color: rgba(128, 150, 180, .62) transparent;
+        }
+
         html::-webkit-scrollbar, body::-webkit-scrollbar,
-        .sidebar::-webkit-scrollbar, .nav::-webkit-scrollbar { width: 0; height: 0; display: none; }
+        .sidebar::-webkit-scrollbar, .nav::-webkit-scrollbar { width: 6px; height: 6px; background: transparent; }
+        html::-webkit-scrollbar-track, body::-webkit-scrollbar-track,
+        .sidebar::-webkit-scrollbar-track, .nav::-webkit-scrollbar-track { background: transparent; }
+        html::-webkit-scrollbar-thumb, body::-webkit-scrollbar-thumb,
+        .sidebar::-webkit-scrollbar-thumb, .nav::-webkit-scrollbar-thumb {
+            background: transparent; border-radius: 3px;
+        }
+        html.is-scrolling::-webkit-scrollbar-thumb, body.is-scrolling::-webkit-scrollbar-thumb,
+        .sidebar.is-scrolling::-webkit-scrollbar-thumb, .nav.is-scrolling::-webkit-scrollbar-thumb {
+            background: rgba(128, 150, 180, .62);
+        }
 
         /* ---------- 侧边栏 ---------- */
         .sidebar {
@@ -915,6 +935,38 @@ if (window.YCGames) {
             /* 注册失败不影响正常浏览（https 没配好、离线时都可能失败），这里静默处理 */
         });
     });
+})();
+</script>
+
+<script>
+/* 细滚动条：只在滚动的时候显示，停下 0.7 秒就淡出（模仿手机上的叠加式滚动条）。
+   CSS 里滚动条默认是透明的，这里给正在滚动的那个容器打上 .is-scrolling。
+   用捕获阶段监听 window，可以同时拿到「文档滚动」和「侧边栏 / 抽屉内部滚动」两种事件。 */
+(function () {
+    var timer = null;
+    var cur = null;
+
+    function clearOne(el) {
+        if (el && el.classList) { el.classList.remove('is-scrolling'); }
+    }
+
+    window.addEventListener('scroll', function (e) {
+        var t = e.target;
+        /* 文档滚动时 target 是 document（或根元素），容器滚动时 target 就是容器本身 */
+        var el = (!t || t === document || t === window) ? document.documentElement : t;
+        if (!el || !el.classList) { return; }
+
+        if (cur && cur !== el) { clearOne(cur); }
+        el.classList.add('is-scrolling');
+        cur = el;
+
+        if (timer) { clearTimeout(timer); }
+        timer = setTimeout(function () {
+            clearOne(el);
+            cur = null;
+            timer = null;
+        }, 700);
+    }, true);
 })();
 </script>
 

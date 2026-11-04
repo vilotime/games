@@ -56,10 +56,18 @@
   }
 
   html, body { height: 100%; }
-  /* 隐藏浏览器自带的滚动条：页面照样能滚（滚轮 / 触控板 / 触摸），只是不画那条竖条，布局不变。
-     scrollbar-width 管 Firefox 与 Chromium 121+，::-webkit-scrollbar 管 Edge / Chrome / Safari */
-  html, body { scrollbar-width: none; -ms-overflow-style: none; }
-  html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; display: none; }
+  /* 细滚动条：平时透明，滚动时才出现（停下 0.7 秒淡出），模仿手机上的叠加式滚动条。
+     · scrollbar-width / scrollbar-color → Firefox、Chromium 121+（Edge / Chrome 新版）
+     · ::-webkit-scrollbar → 老版 Chrome 与 Safari
+     滚动状态由页面底部那段脚本打 .is-scrolling 类控制，滚动本身是原生的，布局不变 */
+  html, body { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+  html.is-scrolling, body.is-scrolling { scrollbar-color: rgba(128, 150, 180, .62) transparent; }
+  html::-webkit-scrollbar, body::-webkit-scrollbar { width: 6px; height: 6px; background: transparent; }
+  html::-webkit-scrollbar-track, body::-webkit-scrollbar-track { background: transparent; }
+  html::-webkit-scrollbar-thumb, body::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+  html.is-scrolling::-webkit-scrollbar-thumb, body.is-scrolling::-webkit-scrollbar-thumb {
+    background: rgba(128, 150, 180, .62);
+  }
   body {
     margin: 0;
     font-family: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", Arial, sans-serif;
@@ -407,6 +415,36 @@ if (window.YCGames) {
     YCGames.applyCounts(document, ds);
   }).catch(function () {});
 }
+</script>
+
+<script>
+/* 细滚动条：滚动时显示、停下 0.7 秒淡出（CSS 里默认是透明的，这里给滚动容器打 .is-scrolling）。
+   游戏墙是整页滚动，target 会是 document，所以落到 documentElement 上。 */
+(function () {
+  var timer = null;
+  var cur = null;
+
+  function clearOne(el) {
+    if (el && el.classList) { el.classList.remove('is-scrolling'); }
+  }
+
+  window.addEventListener('scroll', function (e) {
+    var t = e.target;
+    var el = (!t || t === document || t === window) ? document.documentElement : t;
+    if (!el || !el.classList) { return; }
+
+    if (cur && cur !== el) { clearOne(cur); }
+    el.classList.add('is-scrolling');
+    cur = el;
+
+    if (timer) { clearTimeout(timer); }
+    timer = setTimeout(function () {
+      clearOne(el);
+      cur = null;
+      timer = null;
+    }, 700);
+  }, true);
+})();
 </script>
 
 </body>
