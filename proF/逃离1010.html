@@ -51,7 +51,7 @@
         <h1>逃离1010宿舍</h1>
         <p>你在 1010 宿舍醒来，楼里断电了。</p>
         <p>下楼梯会把手里所有钥匙一次用掉：有多少把就一口气下多少层，最多到 1 楼。</p>
-        <p>电梯会收走 1 把钥匙，直接送到一楼门禁。</p>
+        <p>电梯会收走 3 把钥匙，直接送到一楼门禁。</p>
         <button class="btn" id="startBtn" type="button">开始游戏</button>
       </div>
     </div>
@@ -97,8 +97,9 @@
   var FOG_R = 250;                 /* 玩家视野半径（设计文档：250px） */
   var FOG_STAIR = 100;             /* 走楼梯后的极端黑暗（设计文档：100px） */
   var FOG_ROOM = 250;              /* 宿舍内部视野（六人寝比走廊还大，给足一点） */
-  var NEED_KEY = 3;                /* 成功逃离所需钥匙（设计文档：至少 3 把） */
-  var NEED_ELEV = 4;               /* 电梯会收走一把钥匙，所以手里要有 4 把 */
+  var NEED_KEY = 3;                /* 一楼门禁收走几把钥匙（设计文档：至少 3 把） */
+  var ELEV_COST = 3;               /* 电梯收走几把钥匙 */
+  var NEED_ELEV = NEED_KEY + ELEV_COST;   /* 电梯扣完还得够门禁，所以手里要有 6 把 */
   var HOLD_ELEV = 3, HOLD_GATE = 5;
   var HOLD_STAIRS = 1;             /* 下楼梯长按读条（秒） */
   var DOOR_TIME = 0.5;             /* 进/出宿舍推门读条（秒） */
@@ -1097,11 +1098,11 @@
   function useElev() {
     if (player.keys < NEED_ELEV) {
       holdT = 0; holdId = ''; doorT = 0; doorBusy = false; doorRoom = null; fLock = false;
-      banner('电梯要收一把钥匙：需要 4 把', 1600);
+      banner('电梯要收 ' + ELEV_COST + ' 把钥匙：需要 ' + NEED_ELEV + ' 把', 1600);
       sfxDeny();
       return false;
     }
-    player.keys--;
+    player.keys -= ELEV_COST;
     updateHUD();
     tone(420, 0.35, 0.14, 'square', 700);
     enterLobby(false);
@@ -1521,7 +1522,12 @@
         lobbySc.denied = false;
         holdId = 'gate';
         holdT += dt;
-        if (holdT >= HOLD_GATE) { holdT = 0; holdId = ''; win(); return; }
+        if (holdT >= HOLD_GATE) {
+          holdT = 0; holdId = '';
+          player.keys -= NEED_KEY;         /* 门禁真收 3 把：结算里显示的钥匙数要扣掉它们 */
+          updateHUD();
+          win(); return;
+        }
       }
     } else {
       lobbySc.denied = false;
