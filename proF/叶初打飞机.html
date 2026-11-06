@@ -20,6 +20,12 @@
   .panel h1 { font-size: 26px; }
   .panel p { line-height: 1.7; color: #a9bcda; }
   .panel kbd { min-width: 20px; padding: 1px 6px; }
+  /* 上面那条 26px 会把 yc-ui.css 里的小屏压缩（.panel h1 → 16px）盖掉，
+     手机上空出一大片还没法换行。这里补一条同样的断点把它压回去，桌面不受影响。 */
+  @media (max-width: 760px), (max-height: 620px) {
+    .panel h1 { font-size: 16px; letter-spacing: 1px; margin: 0 0 3px; }
+    .panel p { line-height: 1.35; }
+  }
   #banner { font-size: clamp(14px, 3.8vw, 20px); letter-spacing: clamp(1px, .6vw, 2px); text-shadow: 0 4px 18px rgba(0,0,0,.8); }
 </style>
 </head>
