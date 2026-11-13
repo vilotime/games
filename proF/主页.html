@@ -5,40 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>叶初小游戏 - 在线小游戏</title>
 <script>
-  /* 提前决定主题，避免首屏闪白/闪黑 */
-  (function () {
-    var s = null;
-    try { s = localStorage.getItem('yc-theme'); } catch (e) {}
-    var dark = (s === 'dark') || (s !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-  })();
+  /* 只有深色模式：钉住 data-theme，不再读系统偏好 / localStorage */
+  document.documentElement.setAttribute('data-theme', 'dark');
 </script>
 <style>
   * { box-sizing: border-box; }
   :root {
-    color-scheme: light;
-    --bg: #e7edf5;
-    --bg2: #ffffff;
-    --glow: rgba(79, 156, 249, 0.22);
-    --header-from: #2b3a4b;
-    --header-to: #3f5a78;
-    --header-shadow: 0 6px 22px rgba(20, 35, 55, 0.26);
-    --accent: #4f9cf9;
-    --card-bg: #ffffff;
-    --card-border: #d7e0ec;
-    /* 浅色：只保留一层贴地投影 + 一层柔和中层阴影，不要大范围光晕 */
-    --card-shadow:
-      0 1px 2px rgba(15, 23, 42, 0.08),
-      0 6px 14px -8px rgba(15, 23, 42, 0.16);
-    --title: #1b2836;
-    --muted: #6c7b8f;
-    --header-text: #ffffff;
-  }
-  html[data-theme="dark"] .card {
-    background-image: linear-gradient(180deg, #1d2734 0%, #18202b 100%);
-    box-shadow: var(--card-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  }
-  html[data-theme="dark"] {
     color-scheme: dark;
     --bg: #0f141a;
     --bg2: #19212c;
@@ -163,9 +135,9 @@
     overflow: hidden;
     border-radius: 16px;
     background-color: var(--card-bg);
-    background-image: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+    background-image: linear-gradient(180deg, #1d2734 0%, #18202b 100%);
     border: 1px solid var(--card-border);
-    box-shadow: var(--card-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    box-shadow: var(--card-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.04);
     text-decoration: none;
     color: inherit;
     transition: transform .26s cubic-bezier(.2, .8, .3, 1), box-shadow .26s ease, border-color .26s ease;
@@ -363,46 +335,6 @@ document.addEventListener('click', function (e) {
     }, '*');
   } catch (err) {}
 }, true);
-</script>
-
-<script>
-/* 主页只负责跟随主题；切换按钮统一放在外壳页面 index.html */
-(function () {
-  var KEY = 'yc-theme';
-  var root = document.documentElement;
-  var mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
-
-  function stored() {
-    try { return localStorage.getItem(KEY); } catch (e) { return null; }
-  }
-  function resolved() {
-    var s = stored();
-    if (s === 'dark' || s === 'light') { return s; }
-    return (mq && mq.matches) ? 'dark' : 'light';
-  }
-  function apply() {
-    root.setAttribute('data-theme', resolved());
-  }
-
-  /* 供外壳页面调用 */
-  window.__ycApplyTheme = apply;
-
-  apply();
-
-  /* 与外壳页面（index.html）互相同步 */
-  window.addEventListener('storage', function (e) {
-    if (!e || e.key === KEY || e.key === null) { apply(); }
-  });
-  /* 兜底：即使 storage 事件没有及时送达，也能把主题对齐 */
-  setInterval(function () {
-    if (root.getAttribute('data-theme') !== resolved()) { apply(); }
-  }, 1000);
-  if (mq) {
-    var onSystemChange = function () { if (!stored()) { apply(); } };
-    if (mq.addEventListener) { mq.addEventListener('change', onSystemChange); }
-    else if (mq.addListener) { mq.addListener(onSystemChange); }
-  }
-})();
 </script>
 
 <script src="../core/games.js"></script>

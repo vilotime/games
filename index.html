@@ -36,13 +36,9 @@
     <meta name="twitter:image:alt" content="叶初小游戏 · 封面">
     <!-- head:end -->
     <script>
-        /* 提前决定主题，避免首屏闪白/闪黑 */
-        (function () {
-            var s = null;
-            try { s = localStorage.getItem('yc-theme'); } catch (e) {}
-            var dark = (s === 'dark') || (s !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-            document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-        })();
+        /* 只有深色模式：直接钉住 data-theme，不再读系统偏好 / localStorage，
+           也没有切换按钮了（--shell-* 那套颜色变量在 CSS 里就是深色那一套）。 */
+        document.documentElement.setAttribute('data-theme', 'dark');
 
         /* 站点清单（PWA）只在 http(s) 下挂：
            双击用 file:// 打开时 origin 是 null，浏览器去抓 site.webmanifest 会被 CORS 拦掉，
@@ -58,20 +54,6 @@
     </script>
     <style>
         :root {
-            color-scheme: light;
-            --shell-bg: #ffffff;
-            --shell-content-bg: #e7edf5;
-            --shell-text: #1b2836;
-            --shell-muted: #6c7b8f;
-            --shell-hover: #eef3fa;
-            --shell-active-bg: rgba(79, 156, 249, .13);
-            --shell-btn-bg: #ffffff;
-            --shell-btn-border: #d7e0ec;
-            --shell-line: #e3eaf3;
-            --shell-accent: #4f9cf9;
-            --shell-shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 10px 24px -16px rgba(15, 23, 42, .3);
-        }
-        html[data-theme="dark"] {
             color-scheme: dark;
             --shell-bg: #161c26;
             --shell-content-bg: #0f141a;
@@ -164,30 +146,6 @@
             letter-spacing: 1px;
             color: var(--shell-muted);
         }
-
-        .theme-toggle {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            width: 100%;
-            margin: 0 0 14px;
-            padding: 7px 10px;
-            font-family: inherit;
-            font-size: 12px;
-            line-height: 1;
-            color: var(--shell-text);
-            background-color: var(--shell-btn-bg);
-            border: 1px solid var(--shell-btn-border);
-            border-radius: 9px;
-            cursor: pointer;
-            transition: background-color .2s ease, border-color .2s ease, transform .12s ease;
-            -webkit-tap-highlight-color: transparent;
-            touch-action: manipulation;
-        }
-        .theme-toggle:hover { border-color: var(--shell-accent); }
-        .theme-toggle:active { transform: scale(.98); }
-        .theme-icon { font-size: 13px; line-height: 1; }
 
         .nav { display: flex; flex-direction: column; gap: 2px; }
         .nav-group {
@@ -420,16 +378,6 @@
                 text-overflow: ellipsis;
             }
 
-            .theme-toggle {
-                flex: 0 0 auto;
-                width: 38px;
-                height: 38px;
-                padding: 0;
-                margin: 0;
-                border-radius: 11px;
-            }
-            .theme-text { display: none; }
-
             /* ---------- 圆角抽屉面板 ---------- */
             .nav {
                 position: fixed;
@@ -547,11 +495,6 @@
             <span class="brand-name">叶初小游戏</span>
             <span class="brand-sub" data-game-count>12 款</span>
         </div>
-
-        <button type="button" class="theme-toggle" id="themeToggle" title="切换主题">
-            <span class="theme-icon" aria-hidden="true">🖥️</span>
-            <span class="theme-text">跟随系统</span>
-        </button>
 
         <nav class="nav" id="nav">
             <a href="proF/主页.html" target="gameFrame" data-icon="🏠" data-name="主页" class="active">
@@ -827,86 +770,6 @@
     window.addEventListener('resize', function () {
         if (window.innerWidth > 768) { setOpen(false); }
     });
-})();
-
-/* ---------- 主题切换 ---------- */
-(function () {
-    var KEY = 'yc-theme';
-    var root = document.documentElement;
-    var mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
-    var btn = document.getElementById('themeToggle');
-
-    function stored() {
-        try { return localStorage.getItem(KEY); } catch (e) { return null; }
-    }
-    function resolved() {
-        var s = stored();
-        if (s === 'dark' || s === 'light') { return s; }
-        return (mq && mq.matches) ? 'dark' : 'light';
-    }
-    function apply() {
-        var mode = resolved();
-        root.setAttribute('data-theme', mode);
-        if (!btn) { return; }
-        var s = stored();
-        var label = s === 'dark' ? '深色' : (s === 'light' ? '浅色' : '跟随系统');
-        var icon = s === 'dark' ? '🌙' : (s === 'light' ? '☀️' : '🖥️');
-        btn.querySelector('.theme-icon').textContent = icon;
-        btn.querySelector('.theme-text').textContent = label;
-        var tip = s
-            ? '当前：' + label + '（点击切换为' + (mode === 'dark' ? '浅色' : '深色') + '，右键恢复跟随系统）'
-            : '当前：跟随系统（点击切换主题）';
-        btn.setAttribute('title', tip);
-        btn.setAttribute('aria-label', tip);
-    }
-    function save(mode) {
-        try {
-            if (mode) { localStorage.setItem(KEY, mode); } else { localStorage.removeItem(KEY); }
-        } catch (e) {}
-        apply();
-    }
-    /* 把主题立刻推给内嵌的游戏页面（同源时生效） */
-    function pushToFrame() {
-        try {
-            var f = document.querySelector('iframe[name="gameFrame"]');
-            if (f && f.contentWindow && typeof f.contentWindow.__ycApplyTheme === 'function') {
-                f.contentWindow.__ycApplyTheme();
-            }
-        } catch (e) {}
-    }
-    function commit(mode) {
-        save(mode);
-        pushToFrame();
-    }
-
-    if (btn) {
-        btn.addEventListener('click', function () {
-            commit(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
-        });
-        btn.addEventListener('contextmenu', function (e) {
-            e.preventDefault();
-            commit(null);
-        });
-    }
-
-    /* 供内嵌页面调用 */
-    window.__ycApplyTheme = apply;
-
-    apply();
-
-    /* 与内嵌的主页页面互相同步 */
-    window.addEventListener('storage', function (e) {
-        if (!e || e.key === KEY || e.key === null) { apply(); }
-    });
-    /* 兜底：即使 storage 事件没有及时送达，也能把主题对齐 */
-    setInterval(function () {
-        if (root.getAttribute('data-theme') !== resolved()) { apply(); }
-    }, 1000);
-    if (mq) {
-        var onSystemChange = function () { if (!stored()) { apply(); } };
-        if (mq.addEventListener) { mq.addEventListener('change', onSystemChange); }
-        else if (mq.addListener) { mq.addListener(onSystemChange); }
-    }
 })();
 </script>
 
