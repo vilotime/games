@@ -268,6 +268,35 @@
             display: block;
             background-color: #0b1220;
         }
+        /* ---------- 备案信息（右下角悬浮小标签）----------
+           不占布局、不挤画面：固定在内容区右下角，深色半透明胶囊 + 毛玻璃，
+           平时压得很低调，鼠标移上去才提亮。手机上藏到抽屉/遮罩下面（z-index 更低）。 */
+        .site-icp {
+            position: fixed;
+            right: 14px;
+            bottom: 10px;
+            z-index: 30;
+            padding: 3px 9px;
+            font-size: 11px;
+            line-height: 1.5;
+            letter-spacing: .5px;
+            color: var(--shell-muted);
+            background-color: rgba(22, 28, 38, .72);
+            border: 1px solid var(--shell-line);
+            border-radius: 999px;
+            text-decoration: none;
+            opacity: .82;
+            -webkit-backdrop-filter: blur(4px);
+            backdrop-filter: blur(4px);
+            transition: opacity .16s ease, color .16s ease, border-color .16s ease, background-color .16s ease;
+        }
+        .site-icp:hover,
+        .site-icp:focus-visible {
+            opacity: 1;
+            color: var(--shell-accent);
+            border-color: var(--shell-accent);
+            background-color: rgba(22, 28, 38, .92);
+        }
         /* 换页时的加载遮罩（覆盖在画面之上，加载完就淡出） */
         .frame-wrap { position: relative; }
         .frame-loading {
@@ -477,6 +506,7 @@
             .content { flex: 1 1 auto; min-height: 0; padding: 8px; }
             .gamebar { display: none; }
             .frame-wrap { border-radius: 10px; }
+            .site-icp { right: 8px; bottom: 7px; padding: 2px 7px; font-size: 10px; }
         }
     </style>
 
@@ -562,6 +592,9 @@
                 <span id="frameLoadingText">加载中…</span>
             </div>
         </div>
+        <!-- 备案信息：右下角悬浮小标签，按工信部要求链到备案管理系统 -->
+        <a class="site-icp" href="https://beian.miit.gov.cn/" target="_blank"
+           rel="noopener noreferrer">京ICP备2026079804号</a>
     </div>
 
 <script>

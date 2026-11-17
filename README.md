@@ -1,9 +1,10 @@
 # 叶初小游戏
 
 通过Vibe Coding，按照一定范式构建的纯 Canvas 小游戏，外壳是一个侧栏 + iframe 的静态页，没有构建步骤、没有后端、没有依赖，
-托管在 GitHub Pages（仓库 `VILOTIME/games`），自定义域名：<https://games.vilotime.cn/>
+部署在**腾讯云 EdgeOne**（纯静态托管，仓库 `VILOTIME/games`），自定义域名：<https://games.vilotime.cn/>
 
 > 站点地址只写在根目录的 [`url.txt`](url.txt) 里，换域名只改那一行。
+> 这个仓库和托管平台无关：没有 `CNAME`、没有 `.nojekyll`、没有构建命令 —— EdgeOne / GitHub Pages / 任意静态托管都能直接发根目录。
 
 > **想邀请别人用 AI 帮忙做游戏？** [`docs/AI辅助编程说明.md`](docs/work-with-ai.md) 是给**制作方**看的说明书，
 > 可以直接连同压缩包一起转给对方：怎么装 DSH、怎么打开游戏包、两种提示词写法（**方式一**在对话框里
@@ -116,7 +117,8 @@ https://games.vilotime.cn/
 > 为什么非要脚本同步：页面里原本把名字写死在好几处，其中 `index.html` 里的 `var baseTitle = '…'`
 > 会在**页面加载后覆盖 `document.title`**。只改 `games.json` 只重新生成 head 的话，
 > 标签页会被它打回旧名字（源码看着是新的、浏览器标签页还是旧的，就是这个原因）。
-> 改完记得跑 `tools\sync.cmd`，推上去再 `Ctrl + F5` 强刷（GitHub Pages 的 HTML 默认缓存 10 分钟）。
+> 改完记得跑 `tools\sync.cmd`，推上去再 `Ctrl + F5` 强刷（EdgeOne / CDN 和浏览器都会缓存 HTML，强刷最保险；
+> Service Worker 那个 `sw.js` 尤其要确保不被长时间缓存，见下面「部署到 EdgeOne 的几点」）。
 
 ```json
 "icons": {
@@ -231,7 +233,7 @@ YCGames.load('./games.json').then(function (ds) {
 
 | 你怎么用 | 改了 `games.json` 之后 |
 |---|---|
-| **线上（GitHub Pages）** | 提交推送 → 等部署 → `Ctrl + F5`。**不用跑任何脚本**，页面自己 fetch 新 json |
+| **线上（EdgeOne / 任意静态托管）** | 提交推送 → 等部署 → `Ctrl + F5`。**不用跑任何脚本**，页面自己 fetch 新 json |
 | **本地 http 预览** | 跑 `node tools/dev.js`，浏览器开 `http://127.0.0.1:8080/index.html`；保存 json 会自动同步兜底，`Ctrl + R` 就能看到 |
 | **本地双击 `index.html`** | `file://` 下浏览器不允许读本地 json，页面**一律走静态兜底**（不会再刷 CORS 报错）—— 改了 json **必须双击 `tools\sync.cmd` 同步一次**，否则看到的还是旧内容 |
 
@@ -240,6 +242,18 @@ YCGames.load('./games.json').then(function (ds) {
 > —— 不是报错，是在提醒你"想改完立刻生效就用 http 预览"。
 > 至于 `site.webmanifest` 的 CORS 报错，已经不会出现了：manifest 的 `<link>` 改成在 `http(s)` 下由脚本动态挂
 > （见「像 App 一样装到主屏」那节），`file://` 下压根不会去抓它。
+
+### 部署到 EdgeOne 的几点
+
+这个仓库是**纯静态**（没有 npm、没有构建命令），EdgeOne 那边直接关联仓库、发布目录选根目录就能发。
+
+- **缓存**：`index.html`、`sw.js`、`site.webmanifest` 不建议长缓存 —— 改标题 / 换图标 / 改清单要能立刻生效。
+  `sw.js` 最好设成 `no-cache`（或很短的 max-age），否则装过应用的浏览器会一直用旧的 Service Worker。
+  `assets/`、`ui/`、`proF/` 下的静态资源可以放心长缓存。
+- **HTTPS**：自定义域名 `games.vilotime.cn` 在 EdgeOne 侧申请/上传证书；Service Worker 和「装成应用」都要求 HTTPS。
+- **备案**：ICP 备案的**接入服务商**要与实际接入一致 —— 如果在 EdgeOne（腾讯云）做境内加速，
+  备案的接入就应落在腾讯云（不是的话需要在腾讯云做「接入备案」变更）。页脚那条备案号已经有了，改号只需改 `index.html` 的 `.site-footer`。
+- **不需要** `CNAME` / `.nojekyll` 这类 GitHub Pages 专属文件，仓库里也一个都没有。
 
 ### 命令
 
