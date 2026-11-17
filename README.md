@@ -252,7 +252,8 @@ YCGames.load('./games.json').then(function (ds) {
   `assets/`、`ui/`、`proF/` 下的静态资源可以放心长缓存。
 - **HTTPS**：自定义域名 `games.vilotime.cn` 在 EdgeOne 侧申请/上传证书；Service Worker 和「装成应用」都要求 HTTPS。
 - **备案**：ICP 备案的**接入服务商**要与实际接入一致 —— 如果在 EdgeOne（腾讯云）做境内加速，
-  备案的接入就应落在腾讯云（不是的话需要在腾讯云做「接入备案」变更）。页脚那条备案号已经有了，改号只需改 `index.html` 的 `.site-footer`。
+  备案的接入就应落在腾讯云（不是的话需要在腾讯云做「接入备案」变更）。备案号挂在 `index.html` 右下角那个悬浮胶囊里
+（`.site-icp`，现在是 `京ICP备2026079804号-1`），换号只改那一处。
 - **不需要** `CNAME` / `.nojekyll` 这类 GitHub Pages 专属文件，仓库里也一个都没有。
 
 ### 命令
